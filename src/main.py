@@ -1,8 +1,9 @@
+import time
+import schedule
 from email_client import authenticate_gmail,get_unread_emails, mark_as_read
 from llm_api import classify_email
 from notifier import send_whatsapp_alert
-import time
-import schedule
+from db_utils import log_email_to_db
 
 def run_agent():
     print("Initializing MailMind Agent...")
@@ -37,6 +38,15 @@ def run_agent():
             body_snippet=email['body_snippet']
         )
 
+        # Storing the result in the database for future reference and potential human review
+        log_email_to_db(
+            email_id=email['id'],
+            sender=email['sender'],
+            subject=email['subject'],
+            body=email['body_snippet'],
+            prediction=decision
+        )
+
         # 4. Display the LLM's decision
         if decision == "IMPORTANT":
             # Using a simple ANSI escape code to print IMPORTANT in green for visibility
@@ -69,9 +79,9 @@ if __name__ == "__main__":
 
     run_agent()
 
-    schedule.every(10).minutes.do(run_agent)
+    schedule.every(1).hour.do(run_agent)
 
-    print("\nService is now active. Polling Gmail every 10 minutes.")
+    print("\nService is now active. Polling Gmail every 1 hour.")
     print("Press Ctrl+C to stop the process.\n")
 
     while True:
