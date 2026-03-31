@@ -38,6 +38,12 @@ def run_agent():
             body_snippet=email['body_snippet']
         )
 
+        # THE CIRCUIT BREAKER
+        if decision == "ERROR":
+            print("\n🚨 [SYSTEM HALT] AI processing failed. Halting batch to protect email state.")
+            print("The remaining emails will be kept as UNREAD. Trying again on next scheduled run.")
+            break  # This completely exits the for-loop immediately!
+
         # Storing the result in the database for future reference and potential human review
         log_email_to_db(
             email_id=email['id'],

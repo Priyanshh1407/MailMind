@@ -39,17 +39,34 @@ def classify_email(sender, subject, body_snippet):
     """
 
     try:
-        # Send the prompt to the model
+        # Attempt 1: The Primary Model
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model="gemini-2.5-flash",
             contents=prompt
         )
-        # Strip removes any accidental invisible spaces or newlines the AI might add
-        classification = response.text.strip().upper()
-        return classification
+        return response.text.strip().upper()
+        
     except Exception as e:
-        print(f"Error during classification: {e}")
-        return "ERROR"
+        error_msg = str(e).lower()
+        # Check if the error is a Rate Limit / Quota issue
+        if "429" in error_msg or "exhausted" in error_msg or "quota" in error_msg:
+            print("[API Warning] Primary model quota exhausted. Falling back to flash-lite...")
+            
+            try:
+                # Attempt 2: The Backup Model
+                fallback_response = client.models.generate_content(
+                    model="gemini-2.5-flash-lite",
+                    contents=prompt
+                )
+                return fallback_response.text.strip().upper()
+                
+            except Exception as fallback_e:
+                print(f"[API Error] Fallback model also failed: {fallback_e}")
+                return "ERROR"
+        else:
+            # If it's a different error (like no internet), just fail safely
+            print(f"[API Error] Classification failed: {e}")
+            return "ERROR"
     
 if __name__ == "__main__":
     # A quick local test to make sure our API key and prompt are working
