@@ -1,94 +1,144 @@
 import time
 import schedule
-from email_client import authenticate_gmail,get_unread_emails, mark_as_read
+import requests
+import os
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.columns import Columns
+from rich.align import Align
+from rich.text import Text
+from rich import box
+
+from email_client import authenticate_gmail, get_unread_emails, mark_as_read
 from llm_api import classify_email
-from notifier import send_whatsapp_alert
+from notifier import send_telegram_alert
 from db_utils import log_email_to_db
 
-def run_agent():
-    print("Initializing MailMind Agent...")
+# Initialize the Rich Console
+console = Console()
 
-    # 1. Boot up the email connection
+def print_header():
+    """Renders a corporate-grade ASCII header."""
+    os.system('cls' if os.name == 'nt' else 'clear')
+    title = Text("MAILMIND AI", justify="center", style="bold cyan")
+    subtitle = Text("Autonomous Priority Routing & Shadow Telemetry", justify="center", style="dim italic")
+    header = Panel(
+        Text.assemble(title, "\n", subtitle),
+        box=box.DOUBLE_EDGE,
+        border_style="cyan",
+        expand=True
+    )
+    console.print(header)
+    console.print("\n")
+
+def shadow_evaluate_email(subject, body, external_prediction):
+    start_time = time.time()
+    try:
+        response = requests.post(
+            "http://127.0.0.1:8000/predict",
+            json={"subject": subject, "body": body},
+            timeout=3
+        )
+        if response.status_code == 200:
+            local_data = response.json()
+            local_label = local_data.get("prediction")
+            local_score = local_data.get("confidence_score")
+        else:
+            local_label, local_score = "API_ERROR", 0.0
+    except Exception:
+        local_label, local_score = "CONNECTION_FAILED", 0.0
+        
+    local_latency = round(time.time() - start_time, 3)
+
+    # Build the internal AI table (No printing yet, just building)
+    table = Table(show_header=True, header_style="bold magenta", expand=True, box=box.SIMPLE)
+    table.add_column("Engine", style="cyan")
+    table.add_column("Verdict", justify="center")
+    table.add_column("Conf.", justify="center")
+    table.add_column("Latency", justify="right")
+
+    ext_color = "green" if external_prediction == "IMPORTANT" else "red" if external_prediction == "ERROR" else "dim"
+    loc_color = "green" if local_label == "IMPORTANT" else "red" if local_label in ["API_ERROR", "CONNECTION_FAILED"] else "dim"
+
+    table.add_row("External (Cloud)", f"[{ext_color}]{external_prediction}[/]", "N/A", "N/A")
+    table.add_row("MailMind (Local)", f"[{loc_color}]{local_label}[/]", f"{local_score}%", f"{local_latency}s")
+
+    agreement = "✅ SYNCED" if local_label == external_prediction else "⚠️ DESYNC"
+    agreement_color = "bold green" if local_label == external_prediction else "bold yellow"
+    
+    # Wrap the table in a panel to be rendered side-by-side later
+    ai_panel = Panel(
+        table, 
+        title=f"🧠 Neural Telemetry | Status: [{agreement_color}]{agreement}[/]", 
+        border_style="magenta",
+        width=55
+    )
+    
+    return local_label, ai_panel
+
+def run_agent():
+    print_header()
+    
     gmail_service = authenticate_gmail()
     if not gmail_service:
-        print("Failed to connect to Gmail. Exiting.")
+        console.print("[bold red]Failed to connect to Gmail. Exiting.[/]")
         return
     
-    # 2. Fetch raw data
-    print("Fetching unread emails...")
-    # Fetch 5 emails for testing purposes
-    emails = get_unread_emails(gmail_service,max_results=5)
+    with console.status("[bold green]Establishing secure connection and fetching data...", spinner="point"):
+        emails = get_unread_emails(gmail_service, max_results=5)
 
     if not emails:
-        print("Inbox is clean! No unread emails to process.")
+        console.print(Align.center("[dim italic]No new data packets detected. Engine standing by.[/]"))
         return
     
-    print("--- Starting email classification ---")
+    console.print(f"[bold cyan]Detected {len(emails)} unread packets. Initiating classification matrix...[/]\n")
 
-    # 3. Core Agent Loop: Process each email through the LLM
     for email in emails:
-        print(f"\nEvaluating Email ID: {email['id']}")
-        print(f"From: {email['sender']}")
-        print(f"Subject: {email['subject']}")
+        with console.status(f"[bold yellow]Evaluating Packet ID: {email['id']}...", spinner="arc"):
+            # 1. External Call
+            decision = classify_email(email['sender'], email['subject'], email['body_snippet'])
+            # 2. Local Shadow Call
+            local_label, ai_panel = shadow_evaluate_email(email['subject'], email['body_snippet'], decision)
 
-        # Call the gemini model
-        decision = classify_email(
-            sender=email['sender'], 
-            subject=email['subject'], 
-            body_snippet=email['body_snippet']
-        )
-
-        # THE CIRCUIT BREAKER
+        # Circuit Breaker Logic
         if decision == "ERROR":
-            print("\n🚨 [SYSTEM HALT] AI processing failed. Halting batch to protect email state.")
-            print("The remaining emails will be kept as UNREAD. Trying again on next scheduled run.")
-            break  # This completely exits the for-loop immediately!
+            console.print(Panel("[bold red]🚨 CRITICAL: External API failure. Protecting state and halting batch.[/]", border_style="red"))
+            break
 
-        # Storing the result in the database for future reference and potential human review
-        log_email_to_db(
-            email_id=email['id'],
-            sender=email['sender'],
-            subject=email['subject'],
-            body=email['body_snippet'],
-            prediction=decision
-        )
+        # Log to Database
+        log_email_to_db(email['id'], email['sender'], email['subject'], email['body_snippet'], decision)
 
-        # 4. Display the LLM's decision
+        # Build Data Panel
+        email_text = f"[bold]From:[/bold] {email['sender']}\n[bold]Subject:[/bold] {email['subject']}\n\n[dim]{email['body_snippet'][:80]}...[/dim]"
+        border_color = "green" if decision == "IMPORTANT" else "dim"
+        data_panel = Panel(email_text, title="📧 Incoming Data", border_style=border_color, width=50)
+
+        # Render Side-by-Side!
+        console.print(Columns([data_panel, ai_panel], expand=True))
+
+        # Final Action Footer
         if decision == "IMPORTANT":
-            # Using a simple ANSI escape code to print IMPORTANT in green for visibility
-            print(f"Verdict: \033[92m{decision}\033[0m")
-            print("Action: Triggering WhatsApp alert...")
-
-            success = send_whatsapp_alert(
-                sender=email['sender'], 
-                subject=email['subject'], 
-                summary=email['body_snippet'][:100] + "..."
-            )
-
-            if success:
-                print("WhatsApp alert sent successfully!")
-            else:
-                print("Failed to send WhatsApp alert.")
+            success = send_telegram_alert(email['sender'], email['subject'], email['body_snippet'][:100] + "...")
+            alert_status = "[[bold green]✔ Telegram Routed[/]]" if success else "[[bold red]✖ Telegram Failed[/]]"
+            console.print(f"   ↳ [bold green]Verdict: PRIORITY[/] {alert_status}")
         else:
-            # Print IGNORE in a muted grey/standard color
-            print(f"Verdict: {decision}")
-            print("Action: Ignoring this email.")
+            console.print("   ↳ [dim]Verdict: IGNORE [[⚪ Suppressed]][/]")
 
-        # STATE CHANGE: Mark the email as read regardless of the AI's decision
+        # Mark as read
         if mark_as_read(gmail_service, email['id']):
-            print("-> State Updated: Marked as Read in Gmail.")
+            console.print("   ↳ [dim]State: Read[/]\n")
 
-        print("-"*40)
+        # Small divider between emails
+        console.rule(style="dim", characters="-")
+        time.sleep(0.5) # Slight pause for visual cinematic effect
 
 if __name__ == "__main__":
-    print("Starting the MailMind Background Service...")
-
     run_agent()
-
+    
     schedule.every(1).hour.do(run_agent)
 
-    print("\nService is now active. Polling Gmail every 1 hour.")
-    print("Press Ctrl+C to stop the process.\n")
+    console.print(Align.center("\n[dim]Service active. Polling engine running on 1hr interval. (Ctrl+C to terminate)[/]\n"))
 
     while True:
         schedule.run_pending()

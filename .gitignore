@@ -1,29 +1,14 @@
 # Environments
-.env
-.venv
-env/
 venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Python
+env/
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
 
-# Project specific data and models
-data/
-models/
-*.db
-
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints
-
-# Google OAuth Secrets
+# Environment Variables & Secrets
+.env
 credentials.json
 token.json
+database.db
 
-# Local Data (For Phase 2)
-data/
+# Huge Model Weights (Optional: If your model is > 100MB, keep this here so Git doesn't crash)
 models/

@@ -1,6 +1,19 @@
+# Google API & Auth
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
 google-genai
+
+# Local AI Engine & API
+transformers
+torch
+datasets
+fastapi
+uvicorn
+
+# Core Agent Tools
 python-dotenv
-twilio
+pandas
+requests
+schedule
+rich

@@ -15,6 +15,29 @@ client = genai.Client(api_key=api_key)
 
 def classify_email(sender, subject, body_snippet):
     # This is Prompt Engineering. We are giving the AI a very strict persona and rules.
+    # prompt = f"""
+    # You are an elite executive assistant filtering emails for a software engineer. 
+    # Review the following email and classify it as either 'IMPORTANT' or 'IGNORE'.
+    
+    # Rules:
+    # - Respond ONLY with the word 'IMPORTANT' or 'IGNORE'. Do not add any other text, punctuation, or explanation.
+    
+    # Classify as 'IMPORTANT' if the email matches ANY of these criteria:
+    # 1. AI/ML Opportunities: Any mention of an internship, interview, assessment, recruiter outreach, or job application status related to Artificial Intelligence (AI), Machine Learning (ML), or Deep Learning.
+    # 2. StageVerse Project: Any correspondence mentioning "StageVerse", specifically feedback, inquiries, beta testing, or discussions from Lighting Designers (LDs) or concert production crew.
+    # 3. Critical Personal Communications: Direct, personalized messages from real humans, university faculty, urgent account alerts, or calendar invites.
+
+    # Classify as 'IGNORE' if the email is:
+    # - General newsletters or digests (even if they discuss AI, ML, or concert production).
+    # - Marketing, promotional offers, or automated social media updates.
+    # - Cold sales pitches or generic software vendor emails.
+
+    # Email Data:
+    # Sender: {sender}
+    # Subject: {subject}
+    # Body: {body_snippet}
+    # """
+
     prompt = f"""
     You are an elite executive assistant filtering emails for a software engineer. 
     Review the following email and classify it as either 'IMPORTANT' or 'IGNORE'.
