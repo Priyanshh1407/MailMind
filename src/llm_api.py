@@ -1,6 +1,10 @@
 import os 
 from google import genai
 from dotenv import load_dotenv
+import sys
+
+sys.path.append(os.path.dirname(__file__))
+import vector_db
 
 # Load environment variables from .env file
 load_dotenv()
@@ -14,48 +18,32 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 def classify_email(sender, subject, body_snippet):
-    # This is Prompt Engineering. We are giving the AI a very strict persona and rules.
-    # prompt = f"""
-    # You are an elite executive assistant filtering emails for a software engineer. 
-    # Review the following email and classify it as either 'IMPORTANT' or 'IGNORE'.
+    # 1. Fetch Dynamic Few-Shot Examples from Vector DB
+    similar_emails = vector_db.search_similar_emails(subject, body_snippet, k=3)
     
-    # Rules:
-    # - Respond ONLY with the word 'IMPORTANT' or 'IGNORE'. Do not add any other text, punctuation, or explanation.
-    
-    # Classify as 'IMPORTANT' if the email matches ANY of these criteria:
-    # 1. AI/ML Opportunities: Any mention of an internship, interview, assessment, recruiter outreach, or job application status related to Artificial Intelligence (AI), Machine Learning (ML), or Deep Learning.
-    # 2. StageVerse Project: Any correspondence mentioning "StageVerse", specifically feedback, inquiries, beta testing, or discussions from Lighting Designers (LDs) or concert production crew.
-    # 3. Critical Personal Communications: Direct, personalized messages from real humans, university faculty, urgent account alerts, or calendar invites.
+    few_shot_context = ""
+    if similar_emails:
+        few_shot_context = "\n### User Precedents (Learn from these past classifications) ###\n"
+        for i, em in enumerate(similar_emails):
+            few_shot_context += f"Example {i+1}:\n"
+            few_shot_context += f"{em['text']}\n"
+            few_shot_context += f"User Classified As: {em['label']}\n\n"
 
-    # Classify as 'IGNORE' if the email is:
-    # - General newsletters or digests (even if they discuss AI, ML, or concert production).
-    # - Marketing, promotional offers, or automated social media updates.
-    # - Cold sales pitches or generic software vendor emails.
-
-    # Email Data:
-    # Sender: {sender}
-    # Subject: {subject}
-    # Body: {body_snippet}
-    # """
-
+    # 2. Build the Dynamic Prompt
     prompt = f"""
     You are an elite executive assistant filtering emails for a software engineer. 
-    Review the following email and classify it as either 'IMPORTANT' or 'IGNORE'.
+    Review the following email and classify it strictly into one of three categories: 'IMPORTANT', 'UPDATES', or 'SPAM'.
     
     Rules:
-    - Respond ONLY with the word 'IMPORTANT' or 'IGNORE'. Do not add any other text, punctuation, or explanation.
+    - Respond ONLY with the exact word 'IMPORTANT', 'UPDATES', or 'SPAM'. Do not add any other text.
     
-    Classify as 'IMPORTANT' if the email matches ANY of these criteria:
-    1. AI/ML Opportunities: Any mention of an internship, interview, assessment, recruiter outreach, or job application status related to Artificial Intelligence (AI), Machine Learning (ML), or Deep Learning.
-    2. StageVerse Project: Any correspondence mentioning "StageVerse", specifically feedback, inquiries, beta testing, or discussions from Lighting Designers (LDs) or concert production crew.
-    3. Critical Personal Communications: Direct, personalized messages from real humans, university faculty, urgent account alerts, or calendar invites.
-
-    Classify as 'IGNORE' if the email is:
-    - General newsletters or digests (even if they discuss AI, ML, or concert production).
-    - Marketing, promotional offers, or automated social media updates.
-    - Cold sales pitches or generic software vendor emails.
-
-    Email Data:
+    Category Definitions:
+    1. IMPORTANT: Needs immediate attention. Direct messages, personal communications, urgent alerts, interview scheduling, or calendar invites.
+    2. UPDATES: Useful but not urgent. Internship/job open positions, tool newsletters (like Supabase, AWS), tech updates.
+    3. SPAM: Unwanted junk, general marketing, cold sales pitches, platforms like 'Unstop', promotional offers.
+    {few_shot_context}
+    
+    ### Email to Classify ###
     Sender: {sender}
     Subject: {subject}
     Body: {body_snippet}
@@ -67,36 +55,65 @@ def classify_email(sender, subject, body_snippet):
             model="gemini-2.5-flash",
             contents=prompt
         )
-        return response.text.strip().upper()
+        prediction = response.text.strip().upper()
+        
+        # Sanitize output just in case
+        if prediction not in ["IMPORTANT", "UPDATES", "SPAM"]:
+            return "SPAM"
+            
+        return prediction
         
     except Exception as e:
         error_msg = str(e).lower()
-        # Check if the error is a Rate Limit / Quota issue
         if "429" in error_msg or "exhausted" in error_msg or "quota" in error_msg:
             print("[API Warning] Primary model quota exhausted. Falling back to flash-lite...")
-            
             try:
-                # Attempt 2: The Backup Model
                 fallback_response = client.models.generate_content(
                     model="gemini-2.5-flash-lite",
                     contents=prompt
                 )
-                return fallback_response.text.strip().upper()
-                
+                prediction = fallback_response.text.strip().upper()
+                if prediction not in ["IMPORTANT", "UPDATES", "SPAM"]:
+                    return "SPAM"
+                return prediction
             except Exception as fallback_e:
                 print(f"[API Error] Fallback model also failed: {fallback_e}")
-                return "ERROR"
+                
+                # Ultimate Fallback: ChatGroq
+                print("[API Warning] Both Gemini models failed. Triggering ultimate fallback (Groq/Llama3)...")
+                try:
+                    import requests
+                    groq_api_key = os.getenv("GROQ_API_KEY")
+                    if not groq_api_key:
+                        raise ValueError("GROQ_API_KEY missing from .env")
+                        
+                    headers = {
+                        "Authorization": f"Bearer {groq_api_key}",
+                        "Content-Type": "application/json"
+                    }
+                    data = {
+                        "model": "llama-3.1-8b-instant",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.1
+                    }
+                    groq_resp = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=5)
+                    groq_resp.raise_for_status()
+                    
+                    prediction = groq_resp.json()["choices"][0]["message"]["content"].strip().upper()
+                    if prediction not in ["IMPORTANT", "UPDATES", "SPAM"]:
+                        return "SPAM"
+                    return prediction
+                except Exception as groq_e:
+                    print(f"[API Error] Ultimate Groq fallback also failed: {groq_e}")
+                    return "ERROR"
         else:
-            # If it's a different error (like no internet), just fail safely
             print(f"[API Error] Classification failed: {e}")
             return "ERROR"
     
 if __name__ == "__main__":
-    # A quick local test to make sure our API key and prompt are working
     test_sender = "boss@company.com"
     test_subject = "Urgent: Project Deadline Moved Up"
     test_body = "Priyansh, we need to talk about the delivery timeline. Call me ASAP."
-    
     print("Sending test email to Gemini for classification...")
     result = classify_email(test_sender, test_subject, test_body)
     print(f"LLM Decision: {result}")

@@ -1,5 +1,6 @@
 import os.path
 import base64
+import google_auth_oauthlib.flow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -30,10 +31,23 @@ def authenticate_gmail():
                 os.remove('token.json')
                 return authenticate_gmail()
         else:
-            # Trigger the browser-based OAuth flow
+            # Monkey-patch the WSGI app to serve HTML instead of plain text
+            
+            if not hasattr(google_auth_oauthlib.flow._RedirectWSGIApp, '_patched'):
+                old_call = google_auth_oauthlib.flow._RedirectWSGIApp.__call__
+                def new_call(self, environ, start_response):
+                    def custom_start_response(status, headers, exc_info=None):
+                        new_headers = [(n, 'text/html; charset=utf-8') if n.lower() == 'content-type' else (n, v) for n, v in headers]
+                        return start_response(status, new_headers, exc_info)
+                    return old_call(self, environ, custom_start_response)
+                google_auth_oauthlib.flow._RedirectWSGIApp.__call__ = new_call
+                google_auth_oauthlib.flow._RedirectWSGIApp._patched = True
+
+            # Trigger the browser-based OAuth flow with auto-redirect
             flow = InstalledAppFlow.from_client_secrets_file(
                 'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
+            success_html = '<html><head><meta http-equiv="refresh" content="0;url=http://localhost:5173/"></head><body style="background:#0c1324;color:#22d3ee;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;"><h2>Authentication successful! Redirecting to MailMind...</h2></body></html>'
+            creds = flow.run_local_server(port=0, success_message=success_html)
             
         # Save the credentials for the next run so we don't have to log in every time
         with open('token.json', 'w') as token:
@@ -46,7 +60,15 @@ def authenticate_gmail():
         
         # Quick test: fetch the user's email address to prove it works
         profile = service.users().getProfile(userId='me').execute()
-        print(f"Authenticated as: {profile['emailAddress']}")
+        email_address = profile.get('emailAddress', 'Unknown')
+        print(f"Authenticated as: {email_address}")
+        
+        # Save email to a local file for the UI to read
+        import json
+        profile_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'user_profile.json'))
+        os.makedirs(os.path.dirname(profile_path), exist_ok=True)
+        with open(profile_path, 'w') as f:
+            json.dump({"email": email_address}, f)
         
         return service
         

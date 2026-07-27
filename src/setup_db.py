@@ -9,6 +9,10 @@ current_dir = os.path.dirname(__file__)
 DB_PATH = os.path.abspath(os.path.join(current_dir, '..', 'data', 'email_logs.db'))
 
 def create_database():
+    if os.path.exists(DB_PATH):
+        print(f"Database already exists at: {DB_PATH}. Skipping initialization.")
+        return
+
     print(f"Targeting database at: {DB_PATH}")
     
     # SAFEGUARD: Create the 'data' directory if it somehow doesn't exist
@@ -26,6 +30,7 @@ def create_database():
         subject TEXT,
         body TEXT,
         prediction TEXT,
+        local_prediction TEXT,
         human_label TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );

@@ -4,11 +4,17 @@ env/
 __pycache__/
 *.pyc
 
-# Environment Variables & Secrets
+# Environment Variables, Secrets & Private Databases
 .env
 credentials.json
 token.json
 database.db
 
+# 🛑 CRITICAL: Ignore all local databases and user profiles!
+data/
 # Huge Model Weights (Optional: If your model is > 100MB, keep this here so Git doesn't crash)
 models/
+
+# Interview Prep Files
+Self_Healing_Architecture.md
+MailMind_Interview_Prep_Guide.md

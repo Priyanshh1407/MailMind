@@ -14,6 +14,21 @@ from email_client import authenticate_gmail, get_unread_emails, mark_as_read
 from llm_api import classify_email
 from notifier import send_telegram_alert
 from db_utils import log_email_to_db
+import json
+
+# --- CONFIGURATION ---
+STATUS_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'polling_status.json')
+
+def set_polling_status(is_polling):
+    try:
+        with open(STATUS_FILE, 'w') as f:
+            json.dump({"is_polling": is_polling}, f)
+    except:
+        pass
+# Set to True to see the detailed side-by-side CLI visualization.
+# Set to False to run quietly (useful since we have the React Web UI now).
+ENABLE_CLI_DASHBOARD = False
+# ---------------------
 
 # Initialize the Rich Console
 console = Console()
@@ -46,7 +61,9 @@ def shadow_evaluate_email(subject, body, external_prediction):
             local_score = local_data.get("confidence_score")
         else:
             local_label, local_score = "API_ERROR", 0.0
-    except Exception:
+    except Exception as e:
+        print(f"\n[!] LOCAL MODEL FAILURE: Could not connect to internal AI API.")
+        print(f"[!] ERROR DETAILS: {str(e)}\n")
         local_label, local_score = "CONNECTION_FAILED", 0.0
         
     local_latency = round(time.time() - start_time, 3)
@@ -78,11 +95,13 @@ def shadow_evaluate_email(subject, body, external_prediction):
     return local_label, ai_panel
 
 def run_agent():
+    set_polling_status(True)
     print_header()
     
     gmail_service = authenticate_gmail()
     if not gmail_service:
         console.print("[bold red]Failed to connect to Gmail. Exiting.[/]")
+        set_polling_status(False)
         return
     
     with console.status("[bold green]Establishing secure connection and fetching data...", spinner="point"):
@@ -90,6 +109,7 @@ def run_agent():
 
     if not emails:
         console.print(Align.center("[dim italic]No new data packets detected. Engine standing by.[/]"))
+        set_polling_status(False)
         return
     
     console.print(f"[bold cyan]Detected {len(emails)} unread packets. Initiating classification matrix...[/]\n")
@@ -107,33 +127,41 @@ def run_agent():
             break
 
         # Log to Database
-        log_email_to_db(email['id'], email['sender'], email['subject'], email['body_snippet'], decision)
+        log_email_to_db(email['id'], email['sender'], email['subject'], email['body_snippet'], decision, local_label)
 
-        # Build Data Panel
-        email_text = f"[bold]From:[/bold] {email['sender']}\n[bold]Subject:[/bold] {email['subject']}\n\n[dim]{email['body_snippet'][:80]}...[/dim]"
-        border_color = "green" if decision == "IMPORTANT" else "dim"
-        data_panel = Panel(email_text, title="📧 Incoming Data", border_style=border_color, width=50)
+        if ENABLE_CLI_DASHBOARD:
+            # Build Data Panel
+            email_text = f"[bold]From:[/bold] {email['sender']}\n[bold]Subject:[/bold] {email['subject']}\n\n[dim]{email['body_snippet'][:80]}...[/dim]"
+            border_color = "green" if decision == "IMPORTANT" else "dim"
+            data_panel = Panel(email_text, title="📧 Incoming Data", border_style=border_color, width=50)
 
-        # Render Side-by-Side!
-        console.print(Columns([data_panel, ai_panel], expand=True))
+            # Render Side-by-Side!
+            console.print(Columns([data_panel, ai_panel], expand=True))
 
         # Final Action Footer
         if decision == "IMPORTANT":
             success = send_telegram_alert(email['sender'], email['subject'], email['body_snippet'][:100] + "...")
             alert_status = "[[bold green]✔ Telegram Routed[/]]" if success else "[[bold red]✖ Telegram Failed[/]]"
             console.print(f"   ↳ [bold green]Verdict: PRIORITY[/] {alert_status}")
+        elif decision == "UPDATES":
+            console.print("   ↳ [bold blue]Verdict: UPDATES[/]")
         else:
-            console.print("   ↳ [dim]Verdict: IGNORE [[⚪ Suppressed]][/]")
+            console.print("   ↳ [dim]Verdict: SPAM [[⚪ Suppressed]][/]")
 
         # Mark as read
         if mark_as_read(gmail_service, email['id']):
             console.print("   ↳ [dim]State: Read[/]\n")
 
-        # Small divider between emails
-        console.rule(style="dim", characters="-")
-        time.sleep(0.5) # Slight pause for visual cinematic effect
+        if ENABLE_CLI_DASHBOARD:
+            # Small divider between emails
+            console.rule(style="dim", characters="-")
+            time.sleep(0.5) # Slight pause for visual cinematic effect
+            
+    set_polling_status(False)
 
 if __name__ == "__main__":
+    console.print(Align.center("\n[bold yellow]Booting up systems. Giving local AI 10 seconds to load...[/]\n"))
+    time.sleep(10)
     run_agent()
     
     schedule.every(1).hour.do(run_agent)

@@ -68,6 +68,7 @@ if __name__ == "__main__":
     )
     
     print("\n STARTING PERSONALIZATION LOOP ")
+    
     trainer.train()
     
     print("\n SAVING FINAL CUSTOM PRODUCTION MODEL ")

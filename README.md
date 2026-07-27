@@ -1,26 +1,35 @@
 # 🧠 MailMind AI: Autonomous Shadow Deployment Agent
 
-An offline-first, locally hosted AI microservice that autonomously fetches, classifies, and routes high-priority emails using a fine-tuned DistilBERT model. 
+An offline-first, locally hosted AI microservice that autonomously fetches, classifies, and routes high-priority emails. 
 
-MailMind features an enterprise-grade **Shadow Deployment (A/B Testing)** architecture, running local neural inferences in milliseconds alongside external cloud APIs, complete with real-time CLI telemetry and Telegram alerting.
+MailMind features an enterprise-grade **Dual-LLM Architecture** and a premium **React + Tailwind CSS** frontend dashboard, running background inferences alongside external cloud APIs, complete with real-time UI telemetry and Telegram alerting.
 
 ## 🚀 System Architecture
-- **Data Ingestion:** Securely polls Gmail API via OAuth2 for unread packets.
-- **Microservice Brain (Dockerized):** A FastAPI backend hosting a Hugging Face NLP model, strictly isolated within a containerized Linux environment.
-- **Shadow Telemetry:** Dual-engine classification. Every email is evaluated by both an External Cloud LLM and the Local MailMind Engine, comparing latency, confidence scoring, and model agreement dynamically.
-- **Event-Driven Routing:** Priority communications instantly trigger a webhook to a Telegram Bot for real-time mobile push notifications.
+- **Data Ingestion:** Securely polls Gmail API via OAuth2 for unread packets. Includes a monkey-patched WSGI server for seamless HTML redirection upon authentication.
+- **Backend API (Python/FastAPI):** Hosts endpoints for fetching emails, syncing live telemetry statuses, user profile management, and Human-in-the-Loop feedback.
+- **Dual-LLM Classification:** Every email is evaluated using an external Cloud LLM (Gemini 2.5 Flash / Llama 3.1 8B via Groq) alongside a local model. Emails are bucketed into `IMPORTANT`, `UPDATES`, or `SPAM`.
+- **Feedback & Self-Healing:** Human corrections in the UI are saved to a local Vector Database (ChromaDB) to provide dynamic Few-Shot learning context to the AI, ensuring the system learns from mistakes.
+- **Premium Frontend:** A beautiful, responsive, glassmorphism dashboard built with React and Vite, featuring dynamic Dicebear robot avatars and live polling badges.
 
 ## 🛠️ Tech Stack
-* **AI & Machine Learning:** PyTorch, Hugging Face Transformers (`DistilBERT`)
-* **Backend API:** FastAPI, Uvicorn, Python 3.10
-* **DevOps & Deployment:** Docker, WSL2 (Linux Subsystem)
-* **UI & Telemetry:** Rich (Terminal User Interface)
-* **Integrations:** Gmail API, Telegram Bot API
+* **AI & Machine Learning:** Google GenAI (Gemini), Groq API (Llama 3.1), ChromaDB (Vector Search)
+* **Backend API:** FastAPI, Uvicorn, Python 3.10, SQLite
+* **Frontend:** React, Vite, Tailwind CSS
+* **Integrations:** Gmail API (OAuth2), Telegram Bot API
 
 ## ⚡ Quick Start
 
-### 1. Environment Setup
-GEMINI_API_KEY
+### 1. Environment Setup (.env)
+Create a `.env` file in the root directory:
+```
+GEMINI_API_KEY=your_key
+GROQ_API_KEY=your_key
+TELEGRAM_BOT_TOKEN=your_token
+TELEGRAM_CHAT_ID=your_id
+```
 
-TELEGRAM_BOT_TOKEN 
-TELEGRAM_CHAT_ID 
+### 2. Run the Full Stack
+Use the provided batch script to launch the FastAPI server, the background AI polling engine, and the Vite React frontend simultaneously:
+```bash
+./start_all.bat
+```
