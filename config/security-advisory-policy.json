@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "reviewed": "2026-09-19",
+  "package": "chromadb",
+  "version": "1.5.9",
+  "accepted_ids": [
+    "GHSA-2wm9-hf6c-p5cr",
+    "GHSA-36p7-vc44-83pf",
+    "GHSA-f4j7-r4q5-qw2c",
+    "GHSA-xph7-9rjv-w5fr",
+    "PYSEC-2026-311",
+    "PYSEC-2026-3813",
+    "PYSEC-2026-3814",
+    "PYSEC-2026-3815"
+  ],
+  "boundary": "Embedded PersistentClient with chromadb.api.rust.RustBindingsAPI only; no Chroma HTTP service, server auth or tenant API is started or published.",
+  "recheck": "Before any Chroma upgrade or server/remote/multi-user deployment."
+}

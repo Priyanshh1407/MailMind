@@ -1,0 +1,25 @@
+# Allowlist the only files needed by the build. Everything else, including
+# secrets, private data, models, git history and virtualenvs, stays out.
+**
+!Dockerfile
+!requirements.lock
+!src/
+!src/*.py
+!api/
+!api/*.py
+!scripts/
+!scripts/*.py
+!fixtures/
+!fixtures/**
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/vite.config.js
+!frontend/serve.mjs
+!frontend/src/
+!frontend/src/**
+!frontend/public/
+!frontend/public/**
+!deploy/
+!deploy/**

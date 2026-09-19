@@ -1,55 +1,35 @@
-import re
-import sqlite3
+"""Explicit, account-scoped minimal export; never run against a DB on import."""
+from pathlib import Path
+import argparse
 import pandas as pd
+from src.database import connection
+from src.privacy import redact
+from src.config import CATEGORIES, LEGACY_ACCOUNT
+
 
 def mask_financial_pii(text):
-    # 1. PAN Card (Indian Tax ID)
-    pan_pattern = r'[A-Z]{5}[0-9]{4}[A-Z]{1}'
-    
-    # 2. UPI IDs / VPA (e.g., user@okicici)
-    upi_pattern = r'[\w\.\-_]+@[\w\-_]+'
-    
-    # 3. Folio / Account Numbers (Generic 8-16 digits)
-    # Hint: Use \b to denote word boundaries so it doesn't catch years (2026)
-    acct_pattern = r'\b\d{8,16}\b'
+    from src.privacy import redact
+    return redact(text)
 
-    currency_pattern = r'([\$|₹|Rs\.?]\s?\d+(?:,\d+)*(?:\.\d+)?)'
-    text = re.sub(currency_pattern, "[AMOUNT]", text)
 
-    # Apply substitutions
-    text = re.sub(pan_pattern, "[PAN_ID]", text)
-    text = re.sub(upi_pattern, "[UPI_ID]", text)
-    text = re.sub(acct_pattern, "[ACCOUNT_NUM]", text)
-    
-    # Add one for 'Amount' here using the currency logic from the last step
-    return text
+def process_and_save(*,db_path,account_id,output):
+    if not account_id or account_id == LEGACY_ACCOUNT:
+        raise ValueError('Choose an assigned account explicitly')
+    output=Path(output)
+    if output.exists(): raise ValueError('Export output already exists; choose a fresh path')
+    with connection(db_path) as conn:
+        rows=conn.execute('SELECT subject,body,human_label FROM email_logs WHERE account_id=? AND human_label IN (?,?,?)', (account_id,*CATEGORIES)).fetchall()
+    def safe_cell(value):
+        value=redact(value)
+        return "'"+value if value.lstrip().startswith(('=','+','-','@')) else value
+    frame=pd.DataFrame([{'subject':safe_cell(row['subject']),'body':safe_cell(row['body']),'human_label':row['human_label']} for row in rows],columns=['subject','body','human_label'])
+    output.parent.mkdir(parents=True,exist_ok=True)
+    with output.open('x',encoding='utf-8',newline='') as stream: frame.to_csv(stream,index=False)
+    return len(frame)
 
-def process_and_save():
-    # TODO: 
-    # 1. Connect to data/email_logs.db
-    # 2. Load rows where 'label' is not null into a DataFrame
-    # 3. Apply mask_financial_pii to the 'body' column
-    # 4. Save to 'data/processed/cleaned_emails.csv'
 
-    conn = sqlite3.connect('data/email_logs.db')
-    df = pd.read_sql_query("SELECT * FROM email_logs WHERE human_label IS NOT NULL",con=conn)
-
-    df['body']=df['body'].apply(mask_financial_pii)
-
-    df.to_csv('data/processed/cleaned_emails.csv',index=False)\
-    
-
-    conn.close()
-    print(f"Success! Cleaned {len(df)} emails and saved to CSV.")
-    pass
-
-if __name__ == "__main__":
-    # Test your function here with a string containing a fake PAN or UPI
-    test_str = "Your Folio 1234567890 for PAN ABCDE1234F has a balance of Rs. 5000"
-    print("Testing Masker:")
-    print(mask_financial_pii(test_str))
-    print("-" * 30)
-    
-    # 2. ACTUALLY execute the database extraction and saving!
-    print("Starting database extraction...")
-    process_and_save()
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--db',required=True);parser.add_argument('--account',required=True);parser.add_argument('--output',required=True)
+    args=parser.parse_args();count=process_and_save(db_path=args.db,account_id=args.account,output=args.output)
+    print(f'Exported {count} labelled rows. Masking is not guaranteed anonymization; inspect before sharing.')

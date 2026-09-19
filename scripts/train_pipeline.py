@@ -1,45 +1,23 @@
+from src.email_text import MODEL_MAX_TOKENS
+from src.training_data import prepare_training_frame
+from src.priority_training import load_training_frame
 import pandas as pd
 from datasets import Dataset
 from transformers import AutoTokenizer
 
 def prepare_data():
-    print("1. Loading cleaned data...")
-    df = pd.read_csv("data/processed/cleaned_emails.csv")
-    
-    # Check if 'body' has any empty rows and drop them (data cleaning!)
-    df = df.dropna(subset=['body', 'human_label'])
-
-    print("2. Encoding labels...")
-    # TODO: Create a dictionary mapping your exact text labels to 0 and 1
-    # For example: If your labels are "IGNORE" and "IMPORTANT"
-    label_mapping = {
-        "IGNORE": 0,
-        "IMPORTANT": 1
-    }
-    
-    # Create a new column called 'label' (Hugging Face expects this exact name)
-    df['label'] = df['human_label'].map(label_mapping)
-    df['label'] = df['label'].astype(int)
-
-    print("3. Combining Subject and Body...")
-    # Fill any blank subjects or bodies with empty strings to prevent errors
-    df['subject'] = df['subject'].fillna("")
-    df['body'] = df['body'].fillna("")
-    
-    # Create the Super String
-    df['combined_text'] = "Subject: " + df['subject'] + " | Body: " + df['body']
-
-    # Keep the new combined text and the label
-    df = df[['combined_text', 'label']]
+    print("1. Loading verified priority training groups...")
+    df = load_training_frame()
+    df = prepare_training_frame(df)
     hf_dataset = Dataset.from_pandas(df)
 
     print("4. Tokenizing...")
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", token=False)
 
     def tokenize_function(examples):
         # We truncate to 512 tokens (DistilBERT's max brain size)
         # We pad to max_length so all arrays are exactly the same size
-        return tokenizer(examples["combined_text"], padding="max_length", truncation=True, max_length=512)
+        return tokenizer(examples["combined_text"], padding="max_length", truncation=True, max_length=MODEL_MAX_TOKENS)
 
     # Apply the tokenizer to all rows simultaneously (batched=True makes it lightning fast)
     tokenized_dataset = hf_dataset.map(tokenize_function, batched=True)
@@ -49,4 +27,17 @@ def prepare_data():
     return tokenized_dataset
 
 if __name__ == "__main__":
-    dataset = prepare_data()
+    import argparse
+    import json
+    from pathlib import Path
+    from src.benchmark_data import prepare_rows,group_splits,split_manifest,digest
+    parser=argparse.ArgumentParser(description='Validate provenance and reserve grouped splits without training or loading weights')
+    parser.add_argument('--dataset',default='fixtures/priority_benchmark')
+    parser.add_argument('--output',required=True)
+    parser.add_argument('--seed',type=int,default=42)
+    args=parser.parse_args();root=Path(args.dataset)
+    manifest=json.loads((root/'provenance.json').read_text(encoding='utf-8'))
+    rows=prepare_rows(json.loads((root/'emails.json').read_text(encoding='utf-8')),manifest)
+    splits=group_splits(rows,args.seed);output=Path(args.output);output.parent.mkdir(parents=True,exist_ok=True)
+    output.write_text(json.dumps(split_manifest(splits,digest(rows),args.seed),indent=2)+'\n',encoding='utf-8')
+    print('Validated three-category grouped splits. Test IDs are reserved separately.')

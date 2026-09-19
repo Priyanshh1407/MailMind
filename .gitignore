@@ -6,9 +6,19 @@ __pycache__/
 
 # Environment Variables, Secrets & Private Databases
 .env
+.env.*
+!.env.example
 credentials.json
 token.json
-database.db
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.pem
+*.key
+*.p12
+*.pfx
+exports/
 
 # 🛑 CRITICAL: Ignore all local databases and user profiles!
 data/
@@ -18,3 +28,21 @@ models/
 # Interview Prep Files
 Self_Healing_Architecture.md
 MailMind_Interview_Prep_Guide.md
+# Synthetic browser-test output (source tests are retained).
+frontend/test-results/
+frontend/playwright-report/
+
+# Owned launcher state/logs and clean-release environments
+.run/
+.venv/
+wheelhouse/
+
+# Local review and generated evidence (not part of the public source release)
+docs/PHASE_*_REVIEW.md
+docs/PHASE_0_BASELINE.md
+docs/FINAL_SAFETY_REVIEW.md
+docs/evaluation/
+docs/phase*.png
+PROJECT_*.md
+MAILMIND_INTERVIEW_REPORT.md
+MAILMIND_COMPLETE_GUIDE.md

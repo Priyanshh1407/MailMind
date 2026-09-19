@@ -1,0 +1,18 @@
+{
+  "dataset_id": "mailmind-synthetic-priority-v1",
+  "source": "Original scenario-based fixtures authored for this project; no real emails or third-party dataset copied.",
+  "license": "CC0-1.0",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "task": "three_category_priority",
+  "synthetic": true,
+  "label_semantics": {
+    "IMPORTANT": "Direct legitimate action or attention needed, including deadlines.",
+    "UPDATES": "Legitimate useful nonurgent information with no required response.",
+    "SPAM": "Unwanted bulk junk, deceptive offers or phishing."
+  },
+  "limitations": [
+    "Small hand-designed synthetic benchmark; not independently human-reviewed real inbox data.",
+    "Wording is more explicit than real mail. English only. No population accuracy claim.",
+    "Template/thread variants must stay in the same split."
+  ]
+}

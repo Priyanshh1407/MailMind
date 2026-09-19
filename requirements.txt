@@ -1,20 +1,28 @@
-# Google API & Auth
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
-google-genai
-
-# Local AI Engine & API
-transformers
-torch
-datasets
-fastapi
-uvicorn
-
-# Core Agent Tools
-python-dotenv
-pandas
-requests
-schedule
-rich
-chromadb
+# Direct dependencies tested on CPython 3.14 x64; install the full closure with requirements.lock.
+google-api-python-client==2.200.0
+google-auth==2.58.0
+google-auth-httplib2==0.3.0
+google-auth-oauthlib==1.3.0
+google-genai==2.24.0
+httplib2==0.32.0
+transformers==5.17.0
+torch==2.14.0
+datasets==5.0.1
+fastapi==0.141.1
+uvicorn==0.53.0
+pydantic==2.13.5
+python-dotenv==1.2.2
+pandas==3.0.6
+requests==2.34.2
+httpx==0.28.1
+schedule==1.2.2
+rich==14.3.3
+chromadb==1.5.9
+numpy==2.4.4
+scikit-learn==1.8.0
+tokenizers==0.23.2
+safetensors==0.8.0
+onnxruntime==1.30.0
+psutil==7.2.2
+PyYAML==6.0.3
+packaging==26.0

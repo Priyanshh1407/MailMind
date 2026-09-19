@@ -1,0 +1,51 @@
+name: mailmind-demo
+x-backend: &backend
+  build:
+    context: .
+    target: backend
+  environment: &local-env
+    MAILMIND_LOCAL_ONLY: "true"
+    MAILMIND_DATA_DIR: /app/data
+    MAILMIND_MODEL_PATH: /app/models/classifier
+    MAILMIND_ASSET_MANIFEST: /app/models/manifest.container.json
+    MAILMIND_AUTO_MARK_READ: "false"
+    HF_HUB_OFFLINE: "1"
+    HF_HUB_DISABLE_TELEMETRY: "1"
+  volumes:
+    - mailmind-demo-data:/app/data
+    - type: bind
+      source: ./models/offline-demo-v1
+      target: /app/models
+      read_only: true
+      bind:
+        create_host_path: false
+  init: true
+  stop_grace_period: 60s
+  restart: "no"
+services:
+  api:
+    <<: *backend
+    ports: ["127.0.0.1:8000:8000"]
+  worker:
+    <<: *backend
+    command: ["python", "-m", "scripts.service_runner", "worker"]
+    environment:
+      <<: *local-env
+      MAILMIND_STDIN_CONTROL: "false"
+    healthcheck:
+      disable: true
+    depends_on:
+      api:
+        condition: service_healthy
+  frontend:
+    build:
+      context: .
+      target: frontend
+    ports: ["127.0.0.1:5173:5173"]
+    init: true
+    restart: "no"
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  mailmind-demo-data:

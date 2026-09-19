@@ -1,173 +1,238 @@
-import os.path
-import base64
-import google_auth_oauthlib.flow
+"""Interactive login is explicit; background access never opens a browser."""
+from dataclasses import dataclass, field
+from contextlib import nullcontext
+from .mime_parser import parse_gmail_message, MessageParseError
+from .account_state import WorkCancelled
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from .config import ROOT, Settings
+from .provider_policy import RequestBudget, PROVIDER_CALLS
+import httplib2
+from google_auth_httplib2 import AuthorizedHttp
 
-# If modifying these scopes, delete the file token.json.
-# This scope allows us to read metadata, labels, and the email body securely.
+
+def build_gmail(creds, timeout=5):
+    transport=AuthorizedHttp(creds,http=httplib2.Http(timeout=timeout))
+    return build('gmail','v1',http=transport,cache_discovery=False)
+
+
+def execute_gmail(request, budget=None):
+    if budget is not None:
+        budget.timeout(5)
+    # Real SDK retries are disabled. Test adapters keep their simple contract.
+    from googleapiclient.http import HttpRequest
+    timeout=budget.timeout(5) if budget is not None else 5
+    return PROVIDER_CALLS.run(lambda:request.execute(num_retries=0) if isinstance(request,HttpRequest) else request.execute(),timeout)
+from .logging_utils import log_event
+
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
+
+def _authenticate_gmail():
+    if Settings.from_environment().local_only: raise RuntimeError('Google authentication disabled in local-only mode')
+    flow = InstalledAppFlow.from_client_secrets_file(str(ROOT / 'credentials.json'), SCOPES)
+    creds = flow.run_local_server(host='127.0.0.1', port=0, prompt='select_account',
+                                 timeout_seconds=180, success_message='Connected. You can close this tab.')
+    service = build_gmail(creds)
+    account_id = execute_gmail(service.users().getProfile(userId='me')).get('emailAddress')
+    # Return a candidate only. The lifecycle manager decides whether login is
+    # still allowed before saving anything.
+    return account_id, creds.to_json()
+
+
 def authenticate_gmail():
-    """Shows basic usage of the Gmail API.
-    Authenticates the user and returns the Gmail service object.
-    """
-    creds = None
-    # The file token.json stores the user's access and refresh tokens.
-    # It is created automatically when the authorization flow completes for the first time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-        
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                # Attempt to refresh the token automatically
-                creds.refresh(Request())
-            except Exception as e:
-                print(f"Error refreshing token: {e}. Forcing re-authentication.")
-                os.remove('token.json')
-                return authenticate_gmail()
-        else:
-            # Monkey-patch the WSGI app to serve HTML instead of plain text
-            
-            if not hasattr(google_auth_oauthlib.flow._RedirectWSGIApp, '_patched'):
-                old_call = google_auth_oauthlib.flow._RedirectWSGIApp.__call__
-                def new_call(self, environ, start_response):
-                    def custom_start_response(status, headers, exc_info=None):
-                        new_headers = [(n, 'text/html; charset=utf-8') if n.lower() == 'content-type' else (n, v) for n, v in headers]
-                        return start_response(status, new_headers, exc_info)
-                    return old_call(self, environ, custom_start_response)
-                google_auth_oauthlib.flow._RedirectWSGIApp.__call__ = new_call
-                google_auth_oauthlib.flow._RedirectWSGIApp._patched = True
-
-            # Trigger the browser-based OAuth flow with auto-redirect
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            success_html = '<html><head><meta http-equiv="refresh" content="0;url=http://localhost:5173/"></head><body style="background:#0c1324;color:#22d3ee;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;"><h2>Authentication successful! Redirecting to MailMind...</h2></body></html>'
-            creds = flow.run_local_server(port=0, success_message=success_html)
-            
-        # Save the credentials for the next run so we don't have to log in every time
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-
     try:
-        # Build and return the Gmail API service object
-        service = build('gmail', 'v1', credentials=creds)
-        print("Authentication successful! Gmail API service is ready.")
-        
-        # Quick test: fetch the user's email address to prove it works
-        profile = service.users().getProfile(userId='me').execute()
-        email_address = profile.get('emailAddress', 'Unknown')
-        print(f"Authenticated as: {email_address}")
-        
-        # Save email to a local file for the UI to read
-        import json
-        profile_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'user_profile.json'))
-        os.makedirs(os.path.dirname(profile_path), exist_ok=True)
-        with open(profile_path, 'w') as f:
-            json.dump({"email": email_address}, f)
-        
-        return service
-        
+        return _authenticate_gmail()
     except Exception as error:
-        print(f"An error occurred during authentication or service creation: {error}")
+        log_event('gmail_auth_failed', error=error)
         return None
-    
-def get_unread_emails(service,max_results=5):
-    """Fetches and decodes unread emails from the inbox."""
-    print(f"Querying the API for up to {max_results} unread emails...")
+
+
+def refresh_gmail(manager, context):
+    if manager.settings.local_only: return None
     try:
-        # Step 1: Request a list of message ids
-        results = service.users().messages().list(
-            userId='me',
-            labelIds = ['INBOX', 'UNREAD'],
-            maxResults=max_results
-        ).execute()
-
-        messages = results.get('messages',[])
-
-        if not messages:
-            print("No unread messages found in your inbox.")
-            return []
-        
-        email_data_list = []
-
-        # Step 2: Fetch the full payload for each message ID
-        for msg in messages:
-            msg_id = msg['id']
-            # format='full' gets the headers and the body
-            message = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
-
-            payload = message.get('payload',{})
-            headers = payload.get('headers',[])
-
-            # Extarct subject and sender using list comprehension
-            subject = next((header['value'] for header in headers if header['name'].lower() == 'subject'), 'No Subject ')
-            sender = next((header['value'] for header in headers if header['name'].lower() == 'from'), 'Unknown Sender')
-
-            # Extract and decode the body
-            body = ""
-            if 'parts' in payload:
-                # Loop through the parts to find the plain text version
-                for part in payload['parts']:
-                    if part['mimeType'] == 'text/plain':
-                        data = part['body'].get('data', '')
-                        body = base64.urlsafe_b64decode(data).decode('utf-8')
-                        break
-            elif 'body' in payload and 'data' in payload['body']:
-                # Sometimes the body isn't nested in parts
-                data = payload['body']['data']
-                body = base64.urlsafe_b64decode(data).decode('utf-8')
-
-            # Store the extracted data in a clean dictionary
-            email_data_list.append({
-                'id': msg_id,
-                'sender': sender,
-                'subject': subject,
-                # Truncating the body to 200 characters so our terminal doesn't flood during testing
-                'body_snippet': body[:200] + '...' if len(body) > 200 else body 
-            })
-            
-        return email_data_list
-
+        with manager.guard(context):
+            path=manager.credential_path(context.account_id)
+            if not path.exists():
+                return None
+            creds=Credentials.from_authorized_user_file(str(path),SCOPES)
+        with manager.external(context):
+            if not creds.valid:
+                if not creds.expired or not creds.refresh_token:
+                    return None
+                class BoundedRefresh(Request):
+                    def __call__(self,*args,**kwargs):
+                        kwargs['timeout']=manager.settings.provider_timeout_seconds
+                        with manager.external(context):
+                            return super().__call__(*args,**kwargs)
+                creds.refresh(BoundedRefresh())
+            service=build_gmail(creds,manager.settings.provider_timeout_seconds)
+            account_id=execute_gmail(service.users().getProfile(userId='me')).get('emailAddress')
+        if account_id != context.account_id:
+            log_event('gmail_account_mismatch')
+            return None
+        with manager.guard(context):
+            manager.write_credentials(context,creds.to_json())
+        return service
+    except WorkCancelled:
+        raise
     except Exception as error:
-        print(f"An error occurred while fetching emails: {error}")
-        return []
-    
+        log_event('gmail_refresh_failed',error=error)
+        return None
+
+
+@dataclass
+class FetchBatch:
+    emails: list = field(default_factory=list)
+    failures: list = field(default_factory=list)
+    listing_error: bool = False
+    pages: int = 0
+    scanned: int = 0
+    has_more: bool = False
+    next_page_token: str | None = None
+    deferred: bool = False
+
+    @property
+    def status(self):
+        if self.listing_error or self.failures:
+            return 'partial' if self.emails else 'error'
+        return 'success' if self.emails else ('deferred' if self.deferred else 'empty')
+
+    def summary(self):
+        return {'status': self.status, 'fetched_count':len(self.emails),
+                'failed_count':len(self.failures), 'pages_count':self.pages,
+                'scanned_count':self.scanned, 'has_more':self.has_more,
+                'warning_count':sum(bool(e.get('parse_warnings')) for e in self.emails),
+                'truncated_count':sum(bool(e.get('body_truncated')) for e in self.emails)}
+
+
+def get_unread_emails(service, max_results=20, *, page_size=10, max_pages=3, page_token=None, before_request=None, exclude_ids=None, budget_seconds=30):
+    """Bound listing/detail work; keep good messages if one request fails.
+
+    The optional guard runs around EACH provider request, not a whole inbox.
+    The cursor is an opaque provider hint, not a durable processing queue.
+    """
+    if not 1 <= max_results <= 200 or not 1 <= page_size <= 100 or not 1 <= max_pages <= 20:
+        raise ValueError('Invalid Gmail fetch limits')
+    batch = FetchBatch(next_page_token=page_token)
+    seen, seen_tokens = set(), set()
+    excluded=set(exclude_ids or ())
+    budget=RequestBudget(budget_seconds)
+    guard = before_request or nullcontext
+    while batch.pages < max_pages and batch.scanned < max_results:
+        if page_token in seen_tokens:
+            batch.listing_error = True
+            batch.next_page_token = None
+            batch.has_more = True
+            log_event('gmail_repeated_page_token')
+            break
+        seen_tokens.add(page_token)
+        parameters = dict(userId='me',labelIds=['INBOX','UNREAD'],maxResults=min(page_size,max_results-batch.scanned))
+        if page_token:
+            parameters['pageToken'] = page_token
+        try:
+            with guard():
+                result = execute_gmail(service.users().messages().list(**parameters),budget)
+            if not isinstance(result,dict) or not isinstance(result.get('messages',[]),list):
+                raise ValueError('Malformed Gmail listing')
+        except WorkCancelled:
+            raise
+        except Exception as error:
+            log_event('gmail_list_failed',error=error)
+            batch.listing_error = True
+            # Invalid cursors are discarded. Transient failures retry the page.
+            if getattr(getattr(error,'resp',None),'status',None) == 400 and page_token:
+                batch.next_page_token = None
+                batch.has_more = True
+            else:
+                batch.next_page_token = page_token
+                batch.has_more = bool(page_token)
+            break
+        batch.pages += 1
+        messages = result.get('messages',[])
+        request_limit = parameters['maxResults']
+        if len(messages) > request_limit:
+            # A provider response must not bypass the work limit.
+            batch.listing_error = True
+            messages = messages[:request_limit]
+        for item in messages:
+            if budget.remaining() < 0.05:
+                batch.deferred=True
+                batch.next_page_token=parameters.get('pageToken')
+                batch.has_more=True
+                return batch
+            batch.scanned += 1
+            msg_id = item.get('id') if isinstance(item,dict) else None
+            if not isinstance(msg_id,str) or not msg_id:
+                batch.failures.append({'code':'missing_message_id'})
+                continue
+            if msg_id in seen:
+                continue
+            seen.add(msg_id)
+            if msg_id in excluded:
+                continue
+            try:
+                with guard():
+                    message = execute_gmail(service.users().messages().get(userId='me',id=msg_id,format='full'),budget)
+                def inline_loader(attachment_id):
+                    try:
+                        with guard():
+                            response = execute_gmail(service.users().messages().attachments().get(
+                                userId='me',messageId=msg_id,id=attachment_id),budget)
+                        if not isinstance(response,dict):
+                            raise MessageParseError('malformed_inline_body')
+                        return response.get('data')
+                    except WorkCancelled:
+                        raise
+                    except Exception as error:
+                        log_event('gmail_inline_body_fetch_failed',error=error)
+                        raise MessageParseError('inline_body_fetch_failed') from None
+                batch.emails.append(parse_gmail_message(message,msg_id,inline_loader=inline_loader))
+            except WorkCancelled:
+                raise
+            except MessageParseError as error:
+                log_event('gmail_message_parse_failed')
+                batch.failures.append({'code':error.code,'email_id':msg_id})
+            except Exception as error:
+                log_event('gmail_message_fetch_failed',error=error)
+                batch.failures.append({'code':'message_fetch_failed','email_id':msg_id})
+        token = result.get('nextPageToken')
+        if token is not None and not isinstance(token,str):
+            batch.listing_error = True
+            token = None
+        page_token = token or None
+        batch.next_page_token = page_token
+        batch.has_more = bool(page_token)
+        if not page_token:
+            if not messages and parameters.get('pageToken') and not batch.scanned:
+                # An exhausted/stale continuation is not proof of an empty
+                # inbox. Recheck page one if the page budget still allows it.
+                if batch.pages < max_pages:
+                    continue
+                batch.deferred = True
+            break
+    return batch
+
+
 def mark_as_read(service, message_id):
     """
     Removes the 'UNREAD' label from a specific email ID.
     """
     try:
         # The Gmail API requires a dictionary specifying which labels to add or remove
-        service.users().messages().modify(
+        execute_gmail(service.users().messages().modify(
             userId='me',
             id=message_id,
             body={
                 'removeLabelIds': ['UNREAD']
             }
-        ).execute()
+        ))
         return True
     except Exception as error:
-        print(f"Failed to mark email {message_id} as read: {error}")
+        log_event("gmail_mark_read_failed", error=error)
         return False
 
 if __name__ == '__main__':
-    # 1. Get the authenticated service
-    gmail_service = authenticate_gmail()
-    
-    # 2. If authentication succeeded, fetch the emails
-    if gmail_service:
-        print("\n--- Starting Fetch Process ---")
-        emails = get_unread_emails(gmail_service, max_results=5)
-        
-        # 3. Print the results to the terminal
-        for i, email in enumerate(emails, 1):
-            print(f"\n[Email {i}]")
-            print(f"From: {email['sender']}")
-            print(f"Subject: {email['subject']}")
-            print(f"Body snippet: {email['body_snippet']}")
-            print("-" * 40)
+    print('Connect Google through the local MailMind dashboard.')

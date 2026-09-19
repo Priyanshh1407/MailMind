@@ -1,39 +1,21 @@
-import sqlite3
-import uuid
-from datetime import datetime
+"""Insert deliberate manual examples: python -m scripts.add_manual_email."""
+from uuid import uuid4
+from src.config import LEGACY_ACCOUNT, Settings
+from src.database import initialize_database, connection, utc_timestamp
 
-def insert_new_email(sender, subject, body, human_label):
-    # 1. Connect to your database
-    conn = sqlite3.connect('data/email_logs.db')
-    cursor = conn.cursor()
-    
-    # 2. Generate required metadata
-    email_id = str(uuid.uuid4().hex)[:16] # Creates a fake 16-char ID
-    created_at = datetime.now().strftime("%d-%m-%Y %H:%M")
-    
-    # 3. Insert the new row safely
-    try:
-        cursor.execute('''
-            INSERT INTO email_logs (email_id, sender, subject, body, prediction, human_label, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (email_id, sender, subject, body, "MANUAL_ENTRY", human_label, created_at))
-        
-        conn.commit()
-        print(f"Success! Added 1 new '{human_label}' email to the database.")
-    except Exception as e:
-        print(f"Database error: {e}")
-    finally:
-        conn.close()
+
+def insert_new_email(sender, subject, body, human_label, *, account_id=LEGACY_ACCOUNT, db_path=None):
+    path = db_path or Settings.from_environment().db_path
+    initialize_database(path)
+    email_id, timestamp = "manual-" + uuid4().hex, utc_timestamp()
+    with connection(path) as conn:
+        conn.execute("INSERT INTO accounts VALUES (?) ON CONFLICT DO NOTHING", (account_id,))
+        conn.execute("""INSERT INTO email_logs(account_id,email_id,sender,subject,body,human_label,message_type,created_at)
+            VALUES (?,?,?,?,?,?,'manual',?)""", (account_id,email_id,sender,subject,body,human_label,timestamp))
+        conn.execute("INSERT INTO feedback_history(account_id,email_id,label,created_at) VALUES (?,?,?,?)",
+                     (account_id,email_id,human_label,timestamp))
+    return email_id
+
 
 if __name__ == "__main__":
-    # TODO: Read the screenshot you uploaded and fill these in!
-    new_sender = "Sender Name <sender@example.com>"
-    new_subject = "Type the subject here"
-    new_body = """Type the exact body of the email here. 
-    You can use multiple lines because of the triple quotes."""
-    
-    # Set this to "IGNORE" or "IMPORTANT"
-    new_label = "IMPORTANT" 
-    
-    # Execute the injection
-    insert_new_email(new_sender, new_subject, new_body, new_label)
+    raise SystemExit("Import insert_new_email with explicit content; placeholder records are not inserted automatically.")

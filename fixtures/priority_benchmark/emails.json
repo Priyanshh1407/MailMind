@@ -1,0 +1,1802 @@
+[
+  {
+    "id": "important-00-0",
+    "group_id": "important-00",
+    "thread_id": "important-00",
+    "template_id": "important-00",
+    "subject": "Contract signature",
+    "body": "Hello. Please sign the revised contract before 5 pm today. We cannot start the work without your approval.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-00-1",
+    "group_id": "important-00",
+    "thread_id": "important-00",
+    "template_id": "important-00",
+    "subject": "Contract signature — details",
+    "body": "A message for your inbox: Please sign the revised contract before 5 pm today. We cannot start the work without your approval.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-00-2",
+    "group_id": "important-00",
+    "thread_id": "important-00",
+    "template_id": "important-00",
+    "subject": "Contract signature — message",
+    "body": "For your attention: Please sign the revised contract before 5 pm today. We cannot start the work without your approval.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-01-0",
+    "group_id": "important-01",
+    "thread_id": "important-01",
+    "template_id": "important-01",
+    "subject": "Interview confirmation",
+    "body": "Hello. Your interview is tomorrow morning. Please confirm your attendance and choose the meeting time today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-01-1",
+    "group_id": "important-01",
+    "thread_id": "important-01",
+    "template_id": "important-01",
+    "subject": "Interview confirmation — details",
+    "body": "A message for your inbox: Your interview is tomorrow morning. Please confirm your attendance and choose the meeting time today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-01-2",
+    "group_id": "important-01",
+    "thread_id": "important-01",
+    "template_id": "important-01",
+    "subject": "Interview confirmation — message",
+    "body": "For your attention: Your interview is tomorrow morning. Please confirm your attendance and choose the meeting time today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-02-0",
+    "group_id": "important-02",
+    "thread_id": "important-02",
+    "template_id": "important-02",
+    "subject": "Invoice correction",
+    "body": "Hello. The invoice is missing your purchase order. Please send the corrected details today so payment can be released.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-02-1",
+    "group_id": "important-02",
+    "thread_id": "important-02",
+    "template_id": "important-02",
+    "subject": "Invoice correction — details",
+    "body": "A message for your inbox: The invoice is missing your purchase order. Please send the corrected details today so payment can be released.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-02-2",
+    "group_id": "important-02",
+    "thread_id": "important-02",
+    "template_id": "important-02",
+    "subject": "Invoice correction — message",
+    "body": "For your attention: The invoice is missing your purchase order. Please send the corrected details today so payment can be released.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-03-0",
+    "group_id": "important-03",
+    "thread_id": "important-03",
+    "template_id": "important-03",
+    "subject": "Project blocker",
+    "body": "Hello. The release is blocked on your decision. Please review the two options and reply with approval before noon.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-03-1",
+    "group_id": "important-03",
+    "thread_id": "important-03",
+    "template_id": "important-03",
+    "subject": "Project blocker — details",
+    "body": "A message for your inbox: The release is blocked on your decision. Please review the two options and reply with approval before noon.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-03-2",
+    "group_id": "important-03",
+    "thread_id": "important-03",
+    "template_id": "important-03",
+    "subject": "Project blocker — message",
+    "body": "For your attention: The release is blocked on your decision. Please review the two options and reply with approval before noon.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-04-0",
+    "group_id": "important-04",
+    "thread_id": "important-04",
+    "template_id": "important-04",
+    "subject": "Account protection",
+    "body": "Hello. A suspicious sign-in was detected. Please review your account and reset your password now if this was not you.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-04-1",
+    "group_id": "important-04",
+    "thread_id": "important-04",
+    "template_id": "important-04",
+    "subject": "Account protection — details",
+    "body": "A message for your inbox: A suspicious sign-in was detected. Please review your account and reset your password now if this was not you.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-04-2",
+    "group_id": "important-04",
+    "thread_id": "important-04",
+    "template_id": "important-04",
+    "subject": "Account protection — message",
+    "body": "For your attention: A suspicious sign-in was detected. Please review your account and reset your password now if this was not you.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-05-0",
+    "group_id": "important-05",
+    "thread_id": "important-05",
+    "template_id": "important-05",
+    "subject": "Application deadline",
+    "body": "Hello. Your application needs one missing document. Upload it by tonight or the application cannot proceed.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-05-1",
+    "group_id": "important-05",
+    "thread_id": "important-05",
+    "template_id": "important-05",
+    "subject": "Application deadline — details",
+    "body": "A message for your inbox: Your application needs one missing document. Upload it by tonight or the application cannot proceed.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-05-2",
+    "group_id": "important-05",
+    "thread_id": "important-05",
+    "template_id": "important-05",
+    "subject": "Application deadline — message",
+    "body": "For your attention: Your application needs one missing document. Upload it by tonight or the application cannot proceed.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-06-0",
+    "group_id": "important-06",
+    "thread_id": "important-06",
+    "template_id": "important-06",
+    "subject": "Meeting decision",
+    "body": "Hello. We need your budget decision at the meeting this afternoon. Please prepare your response before joining.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-06-1",
+    "group_id": "important-06",
+    "thread_id": "important-06",
+    "template_id": "important-06",
+    "subject": "Meeting decision — details",
+    "body": "A message for your inbox: We need your budget decision at the meeting this afternoon. Please prepare your response before joining.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-06-2",
+    "group_id": "important-06",
+    "thread_id": "important-06",
+    "template_id": "important-06",
+    "subject": "Meeting decision — message",
+    "body": "For your attention: We need your budget decision at the meeting this afternoon. Please prepare your response before joining.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-07-0",
+    "group_id": "important-07",
+    "thread_id": "important-07",
+    "template_id": "important-07",
+    "subject": "Travel action",
+    "body": "Hello. Your flight was cancelled. Please select a replacement flight before the rebooking deadline this evening.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-07-1",
+    "group_id": "important-07",
+    "thread_id": "important-07",
+    "template_id": "important-07",
+    "subject": "Travel action — details",
+    "body": "A message for your inbox: Your flight was cancelled. Please select a replacement flight before the rebooking deadline this evening.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-07-2",
+    "group_id": "important-07",
+    "thread_id": "important-07",
+    "template_id": "important-07",
+    "subject": "Travel action — message",
+    "body": "For your attention: Your flight was cancelled. Please select a replacement flight before the rebooking deadline this evening.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-08-0",
+    "group_id": "important-08",
+    "thread_id": "important-08",
+    "template_id": "important-08",
+    "subject": "Delivery problem",
+    "body": "Hello. Your parcel cannot be delivered without an address correction. Please confirm the address today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-08-1",
+    "group_id": "important-08",
+    "thread_id": "important-08",
+    "template_id": "important-08",
+    "subject": "Delivery problem — details",
+    "body": "A message for your inbox: Your parcel cannot be delivered without an address correction. Please confirm the address today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-08-2",
+    "group_id": "important-08",
+    "thread_id": "important-08",
+    "template_id": "important-08",
+    "subject": "Delivery problem — message",
+    "body": "For your attention: Your parcel cannot be delivered without an address correction. Please confirm the address today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-09-0",
+    "group_id": "important-09",
+    "thread_id": "important-09",
+    "template_id": "important-09",
+    "subject": "Access request",
+    "body": "Hello. A teammate cannot access the repository. Please approve the access request before the deployment starts today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-09-1",
+    "group_id": "important-09",
+    "thread_id": "important-09",
+    "template_id": "important-09",
+    "subject": "Access request — details",
+    "body": "A message for your inbox: A teammate cannot access the repository. Please approve the access request before the deployment starts today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-09-2",
+    "group_id": "important-09",
+    "thread_id": "important-09",
+    "template_id": "important-09",
+    "subject": "Access request — message",
+    "body": "For your attention: A teammate cannot access the repository. Please approve the access request before the deployment starts today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-10-0",
+    "group_id": "important-10",
+    "thread_id": "important-10",
+    "template_id": "important-10",
+    "subject": "Review request",
+    "body": "Hello. Please review the attached design and send comments before tomorrow morning. Your response is needed to continue.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-10-1",
+    "group_id": "important-10",
+    "thread_id": "important-10",
+    "template_id": "important-10",
+    "subject": "Review request — details",
+    "body": "A message for your inbox: Please review the attached design and send comments before tomorrow morning. Your response is needed to continue.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-10-2",
+    "group_id": "important-10",
+    "thread_id": "important-10",
+    "template_id": "important-10",
+    "subject": "Review request — message",
+    "body": "For your attention: Please review the attached design and send comments before tomorrow morning. Your response is needed to continue.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-11-0",
+    "group_id": "important-11",
+    "thread_id": "important-11",
+    "template_id": "important-11",
+    "subject": "Schedule change",
+    "body": "Hello. The appointment time has changed. Please confirm the new time today or ask us to reschedule.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-11-1",
+    "group_id": "important-11",
+    "thread_id": "important-11",
+    "template_id": "important-11",
+    "subject": "Schedule change — details",
+    "body": "A message for your inbox: The appointment time has changed. Please confirm the new time today or ask us to reschedule.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-11-2",
+    "group_id": "important-11",
+    "thread_id": "important-11",
+    "template_id": "important-11",
+    "subject": "Schedule change — message",
+    "body": "For your attention: The appointment time has changed. Please confirm the new time today or ask us to reschedule.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-12-0",
+    "group_id": "important-12",
+    "thread_id": "important-12",
+    "template_id": "important-12",
+    "subject": "Payment action",
+    "body": "Hello. Your subscription payment failed. Please update your billing method before tonight to avoid service interruption.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-12-1",
+    "group_id": "important-12",
+    "thread_id": "important-12",
+    "template_id": "important-12",
+    "subject": "Payment action — details",
+    "body": "A message for your inbox: Your subscription payment failed. Please update your billing method before tonight to avoid service interruption.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-12-2",
+    "group_id": "important-12",
+    "thread_id": "important-12",
+    "template_id": "important-12",
+    "subject": "Payment action — message",
+    "body": "For your attention: Your subscription payment failed. Please update your billing method before tonight to avoid service interruption.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-13-0",
+    "group_id": "important-13",
+    "thread_id": "important-13",
+    "template_id": "important-13",
+    "subject": "Document approval",
+    "body": "Hello. Please approve the final report today. We are waiting for your signature before sending it to the client.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-13-1",
+    "group_id": "important-13",
+    "thread_id": "important-13",
+    "template_id": "important-13",
+    "subject": "Document approval — details",
+    "body": "A message for your inbox: Please approve the final report today. We are waiting for your signature before sending it to the client.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-13-2",
+    "group_id": "important-13",
+    "thread_id": "important-13",
+    "template_id": "important-13",
+    "subject": "Document approval — message",
+    "body": "For your attention: Please approve the final report today. We are waiting for your signature before sending it to the client.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-14-0",
+    "group_id": "important-14",
+    "thread_id": "important-14",
+    "template_id": "important-14",
+    "subject": "Support reply",
+    "body": "Hello. Your support case needs a reply from you. Please send the requested logs today so we can investigate.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-14-1",
+    "group_id": "important-14",
+    "thread_id": "important-14",
+    "template_id": "important-14",
+    "subject": "Support reply — details",
+    "body": "A message for your inbox: Your support case needs a reply from you. Please send the requested logs today so we can investigate.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-14-2",
+    "group_id": "important-14",
+    "thread_id": "important-14",
+    "template_id": "important-14",
+    "subject": "Support reply — message",
+    "body": "For your attention: Your support case needs a reply from you. Please send the requested logs today so we can investigate.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-15-0",
+    "group_id": "important-15",
+    "thread_id": "important-15",
+    "template_id": "important-15",
+    "subject": "Team question",
+    "body": "Hello. Can you cover the demonstration tomorrow? Please reply today so we can confirm the schedule.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-15-1",
+    "group_id": "important-15",
+    "thread_id": "important-15",
+    "template_id": "important-15",
+    "subject": "Team question — details",
+    "body": "A message for your inbox: Can you cover the demonstration tomorrow? Please reply today so we can confirm the schedule.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-15-2",
+    "group_id": "important-15",
+    "thread_id": "important-15",
+    "template_id": "important-15",
+    "subject": "Team question — message",
+    "body": "For your attention: Can you cover the demonstration tomorrow? Please reply today so we can confirm the schedule.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-16-0",
+    "group_id": "important-16",
+    "thread_id": "important-16",
+    "template_id": "important-16",
+    "subject": "Reservation confirmation",
+    "body": "Hello. Please confirm your reservation by this afternoon. Unconfirmed reservations will be released.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-16-1",
+    "group_id": "important-16",
+    "thread_id": "important-16",
+    "template_id": "important-16",
+    "subject": "Reservation confirmation — details",
+    "body": "A message for your inbox: Please confirm your reservation by this afternoon. Unconfirmed reservations will be released.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-16-2",
+    "group_id": "important-16",
+    "thread_id": "important-16",
+    "template_id": "important-16",
+    "subject": "Reservation confirmation — message",
+    "body": "For your attention: Please confirm your reservation by this afternoon. Unconfirmed reservations will be released.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-17-0",
+    "group_id": "important-17",
+    "thread_id": "important-17",
+    "template_id": "important-17",
+    "subject": "Personal request",
+    "body": "Hello. Please call me tonight about the move. I need your answer before I book the transport.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-17-1",
+    "group_id": "important-17",
+    "thread_id": "important-17",
+    "template_id": "important-17",
+    "subject": "Personal request — details",
+    "body": "A message for your inbox: Please call me tonight about the move. I need your answer before I book the transport.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-17-2",
+    "group_id": "important-17",
+    "thread_id": "important-17",
+    "template_id": "important-17",
+    "subject": "Personal request — message",
+    "body": "For your attention: Please call me tonight about the move. I need your answer before I book the transport.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-18-0",
+    "group_id": "important-18",
+    "thread_id": "important-18",
+    "template_id": "important-18",
+    "subject": "Security incident",
+    "body": "Hello. An exposed credential needs immediate rotation. Please revoke the key and confirm completion today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-18-1",
+    "group_id": "important-18",
+    "thread_id": "important-18",
+    "template_id": "important-18",
+    "subject": "Security incident — details",
+    "body": "A message for your inbox: An exposed credential needs immediate rotation. Please revoke the key and confirm completion today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-18-2",
+    "group_id": "important-18",
+    "thread_id": "important-18",
+    "template_id": "important-18",
+    "subject": "Security incident — message",
+    "body": "For your attention: An exposed credential needs immediate rotation. Please revoke the key and confirm completion today.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-19-0",
+    "group_id": "important-19",
+    "thread_id": "important-19",
+    "template_id": "important-19",
+    "subject": "Registration action",
+    "body": "Hello. Your course registration is incomplete. Choose a session and submit the form before tomorrow.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-19-1",
+    "group_id": "important-19",
+    "thread_id": "important-19",
+    "template_id": "important-19",
+    "subject": "Registration action — details",
+    "body": "A message for your inbox: Your course registration is incomplete. Choose a session and submit the form before tomorrow.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "important-19-2",
+    "group_id": "important-19",
+    "thread_id": "important-19",
+    "template_id": "important-19",
+    "subject": "Registration action — message",
+    "body": "For your attention: Your course registration is incomplete. Choose a session and submit the form before tomorrow.",
+    "human_label": "IMPORTANT",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-00-0",
+    "group_id": "updates-00",
+    "thread_id": "updates-00",
+    "template_id": "updates-00",
+    "subject": "Payment receipt",
+    "body": "Hello. Your payment was received successfully. This receipt is for your records. No response or further action is required.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-00-1",
+    "group_id": "updates-00",
+    "thread_id": "updates-00",
+    "template_id": "updates-00",
+    "subject": "Payment receipt — details",
+    "body": "A message for your inbox: Your payment was received successfully. This receipt is for your records. No response or further action is required.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-00-2",
+    "group_id": "updates-00",
+    "thread_id": "updates-00",
+    "template_id": "updates-00",
+    "subject": "Payment receipt — message",
+    "body": "For your attention: Your payment was received successfully. This receipt is for your records. No response or further action is required.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-01-0",
+    "group_id": "updates-01",
+    "thread_id": "updates-01",
+    "template_id": "updates-01",
+    "subject": "Monthly account summary",
+    "body": "Hello. Here is your monthly account summary. All payments are current. This information does not require a reply.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-01-1",
+    "group_id": "updates-01",
+    "thread_id": "updates-01",
+    "template_id": "updates-01",
+    "subject": "Monthly account summary — details",
+    "body": "A message for your inbox: Here is your monthly account summary. All payments are current. This information does not require a reply.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-01-2",
+    "group_id": "updates-01",
+    "thread_id": "updates-01",
+    "template_id": "updates-01",
+    "subject": "Monthly account summary — message",
+    "body": "For your attention: Here is your monthly account summary. All payments are current. This information does not require a reply.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-02-0",
+    "group_id": "updates-02",
+    "thread_id": "updates-02",
+    "template_id": "updates-02",
+    "subject": "Release newsletter",
+    "body": "Hello. Our monthly newsletter describes the latest release and changes. Read it when convenient; no action is needed.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-02-1",
+    "group_id": "updates-02",
+    "thread_id": "updates-02",
+    "template_id": "updates-02",
+    "subject": "Release newsletter — details",
+    "body": "A message for your inbox: Our monthly newsletter describes the latest release and changes. Read it when convenient; no action is needed.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-02-2",
+    "group_id": "updates-02",
+    "thread_id": "updates-02",
+    "template_id": "updates-02",
+    "subject": "Release newsletter — message",
+    "body": "For your attention: Our monthly newsletter describes the latest release and changes. Read it when convenient; no action is needed.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-03-0",
+    "group_id": "updates-03",
+    "thread_id": "updates-03",
+    "template_id": "updates-03",
+    "subject": "Delivery confirmation",
+    "body": "Hello. Your package was delivered successfully. This is a delivery confirmation for your records.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-03-1",
+    "group_id": "updates-03",
+    "thread_id": "updates-03",
+    "template_id": "updates-03",
+    "subject": "Delivery confirmation — details",
+    "body": "A message for your inbox: Your package was delivered successfully. This is a delivery confirmation for your records.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-03-2",
+    "group_id": "updates-03",
+    "thread_id": "updates-03",
+    "template_id": "updates-03",
+    "subject": "Delivery confirmation — message",
+    "body": "For your attention: Your package was delivered successfully. This is a delivery confirmation for your records.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-04-0",
+    "group_id": "updates-04",
+    "thread_id": "updates-04",
+    "template_id": "updates-04",
+    "subject": "Meeting notes",
+    "body": "Hello. Here are the notes from the completed meeting. They are shared for reference and contain no assigned action for you.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-04-1",
+    "group_id": "updates-04",
+    "thread_id": "updates-04",
+    "template_id": "updates-04",
+    "subject": "Meeting notes — details",
+    "body": "A message for your inbox: Here are the notes from the completed meeting. They are shared for reference and contain no assigned action for you.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-04-2",
+    "group_id": "updates-04",
+    "thread_id": "updates-04",
+    "template_id": "updates-04",
+    "subject": "Meeting notes — message",
+    "body": "For your attention: Here are the notes from the completed meeting. They are shared for reference and contain no assigned action for you.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-05-0",
+    "group_id": "updates-05",
+    "thread_id": "updates-05",
+    "template_id": "updates-05",
+    "subject": "Service maintenance notice",
+    "body": "Hello. Routine maintenance is planned next month. Your account will remain available and you do not need to reply.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-05-1",
+    "group_id": "updates-05",
+    "thread_id": "updates-05",
+    "template_id": "updates-05",
+    "subject": "Service maintenance notice — details",
+    "body": "A message for your inbox: Routine maintenance is planned next month. Your account will remain available and you do not need to reply.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-05-2",
+    "group_id": "updates-05",
+    "thread_id": "updates-05",
+    "template_id": "updates-05",
+    "subject": "Service maintenance notice — message",
+    "body": "For your attention: Routine maintenance is planned next month. Your account will remain available and you do not need to reply.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-06-0",
+    "group_id": "updates-06",
+    "thread_id": "updates-06",
+    "template_id": "updates-06",
+    "subject": "Product information",
+    "body": "Hello. This optional product guide explains existing features. It is general information without a deadline.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-06-1",
+    "group_id": "updates-06",
+    "thread_id": "updates-06",
+    "template_id": "updates-06",
+    "subject": "Product information — details",
+    "body": "A message for your inbox: This optional product guide explains existing features. It is general information without a deadline.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-06-2",
+    "group_id": "updates-06",
+    "thread_id": "updates-06",
+    "template_id": "updates-06",
+    "subject": "Product information — message",
+    "body": "For your attention: This optional product guide explains existing features. It is general information without a deadline.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-07-0",
+    "group_id": "updates-07",
+    "thread_id": "updates-07",
+    "template_id": "updates-07",
+    "subject": "Support resolution",
+    "body": "Hello. Your support case has been resolved. This message summarizes the fix for your reference; no reply is required.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-07-1",
+    "group_id": "updates-07",
+    "thread_id": "updates-07",
+    "template_id": "updates-07",
+    "subject": "Support resolution — details",
+    "body": "A message for your inbox: Your support case has been resolved. This message summarizes the fix for your reference; no reply is required.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-07-2",
+    "group_id": "updates-07",
+    "thread_id": "updates-07",
+    "template_id": "updates-07",
+    "subject": "Support resolution — message",
+    "body": "For your attention: Your support case has been resolved. This message summarizes the fix for your reference; no reply is required.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-08-0",
+    "group_id": "updates-08",
+    "thread_id": "updates-08",
+    "template_id": "updates-08",
+    "subject": "Travel receipt",
+    "body": "Hello. Your completed trip receipt is attached for your records. The booking is complete and no changes are needed.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-08-1",
+    "group_id": "updates-08",
+    "thread_id": "updates-08",
+    "template_id": "updates-08",
+    "subject": "Travel receipt — details",
+    "body": "A message for your inbox: Your completed trip receipt is attached for your records. The booking is complete and no changes are needed.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-08-2",
+    "group_id": "updates-08",
+    "thread_id": "updates-08",
+    "template_id": "updates-08",
+    "subject": "Travel receipt — message",
+    "body": "For your attention: Your completed trip receipt is attached for your records. The booking is complete and no changes are needed.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-09-0",
+    "group_id": "updates-09",
+    "thread_id": "updates-09",
+    "template_id": "updates-09",
+    "subject": "Course resources",
+    "body": "Hello. The course resource library has new reading material. Access it whenever useful; there is no required task.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-09-1",
+    "group_id": "updates-09",
+    "thread_id": "updates-09",
+    "template_id": "updates-09",
+    "subject": "Course resources — details",
+    "body": "A message for your inbox: The course resource library has new reading material. Access it whenever useful; there is no required task.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-09-2",
+    "group_id": "updates-09",
+    "thread_id": "updates-09",
+    "template_id": "updates-09",
+    "subject": "Course resources — message",
+    "body": "For your attention: The course resource library has new reading material. Access it whenever useful; there is no required task.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-10-0",
+    "group_id": "updates-10",
+    "thread_id": "updates-10",
+    "template_id": "updates-10",
+    "subject": "Community digest",
+    "body": "Hello. This weekly community digest contains discussions and optional events. It is not a personal request.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-10-1",
+    "group_id": "updates-10",
+    "thread_id": "updates-10",
+    "template_id": "updates-10",
+    "subject": "Community digest — details",
+    "body": "A message for your inbox: This weekly community digest contains discussions and optional events. It is not a personal request.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-10-2",
+    "group_id": "updates-10",
+    "thread_id": "updates-10",
+    "template_id": "updates-10",
+    "subject": "Community digest — message",
+    "body": "For your attention: This weekly community digest contains discussions and optional events. It is not a personal request.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-11-0",
+    "group_id": "updates-11",
+    "thread_id": "updates-11",
+    "template_id": "updates-11",
+    "subject": "Successful account update",
+    "body": "Hello. Your requested account update completed successfully. This confirmation requires no further action.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-11-1",
+    "group_id": "updates-11",
+    "thread_id": "updates-11",
+    "template_id": "updates-11",
+    "subject": "Successful account update — details",
+    "body": "A message for your inbox: Your requested account update completed successfully. This confirmation requires no further action.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-11-2",
+    "group_id": "updates-11",
+    "thread_id": "updates-11",
+    "template_id": "updates-11",
+    "subject": "Successful account update — message",
+    "body": "For your attention: Your requested account update completed successfully. This confirmation requires no further action.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-12-0",
+    "group_id": "updates-12",
+    "thread_id": "updates-12",
+    "template_id": "updates-12",
+    "subject": "Invoice paid",
+    "body": "Hello. Your invoice has been paid and closed. Keep this confirmation for your records. No payment is due.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-12-1",
+    "group_id": "updates-12",
+    "thread_id": "updates-12",
+    "template_id": "updates-12",
+    "subject": "Invoice paid — details",
+    "body": "A message for your inbox: Your invoice has been paid and closed. Keep this confirmation for your records. No payment is due.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-12-2",
+    "group_id": "updates-12",
+    "thread_id": "updates-12",
+    "template_id": "updates-12",
+    "subject": "Invoice paid — message",
+    "body": "For your attention: Your invoice has been paid and closed. Keep this confirmation for your records. No payment is due.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-13-0",
+    "group_id": "updates-13",
+    "thread_id": "updates-13",
+    "template_id": "updates-13",
+    "subject": "Project progress",
+    "body": "Hello. The project progress report is shared for information. There are no blockers or decisions awaiting you.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-13-1",
+    "group_id": "updates-13",
+    "thread_id": "updates-13",
+    "template_id": "updates-13",
+    "subject": "Project progress — details",
+    "body": "A message for your inbox: The project progress report is shared for information. There are no blockers or decisions awaiting you.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-13-2",
+    "group_id": "updates-13",
+    "thread_id": "updates-13",
+    "template_id": "updates-13",
+    "subject": "Project progress — message",
+    "body": "For your attention: The project progress report is shared for information. There are no blockers or decisions awaiting you.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-14-0",
+    "group_id": "updates-14",
+    "thread_id": "updates-14",
+    "template_id": "updates-14",
+    "subject": "Research digest",
+    "body": "Hello. This research digest summarizes public articles. Reading is optional and there is no deadline.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-14-1",
+    "group_id": "updates-14",
+    "thread_id": "updates-14",
+    "template_id": "updates-14",
+    "subject": "Research digest — details",
+    "body": "A message for your inbox: This research digest summarizes public articles. Reading is optional and there is no deadline.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-14-2",
+    "group_id": "updates-14",
+    "thread_id": "updates-14",
+    "template_id": "updates-14",
+    "subject": "Research digest — message",
+    "body": "For your attention: This research digest summarizes public articles. Reading is optional and there is no deadline.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-15-0",
+    "group_id": "updates-15",
+    "thread_id": "updates-15",
+    "template_id": "updates-15",
+    "subject": "Policy information",
+    "body": "Hello. A policy update takes effect next quarter. This notice is informational and does not require approval.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-15-1",
+    "group_id": "updates-15",
+    "thread_id": "updates-15",
+    "template_id": "updates-15",
+    "subject": "Policy information — details",
+    "body": "A message for your inbox: A policy update takes effect next quarter. This notice is informational and does not require approval.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-15-2",
+    "group_id": "updates-15",
+    "thread_id": "updates-15",
+    "template_id": "updates-15",
+    "subject": "Policy information — message",
+    "body": "For your attention: A policy update takes effect next quarter. This notice is informational and does not require approval.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-16-0",
+    "group_id": "updates-16",
+    "thread_id": "updates-16",
+    "template_id": "updates-16",
+    "subject": "Optional webinar",
+    "body": "Hello. A recording of the webinar is now available. Watch it when convenient; attendance and replies are optional.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-16-1",
+    "group_id": "updates-16",
+    "thread_id": "updates-16",
+    "template_id": "updates-16",
+    "subject": "Optional webinar — details",
+    "body": "A message for your inbox: A recording of the webinar is now available. Watch it when convenient; attendance and replies are optional.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-16-2",
+    "group_id": "updates-16",
+    "thread_id": "updates-16",
+    "template_id": "updates-16",
+    "subject": "Optional webinar — message",
+    "body": "For your attention: A recording of the webinar is now available. Watch it when convenient; attendance and replies are optional.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-17-0",
+    "group_id": "updates-17",
+    "thread_id": "updates-17",
+    "template_id": "updates-17",
+    "subject": "Subscription confirmation",
+    "body": "Hello. Your newsletter subscription is confirmed. Future updates will arrive monthly. No response is needed.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-17-1",
+    "group_id": "updates-17",
+    "thread_id": "updates-17",
+    "template_id": "updates-17",
+    "subject": "Subscription confirmation — details",
+    "body": "A message for your inbox: Your newsletter subscription is confirmed. Future updates will arrive monthly. No response is needed.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-17-2",
+    "group_id": "updates-17",
+    "thread_id": "updates-17",
+    "template_id": "updates-17",
+    "subject": "Subscription confirmation — message",
+    "body": "For your attention: Your newsletter subscription is confirmed. Future updates will arrive monthly. No response is needed.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-18-0",
+    "group_id": "updates-18",
+    "thread_id": "updates-18",
+    "template_id": "updates-18",
+    "subject": "Repository summary",
+    "body": "Hello. This automated weekly repository summary lists completed changes. No review or approval is requested.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-18-1",
+    "group_id": "updates-18",
+    "thread_id": "updates-18",
+    "template_id": "updates-18",
+    "subject": "Repository summary — details",
+    "body": "A message for your inbox: This automated weekly repository summary lists completed changes. No review or approval is requested.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-18-2",
+    "group_id": "updates-18",
+    "thread_id": "updates-18",
+    "template_id": "updates-18",
+    "subject": "Repository summary — message",
+    "body": "For your attention: This automated weekly repository summary lists completed changes. No review or approval is requested.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-19-0",
+    "group_id": "updates-19",
+    "thread_id": "updates-19",
+    "template_id": "updates-19",
+    "subject": "Appointment receipt",
+    "body": "Hello. Your completed appointment receipt is attached. It is provided for your records, without any follow-up task.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-19-1",
+    "group_id": "updates-19",
+    "thread_id": "updates-19",
+    "template_id": "updates-19",
+    "subject": "Appointment receipt — details",
+    "body": "A message for your inbox: Your completed appointment receipt is attached. It is provided for your records, without any follow-up task.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "updates-19-2",
+    "group_id": "updates-19",
+    "thread_id": "updates-19",
+    "template_id": "updates-19",
+    "subject": "Appointment receipt — message",
+    "body": "For your attention: Your completed appointment receipt is attached. It is provided for your records, without any follow-up task.",
+    "human_label": "UPDATES",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-00-0",
+    "group_id": "spam-00",
+    "thread_id": "spam-00",
+    "template_id": "spam-00",
+    "subject": "Unsolicited jackpot",
+    "body": "Hello. You have won a huge cash prize without entering a contest. Send a processing fee now to claim your winnings.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-00-1",
+    "group_id": "spam-00",
+    "thread_id": "spam-00",
+    "template_id": "spam-00",
+    "subject": "Unsolicited jackpot — details",
+    "body": "A message for your inbox: You have won a huge cash prize without entering a contest. Send a processing fee now to claim your winnings.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-00-2",
+    "group_id": "spam-00",
+    "thread_id": "spam-00",
+    "template_id": "spam-00",
+    "subject": "Unsolicited jackpot — message",
+    "body": "For your attention: You have won a huge cash prize without entering a contest. Send a processing fee now to claim your winnings.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-01-0",
+    "group_id": "spam-01",
+    "thread_id": "spam-01",
+    "template_id": "spam-01",
+    "subject": "Guaranteed investment",
+    "body": "Hello. An unsolicited offer guarantees enormous investment returns with no risk. Send funds to secure this secret deal.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-01-1",
+    "group_id": "spam-01",
+    "thread_id": "spam-01",
+    "template_id": "spam-01",
+    "subject": "Guaranteed investment — details",
+    "body": "A message for your inbox: An unsolicited offer guarantees enormous investment returns with no risk. Send funds to secure this secret deal.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-01-2",
+    "group_id": "spam-01",
+    "thread_id": "spam-01",
+    "template_id": "spam-01",
+    "subject": "Guaranteed investment — message",
+    "body": "For your attention: An unsolicited offer guarantees enormous investment returns with no risk. Send funds to secure this secret deal.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-02-0",
+    "group_id": "spam-02",
+    "thread_id": "spam-02",
+    "template_id": "spam-02",
+    "subject": "Unwanted bulk offer",
+    "body": "Hello. This unwanted bulk promotion sells miracle products at a secret discount. Buy immediately before the offer disappears.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-02-1",
+    "group_id": "spam-02",
+    "thread_id": "spam-02",
+    "template_id": "spam-02",
+    "subject": "Unwanted bulk offer — details",
+    "body": "A message for your inbox: This unwanted bulk promotion sells miracle products at a secret discount. Buy immediately before the offer disappears.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-02-2",
+    "group_id": "spam-02",
+    "thread_id": "spam-02",
+    "template_id": "spam-02",
+    "subject": "Unwanted bulk offer — message",
+    "body": "For your attention: This unwanted bulk promotion sells miracle products at a secret discount. Buy immediately before the offer disappears.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-03-0",
+    "group_id": "spam-03",
+    "thread_id": "spam-03",
+    "template_id": "spam-03",
+    "subject": "Fake inheritance",
+    "body": "Hello. A stranger promises a large inheritance. Share bank details and pay a release fee to receive the money.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-03-1",
+    "group_id": "spam-03",
+    "thread_id": "spam-03",
+    "template_id": "spam-03",
+    "subject": "Fake inheritance — details",
+    "body": "A message for your inbox: A stranger promises a large inheritance. Share bank details and pay a release fee to receive the money.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-03-2",
+    "group_id": "spam-03",
+    "thread_id": "spam-03",
+    "template_id": "spam-03",
+    "subject": "Fake inheritance — message",
+    "body": "For your attention: A stranger promises a large inheritance. Share bank details and pay a release fee to receive the money.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-04-0",
+    "group_id": "spam-04",
+    "thread_id": "spam-04",
+    "template_id": "spam-04",
+    "subject": "Miracle treatment",
+    "body": "Hello. This unsolicited advertisement claims a miracle treatment solves every condition. Buy today with a special secret code.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-04-1",
+    "group_id": "spam-04",
+    "thread_id": "spam-04",
+    "template_id": "spam-04",
+    "subject": "Miracle treatment — details",
+    "body": "A message for your inbox: This unsolicited advertisement claims a miracle treatment solves every condition. Buy today with a special secret code.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-04-2",
+    "group_id": "spam-04",
+    "thread_id": "spam-04",
+    "template_id": "spam-04",
+    "subject": "Miracle treatment — message",
+    "body": "For your attention: This unsolicited advertisement claims a miracle treatment solves every condition. Buy today with a special secret code.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-05-0",
+    "group_id": "spam-05",
+    "thread_id": "spam-05",
+    "template_id": "spam-05",
+    "subject": "Phishing verification",
+    "body": "Hello. A suspicious unknown sender asks for your password and banking PIN to avoid account deletion. Send the details directly.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-05-1",
+    "group_id": "spam-05",
+    "thread_id": "spam-05",
+    "template_id": "spam-05",
+    "subject": "Phishing verification — details",
+    "body": "A message for your inbox: A suspicious unknown sender asks for your password and banking PIN to avoid account deletion. Send the details directly.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-05-2",
+    "group_id": "spam-05",
+    "thread_id": "spam-05",
+    "template_id": "spam-05",
+    "subject": "Phishing verification — message",
+    "body": "For your attention: A suspicious unknown sender asks for your password and banking PIN to avoid account deletion. Send the details directly.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-06-0",
+    "group_id": "spam-06",
+    "thread_id": "spam-06",
+    "template_id": "spam-06",
+    "subject": "Fake job fee",
+    "body": "Hello. A stranger guarantees a job without an interview. Pay an upfront registration fee to receive the offer.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-06-1",
+    "group_id": "spam-06",
+    "thread_id": "spam-06",
+    "template_id": "spam-06",
+    "subject": "Fake job fee — details",
+    "body": "A message for your inbox: A stranger guarantees a job without an interview. Pay an upfront registration fee to receive the offer.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-06-2",
+    "group_id": "spam-06",
+    "thread_id": "spam-06",
+    "template_id": "spam-06",
+    "subject": "Fake job fee — message",
+    "body": "For your attention: A stranger guarantees a job without an interview. Pay an upfront registration fee to receive the offer.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-07-0",
+    "group_id": "spam-07",
+    "thread_id": "spam-07",
+    "template_id": "spam-07",
+    "subject": "Unwanted coupon",
+    "body": "Hello. An unsolicited mass advertisement offers random coupons for products you never requested. Purchase now.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-07-1",
+    "group_id": "spam-07",
+    "thread_id": "spam-07",
+    "template_id": "spam-07",
+    "subject": "Unwanted coupon — details",
+    "body": "A message for your inbox: An unsolicited mass advertisement offers random coupons for products you never requested. Purchase now.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-07-2",
+    "group_id": "spam-07",
+    "thread_id": "spam-07",
+    "template_id": "spam-07",
+    "subject": "Unwanted coupon — message",
+    "body": "For your attention: An unsolicited mass advertisement offers random coupons for products you never requested. Purchase now.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-08-0",
+    "group_id": "spam-08",
+    "thread_id": "spam-08",
+    "template_id": "spam-08",
+    "subject": "Fake delivery fee",
+    "body": "Hello. A suspicious unknown link requests your full card details to pay an unexpected delivery release fee.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-08-1",
+    "group_id": "spam-08",
+    "thread_id": "spam-08",
+    "template_id": "spam-08",
+    "subject": "Fake delivery fee — details",
+    "body": "A message for your inbox: A suspicious unknown link requests your full card details to pay an unexpected delivery release fee.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-08-2",
+    "group_id": "spam-08",
+    "thread_id": "spam-08",
+    "template_id": "spam-08",
+    "subject": "Fake delivery fee — message",
+    "body": "For your attention: A suspicious unknown link requests your full card details to pay an unexpected delivery release fee.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-09-0",
+    "group_id": "spam-09",
+    "thread_id": "spam-09",
+    "template_id": "spam-09",
+    "subject": "Lottery membership",
+    "body": "Hello. An unwanted lottery advertisement promises certain winnings if you pay for a premium membership.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-09-1",
+    "group_id": "spam-09",
+    "thread_id": "spam-09",
+    "template_id": "spam-09",
+    "subject": "Lottery membership — details",
+    "body": "A message for your inbox: An unwanted lottery advertisement promises certain winnings if you pay for a premium membership.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-09-2",
+    "group_id": "spam-09",
+    "thread_id": "spam-09",
+    "template_id": "spam-09",
+    "subject": "Lottery membership — message",
+    "body": "For your attention: An unwanted lottery advertisement promises certain winnings if you pay for a premium membership.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-10-0",
+    "group_id": "spam-10",
+    "thread_id": "spam-10",
+    "template_id": "spam-10",
+    "subject": "Secret cryptocurrency",
+    "body": "Hello. An unsolicited crypto scheme promises to multiply every deposit. Transfer money immediately to a stranger.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-10-1",
+    "group_id": "spam-10",
+    "thread_id": "spam-10",
+    "template_id": "spam-10",
+    "subject": "Secret cryptocurrency — details",
+    "body": "A message for your inbox: An unsolicited crypto scheme promises to multiply every deposit. Transfer money immediately to a stranger.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-10-2",
+    "group_id": "spam-10",
+    "thread_id": "spam-10",
+    "template_id": "spam-10",
+    "subject": "Secret cryptocurrency — message",
+    "body": "For your attention: An unsolicited crypto scheme promises to multiply every deposit. Transfer money immediately to a stranger.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-11-0",
+    "group_id": "spam-11",
+    "thread_id": "spam-11",
+    "template_id": "spam-11",
+    "subject": "Follower promotion",
+    "body": "Hello. An unwanted bulk promotion sells fake followers and engagement. Buy a package through an unknown link.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-11-1",
+    "group_id": "spam-11",
+    "thread_id": "spam-11",
+    "template_id": "spam-11",
+    "subject": "Follower promotion — details",
+    "body": "A message for your inbox: An unwanted bulk promotion sells fake followers and engagement. Buy a package through an unknown link.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-11-2",
+    "group_id": "spam-11",
+    "thread_id": "spam-11",
+    "template_id": "spam-11",
+    "subject": "Follower promotion — message",
+    "body": "For your attention: An unwanted bulk promotion sells fake followers and engagement. Buy a package through an unknown link.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-12-0",
+    "group_id": "spam-12",
+    "thread_id": "spam-12",
+    "template_id": "spam-12",
+    "subject": "Unrequested loan",
+    "body": "Hello. A stranger offers an instant loan and demands an advance fee before providing any terms.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-12-1",
+    "group_id": "spam-12",
+    "thread_id": "spam-12",
+    "template_id": "spam-12",
+    "subject": "Unrequested loan — details",
+    "body": "A message for your inbox: A stranger offers an instant loan and demands an advance fee before providing any terms.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-12-2",
+    "group_id": "spam-12",
+    "thread_id": "spam-12",
+    "template_id": "spam-12",
+    "subject": "Unrequested loan — message",
+    "body": "For your attention: A stranger offers an instant loan and demands an advance fee before providing any terms.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-13-0",
+    "group_id": "spam-13",
+    "thread_id": "spam-13",
+    "template_id": "spam-13",
+    "subject": "Password collection",
+    "body": "Hello. A suspicious message asks you to email your password to an unknown address to verify a fake security alert.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-13-1",
+    "group_id": "spam-13",
+    "thread_id": "spam-13",
+    "template_id": "spam-13",
+    "subject": "Password collection — details",
+    "body": "A message for your inbox: A suspicious message asks you to email your password to an unknown address to verify a fake security alert.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-13-2",
+    "group_id": "spam-13",
+    "thread_id": "spam-13",
+    "template_id": "spam-13",
+    "subject": "Password collection — message",
+    "body": "For your attention: A suspicious message asks you to email your password to an unknown address to verify a fake security alert.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-14-0",
+    "group_id": "spam-14",
+    "thread_id": "spam-14",
+    "template_id": "spam-14",
+    "subject": "Counterfeit sale",
+    "body": "Hello. An unsolicited bulk advertisement promotes counterfeit luxury goods with impossible discounts.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-14-1",
+    "group_id": "spam-14",
+    "thread_id": "spam-14",
+    "template_id": "spam-14",
+    "subject": "Counterfeit sale — details",
+    "body": "A message for your inbox: An unsolicited bulk advertisement promotes counterfeit luxury goods with impossible discounts.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-14-2",
+    "group_id": "spam-14",
+    "thread_id": "spam-14",
+    "template_id": "spam-14",
+    "subject": "Counterfeit sale — message",
+    "body": "For your attention: An unsolicited bulk advertisement promotes counterfeit luxury goods with impossible discounts.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-15-0",
+    "group_id": "spam-15",
+    "thread_id": "spam-15",
+    "template_id": "spam-15",
+    "subject": "Prize verification fee",
+    "body": "Hello. You supposedly won a prize you never entered. Pay a verification fee and send identity documents to a stranger.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-15-1",
+    "group_id": "spam-15",
+    "thread_id": "spam-15",
+    "template_id": "spam-15",
+    "subject": "Prize verification fee — details",
+    "body": "A message for your inbox: You supposedly won a prize you never entered. Pay a verification fee and send identity documents to a stranger.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-15-2",
+    "group_id": "spam-15",
+    "thread_id": "spam-15",
+    "template_id": "spam-15",
+    "subject": "Prize verification fee — message",
+    "body": "For your attention: You supposedly won a prize you never entered. Pay a verification fee and send identity documents to a stranger.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-16-0",
+    "group_id": "spam-16",
+    "thread_id": "spam-16",
+    "template_id": "spam-16",
+    "subject": "Fake tax refund",
+    "body": "Hello. A suspicious unknown sender promises an unexpected tax refund after you submit banking credentials.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-16-1",
+    "group_id": "spam-16",
+    "thread_id": "spam-16",
+    "template_id": "spam-16",
+    "subject": "Fake tax refund — details",
+    "body": "A message for your inbox: A suspicious unknown sender promises an unexpected tax refund after you submit banking credentials.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-16-2",
+    "group_id": "spam-16",
+    "thread_id": "spam-16",
+    "template_id": "spam-16",
+    "subject": "Fake tax refund — message",
+    "body": "For your attention: A suspicious unknown sender promises an unexpected tax refund after you submit banking credentials.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-17-0",
+    "group_id": "spam-17",
+    "thread_id": "spam-17",
+    "template_id": "spam-17",
+    "subject": "Unwanted gambling",
+    "body": "Hello. This unsolicited gambling promotion claims guaranteed wins and asks you to deposit money immediately.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-17-1",
+    "group_id": "spam-17",
+    "thread_id": "spam-17",
+    "template_id": "spam-17",
+    "subject": "Unwanted gambling — details",
+    "body": "A message for your inbox: This unsolicited gambling promotion claims guaranteed wins and asks you to deposit money immediately.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-17-2",
+    "group_id": "spam-17",
+    "thread_id": "spam-17",
+    "template_id": "spam-17",
+    "subject": "Unwanted gambling — message",
+    "body": "For your attention: This unsolicited gambling promotion claims guaranteed wins and asks you to deposit money immediately.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-18-0",
+    "group_id": "spam-18",
+    "thread_id": "spam-18",
+    "template_id": "spam-18",
+    "subject": "Fake invoice attachment",
+    "body": "Hello. An unknown sender demands payment for an order you never placed and asks you to open a suspicious attachment.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-18-1",
+    "group_id": "spam-18",
+    "thread_id": "spam-18",
+    "template_id": "spam-18",
+    "subject": "Fake invoice attachment — details",
+    "body": "A message for your inbox: An unknown sender demands payment for an order you never placed and asks you to open a suspicious attachment.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-18-2",
+    "group_id": "spam-18",
+    "thread_id": "spam-18",
+    "template_id": "spam-18",
+    "subject": "Fake invoice attachment — message",
+    "body": "For your attention: An unknown sender demands payment for an order you never placed and asks you to open a suspicious attachment.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-19-0",
+    "group_id": "spam-19",
+    "thread_id": "spam-19",
+    "template_id": "spam-19",
+    "subject": "Bulk marketing blast",
+    "body": "Hello. An unwanted mass marketing message repeats irrelevant advertisements and pressure to buy an unrequested service.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-19-1",
+    "group_id": "spam-19",
+    "thread_id": "spam-19",
+    "template_id": "spam-19",
+    "subject": "Bulk marketing blast — details",
+    "body": "A message for your inbox: An unwanted mass marketing message repeats irrelevant advertisements and pressure to buy an unrequested service.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  },
+  {
+    "id": "spam-19-2",
+    "group_id": "spam-19",
+    "thread_id": "spam-19",
+    "template_id": "spam-19",
+    "subject": "Bulk marketing blast — message",
+    "body": "For your attention: An unwanted mass marketing message repeats irrelevant advertisements and pressure to buy an unrequested service.",
+    "human_label": "SPAM",
+    "annotation_basis": "Scenario semantics: explicit direct action, legitimate nonurgent information, or unwanted/deceptive content."
+  }
+]

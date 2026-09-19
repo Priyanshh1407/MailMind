@@ -1,173 +1,151 @@
+"""Paused by default; durable steps replace Gmail unread status as the queue."""
 import time
 import schedule
-import requests
-import os
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.columns import Columns
-from rich.align import Align
-from rich.text import Text
-from rich import box
+from .email_client import refresh_gmail, get_unread_emails, mark_as_read
+from .llm_api import classify_email
+from .notifier import send_telegram_alert
+from .db_utils import log_email_to_db, get_ingestion_state, save_ingestion_state
+from .config import Settings
+from .setup_db import create_database
+from .logging_utils import log_event
+from .account_state import AccountManager, WorkCancelled
+from .local_llm import DeferredMailMindModel, MailMindModel
+from .retrieval_policy import load_policy
+from .vector_db import create_vector_collection, VectorService
+from .feedback import reconcile_feedback, current_vector
+from .work_queue import claim_cycle, fence, finish_cycle, ingest_email, due_tasks, excluded_messages, record_ingestion_failure
+from .pipeline import process_task, cycle_external
+from .provider_policy import PROVIDER_CALLS
 
-from email_client import authenticate_gmail, get_unread_emails, mark_as_read
-from llm_api import classify_email
-from notifier import send_telegram_alert
-from db_utils import log_email_to_db
-import json
+_model = None
+_model_paths = None
+_collection = None
+_collection_path = None
 
-# --- CONFIGURATION ---
-STATUS_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'polling_status.json')
 
-def set_polling_status(is_polling):
+def shadow_evaluate_email(subject, body, external_prediction, *, account_id=None, model=None):
+    return model.predict(subject,body,account_id=account_id),None
+
+
+def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop_event=None):
+    config=settings or Settings.from_environment(load_file=True)
+    create_database(config.db_path)
+    manager=manager or AccountManager(config)
+    context=manager.worker_context()
+    if context is None:
+        return {'status':'paused'}
+    ownership=claim_cycle(manager,context)
+    if ownership is None:
+        return {'status':'busy'}
+    token,job_id=ownership
+    error_code=None
+    global _model,_model_paths,_collection,_collection_path
     try:
-        with open(STATUS_FILE, 'w') as f:
-            json.dump({"is_polling": is_polling}, f)
-    except:
-        pass
-# Set to True to see the detailed side-by-side CLI visualization.
-# Set to False to run quietly (useful since we have the React Web UI now).
-ENABLE_CLI_DASHBOARD = False
-# ---------------------
+        def collection_provider():
+            global _collection,_collection_path
+            if collection is not None:
+                return collection
+            if _collection is None or _collection_path != (config.data_dir,config.local_only,config.asset_manifest_path):
+                _collection=create_vector_collection(config.data_dir/'chroma_db',settings=config)
+                _collection_path=(config.data_dir,config.local_only,config.asset_manifest_path)
+            return _collection
+        # A degraded derived vector index must not starve the durable mail queue.
+        # Interactive reconciliation remains available without this automatic cap.
+        reconcile_feedback(manager,context,collection_provider,max_attempts=config.max_processing_attempts)
+        service=None
+        if not config.local_only:
+            try:
+                with cycle_external(manager,context,token):
+                    service=PROVIDER_CALLS.run(lambda:refresh_gmail(manager,context),config.provider_timeout_seconds)
+            except WorkCancelled:
+                raise
+            except TimeoutError:
+                service=None
+            if service is None:
+                error_code='gmail_unavailable'
+                with manager.guard(context) as conn:
+                    from .database import utc_timestamp
+                    conn.execute('UPDATE worker_health SET last_error_at=?,last_error_code=? WHERE account_id=?',(utc_timestamp(),error_code,context.account_id))
+                manager.pause(context)
+                return {'status':'paused','job_id':job_id}
+            with manager.guard(context) as conn:
+                fence(manager,context,token,conn)
+                previous=get_ingestion_state(context.account_id,conn)
+                excluded=excluded_messages(conn,context.account_id)
+            batch=get_unread_emails(service,max_results=config.batch_size,page_size=config.gmail_page_size,
+                max_pages=config.gmail_max_pages,page_token=previous['page_token'] if previous else None,
+                before_request=lambda:cycle_external(manager,context,token),exclude_ids=excluded)
+            # Save bodies BEFORE advancing the listing cursor.
+            for email in batch.emails:
+                ingest_email(email,manager,context,token)
+            for failure in batch.failures:
+                record_ingestion_failure(failure,manager,context,token)
+            with manager.guard(context) as conn:
+                fence(manager,context,token,conn)
+                save_ingestion_state(context.account_id,batch,conn)
+        tasks=due_tasks(manager,context,token,config.batch_size)
+        if tasks and model is None:
+            paths=(config.model_path,config.data_dir,config.retrieval_policy_path,config.local_only,config.asset_manifest_path)
+            with cycle_external(manager,context,token):
+                if _model is None or _model_paths != paths:
+                    if config.local_only:
+                        _model=MailMindModel(config.model_path,settings=config,vector_service=VectorService(collection_provider,lambda metadata:current_vector(metadata,config.db_path),policy=load_policy(config.retrieval_policy_path)))
+                    else:
+                        _model=DeferredMailMindModel(config.model_path,settings=config)
+                    _model_paths=paths
+                model=_model
+        completed=0
+        def cloud_collection_provider():
+            if _collection is None:
+                raise RuntimeError('retrieval_not_initialized')
+            return _collection
+        for task in tasks:
+            if stop_event is not None and stop_event.is_set():break
+            completed+=bool(process_task(task,manager,context,token,service,model,cloud_collection_provider,
+                classifier=classify_email,shadow=shadow_evaluate_email,notifier=send_telegram_alert,
+                marker=mark_as_read,logger=log_email_to_db,validator=lambda metadata:current_vector(metadata,config.db_path)))
+        if completed < len(tasks):
+            error_code='processing_incomplete'
+            with manager.guard(context) as conn:
+                fence(manager,context,token,conn)
+                conn.execute('UPDATE ingestion_state SET page_token=NULL WHERE account_id=?',(context.account_id,))
+        if not config.local_only and batch.listing_error:
+            error_code='gmail_listing_failed'
+        return {**({'status':'local_only','network':'disabled'} if config.local_only else batch.summary()),'processed_count':completed,'attempted_count':len(tasks),'job_id':job_id,
+                'processing_status':'partial' if error_code else 'complete'}
+    except WorkCancelled:
+        log_event('agent_cycle_cancelled')
+        return {'status':'cancelled','job_id':job_id}
+    except Exception:
+        error_code='cycle_failed'
+        raise
+    finally:
+        try:
+            finish_cycle(manager,context,token,job_id,error_code)
+        except WorkCancelled:
+            pass
 
-# Initialize the Rich Console
-console = Console()
-
-def print_header():
-    """Renders a corporate-grade ASCII header."""
-    os.system('cls' if os.name == 'nt' else 'clear')
-    title = Text("MAILMIND AI", justify="center", style="bold cyan")
-    subtitle = Text("Autonomous Priority Routing & Shadow Telemetry", justify="center", style="dim italic")
-    header = Panel(
-        Text.assemble(title, "\n", subtitle),
-        box=box.DOUBLE_EDGE,
-        border_style="cyan",
-        expand=True
-    )
-    console.print(header)
-    console.print("\n")
-
-def shadow_evaluate_email(subject, body, external_prediction):
-    start_time = time.time()
-    try:
-        response = requests.post(
-            "http://127.0.0.1:8000/predict",
-            json={"subject": subject, "body": body},
-            timeout=3
-        )
-        if response.status_code == 200:
-            local_data = response.json()
-            local_label = local_data.get("prediction")
-            local_score = local_data.get("confidence_score")
-        else:
-            local_label, local_score = "API_ERROR", 0.0
-    except Exception as e:
-        print(f"\n[!] LOCAL MODEL FAILURE: Could not connect to internal AI API.")
-        print(f"[!] ERROR DETAILS: {str(e)}\n")
-        local_label, local_score = "CONNECTION_FAILED", 0.0
-        
-    local_latency = round(time.time() - start_time, 3)
-
-    # Build the internal AI table (No printing yet, just building)
-    table = Table(show_header=True, header_style="bold magenta", expand=True, box=box.SIMPLE)
-    table.add_column("Engine", style="cyan")
-    table.add_column("Verdict", justify="center")
-    table.add_column("Conf.", justify="center")
-    table.add_column("Latency", justify="right")
-
-    ext_color = "green" if external_prediction == "IMPORTANT" else "red" if external_prediction == "ERROR" else "dim"
-    loc_color = "green" if local_label == "IMPORTANT" else "red" if local_label in ["API_ERROR", "CONNECTION_FAILED"] else "dim"
-
-    table.add_row("External (Cloud)", f"[{ext_color}]{external_prediction}[/]", "N/A", "N/A")
-    table.add_row("MailMind (Local)", f"[{loc_color}]{local_label}[/]", f"{local_score}%", f"{local_latency}s")
-
-    agreement = "✅ SYNCED" if local_label == external_prediction else "⚠️ DESYNC"
-    agreement_color = "bold green" if local_label == external_prediction else "bold yellow"
-    
-    # Wrap the table in a panel to be rendered side-by-side later
-    ai_panel = Panel(
-        table, 
-        title=f"🧠 Neural Telemetry | Status: [{agreement_color}]{agreement}[/]", 
-        border_style="magenta",
-        width=55
-    )
-    
-    return local_label, ai_panel
 
 def run_agent():
-    set_polling_status(True)
-    print_header()
-    
-    gmail_service = authenticate_gmail()
-    if not gmail_service:
-        console.print("[bold red]Failed to connect to Gmail. Exiting.[/]")
-        set_polling_status(False)
-        return
-    
-    with console.status("[bold green]Establishing secure connection and fetching data...", spinner="point"):
-        emails = get_unread_emails(gmail_service, max_results=5)
+    try:
+        return _run_agent()
+    except Exception as error:
+        log_event('agent_cycle_failed',error=error)
+        raise RuntimeError('Email processing failed') from None
 
-    if not emails:
-        console.print(Align.center("[dim italic]No new data packets detected. Engine standing by.[/]"))
-        set_polling_status(False)
-        return
-    
-    console.print(f"[bold cyan]Detected {len(emails)} unread packets. Initiating classification matrix...[/]\n")
 
-    for email in emails:
-        with console.status(f"[bold yellow]Evaluating Packet ID: {email['id']}...", spinner="arc"):
-            # 1. External Call
-            decision = classify_email(email['sender'], email['subject'], email['body_snippet'])
-            # 2. Local Shadow Call
-            local_label, ai_panel = shadow_evaluate_email(email['subject'], email['body_snippet'], decision)
+def scheduled_cycle():
+    try:
+        run_agent()
+    except RuntimeError:
+        pass
 
-        # Circuit Breaker Logic
-        if decision == "ERROR":
-            console.print(Panel("[bold red]🚨 CRITICAL: External API failure. Protecting state and halting batch.[/]", border_style="red"))
-            break
 
-        # Log to Database
-        log_email_to_db(email['id'], email['sender'], email['subject'], email['body_snippet'], decision, local_label)
-
-        if ENABLE_CLI_DASHBOARD:
-            # Build Data Panel
-            email_text = f"[bold]From:[/bold] {email['sender']}\n[bold]Subject:[/bold] {email['subject']}\n\n[dim]{email['body_snippet'][:80]}...[/dim]"
-            border_color = "green" if decision == "IMPORTANT" else "dim"
-            data_panel = Panel(email_text, title="📧 Incoming Data", border_style=border_color, width=50)
-
-            # Render Side-by-Side!
-            console.print(Columns([data_panel, ai_panel], expand=True))
-
-        # Final Action Footer
-        if decision == "IMPORTANT":
-            success = send_telegram_alert(email['sender'], email['subject'], email['body_snippet'][:100] + "...")
-            alert_status = "[[bold green]✔ Telegram Routed[/]]" if success else "[[bold red]✖ Telegram Failed[/]]"
-            console.print(f"   ↳ [bold green]Verdict: PRIORITY[/] {alert_status}")
-        elif decision == "UPDATES":
-            console.print("   ↳ [bold blue]Verdict: UPDATES[/]")
-        else:
-            console.print("   ↳ [dim]Verdict: SPAM [[⚪ Suppressed]][/]")
-
-        # Mark as read
-        if mark_as_read(gmail_service, email['id']):
-            console.print("   ↳ [dim]State: Read[/]\n")
-
-        if ENABLE_CLI_DASHBOARD:
-            # Small divider between emails
-            console.rule(style="dim", characters="-")
-            time.sleep(0.5) # Slight pause for visual cinematic effect
-            
-    set_polling_status(False)
-
-if __name__ == "__main__":
-    console.print(Align.center("\n[bold yellow]Booting up systems. Giving local AI 10 seconds to load...[/]\n"))
-    time.sleep(10)
-    run_agent()
-    
-    schedule.every(1).hour.do(run_agent)
-
-    console.print(Align.center("\n[dim]Service active. Polling engine running on 1hr interval. (Ctrl+C to terminate)[/]\n"))
-
+if __name__ == '__main__':
+    print('MailMind worker: paused until Google is connected in the dashboard.')
+    scheduled_cycle()
+    config=Settings.from_environment(load_file=True)
+    schedule.every(config.poll_interval_seconds).seconds.do(scheduled_cycle)
     while True:
         schedule.run_pending()
         time.sleep(1)

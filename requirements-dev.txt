@@ -1,0 +1,2 @@
+# Tests use unittest, TestClient/httpx and the same pinned dependency closure.
+-r requirements.lock
