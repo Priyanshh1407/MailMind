@@ -28,6 +28,16 @@ def format_email_text(subject, body):
     return f'Subject: {normalize_subject(subject)} | Body: {normalize_text(body)}'
 
 
+def format_model_text(sender, subject, body):
+    """Local-model input including bounded sender evidence."""
+    from email.utils import parseaddr
+    sender = normalize_text(sender, limit=MAX_SENDER_CHARS)
+    address = parseaddr(sender)[1].casefold()
+    domain = address.rsplit('@', 1)[-1] if '@' in address else ''
+    return (f'From: {sender} | Sender domain: {domain} | '
+            f'Subject: {normalize_subject(subject)} | Body: {normalize_text(body)}')
+
+
 def preview_text(body, limit=PREVIEW_CHARS):
     return body[:limit] + ('...' if len(body) > limit else '')
 

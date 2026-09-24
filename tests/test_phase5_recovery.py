@@ -33,7 +33,7 @@ class RecoveryTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='mailmind-phase5-')
         self.addCleanup(self.temp.cleanup)
-        self.settings=Settings(data_dir=Path(self.temp.name),access_key='synthetic-phase5-pairing-code',auto_mark_read=True)
+        self.settings=Settings(data_dir=Path(self.temp.name),auto_mark_read=True)
         self.collection=FakeCollection()
         self.model=Mock(model_loaded=False)
         self.model.predict.return_value=Prediction(reason='missing_checkpoint')
@@ -42,7 +42,7 @@ class RecoveryTests(unittest.TestCase):
         self.client.__enter__()
         self.addCleanup(self.client.__exit__,None,None,None)
         self.client.headers['Origin']=ORIGIN
-        csrf=self.client.post('/session',json={'code':self.settings.access_key}).json()['csrf_token']
+        csrf=self.client.post('/session').json()['csrf_token']
         self.client.headers['X-CSRF-Token']=csrf
         self.manager=self.app.state.accounts
         context,_=self.manager.session(self.client.cookies.get('mailmind_session'))
@@ -221,6 +221,19 @@ class RecoveryTests(unittest.TestCase):
         self.assertIsNone(claim_cycle(AccountManager(self.settings),self.context))
         finish_cycle(self.manager,self.context,*owner)
 
+    def test_successful_cycle_clears_a_historical_worker_error(self):
+        failed=claim_cycle(self.manager,self.context)
+        finish_cycle(self.manager,self.context,*failed,error_code='gmail_unavailable')
+        successful=claim_cycle(self.manager,self.context)
+        finish_cycle(self.manager,self.context,*successful)
+        with connection(self.settings.db_path) as conn:
+            health=conn.execute('SELECT last_success_at,last_error_at,last_error_code FROM worker_health WHERE account_id=?',
+                                (self.context.account_id,)).fetchone()
+            runtime=conn.execute('SELECT last_success_at,last_error_at,last_error_code FROM runtime_state').fetchone()
+        self.assertIsNotNone(health['last_success_at'])
+        self.assertEqual((health['last_error_at'],health['last_error_code']),(None,None))
+        self.assertEqual((runtime['last_error_at'],runtime['last_error_code']),(None,None))
+
     def test_expired_owner_cannot_commit_or_clear_new_owner(self):
         old=claim_cycle(self.manager,self.context)
         with connection(self.settings.db_path) as conn:
@@ -241,13 +254,12 @@ class RecoveryTests(unittest.TestCase):
         finish_cycle(self.manager,self.context,*next(result for result in results if result))
 
     def test_queued_processing_job_is_trackable_and_deduplicated(self):
-        first=self.client.post('/process')
-        second=self.client.post('/process')
-        self.assertEqual(first.status_code,202)
-        self.assertEqual(first.json()['job_id'],second.json()['job_id'])
-        self.assertEqual(self.client.get('/jobs/'+str(first.json()['job_id'])).json()['status'],'queued')
+        first=enqueue_cycle(self.manager,self.context)
+        second=enqueue_cycle(self.manager,self.context)
+        self.assertEqual(first,second)
+        self.assertEqual(self.client.get('/jobs/'+str(first)).json()['status'],'queued')
         self.run_cycle()
-        self.assertEqual(self.client.get('/jobs/'+str(first.json()['job_id'])).json()['status'],'complete')
+        self.assertEqual(self.client.get('/jobs/'+str(first)).json()['status'],'complete')
 
     def test_recovery_endpoints_reject_unknown_ids_and_bad_actions(self):
         self.assertEqual(self.client.get('/jobs/not-owned').status_code,404)
@@ -276,10 +288,10 @@ class RecoveryTests(unittest.TestCase):
         self.service=mailbox(2)
         cloud=Mock(side_effect=[Prediction(outcome='ERROR',reason='invalid_provider_output'),Prediction(category='UPDATES',outcome='CLASSIFIED')])
         self.run_cycle(classifier=cloud)
-        self.assertEqual(self.service.unread,['synthetic-0'])
+        self.assertEqual(self.service.unread,['synthetic-1'])
         with connection(self.settings.db_path) as conn:
             rows={row['email_id']:row['status'] for row in conn.execute('SELECT email_id,status FROM processing_tasks')}
-        self.assertEqual(rows,{'synthetic-0':'dead','synthetic-1':'complete'})
+        self.assertEqual(rows,{'synthetic-0':'complete','synthetic-1':'dead'})
 
     def test_transient_classification_has_backoff_and_attempt_limit(self):
         cloud=Mock(return_value=Prediction(outcome='ERROR',reason='provider_transient'))
@@ -389,7 +401,7 @@ class RecoveryTests(unittest.TestCase):
         initialize_database(path)
         initialize_database(path)
         with connection(path) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],7)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],10)
             self.assertEqual(tuple(conn.execute('SELECT body,prediction FROM email_logs').fetchone()),('original body','IMPORTANT'))
             self.assertEqual(conn.execute('SELECT label FROM feedback_history').fetchone()[0],'UPDATES')
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM processing_tasks').fetchone()[0],0)
@@ -431,7 +443,7 @@ class AuthenticationJobTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='mailmind-phase5-auth-')
         self.addCleanup(self.temp.cleanup)
-        self.settings=Settings(data_dir=Path(self.temp.name),access_key='synthetic-background-pairing-key')
+        self.settings=Settings(data_dir=Path(self.temp.name))
         self.release,self.entered=threading.Event(),threading.Event()
         def sign_in():
             self.entered.set()
@@ -444,7 +456,7 @@ class AuthenticationJobTests(unittest.TestCase):
         self.client.__enter__()
         self.addCleanup(self.client.__exit__,None,None,None)
         self.addCleanup(self.finish)
-        self.pair()
+        self.open_session()
 
     def finish(self):
         self.release.set()
@@ -452,8 +464,8 @@ class AuthenticationJobTests(unittest.TestCase):
             if not future.cancelled():
                 future.result(timeout=4)
 
-    def pair(self):
-        result=self.client.post('/session',json={'code':self.settings.access_key},headers={'Origin':ORIGIN})
+    def open_session(self):
+        result=self.client.post('/session',headers={'Origin':ORIGIN})
         self.client.headers.update({'Origin':ORIGIN,'X-CSRF-Token':result.json()['csrf_token']})
 
     def test_sign_in_returns_trackable_job_without_waiting_for_google(self):
@@ -494,15 +506,39 @@ class AuthenticationJobTests(unittest.TestCase):
         self.assertNotIn('private',json.dumps(job))
         self.assertFalse(self.client.get('/status').json()['auth_in_progress'])
 
+    def test_failed_account_switch_restores_previous_connection(self):
+        manager=self.app.state.accounts
+        context,_=manager.session(self.client.cookies.get('mailmind_session'))
+        connected=manager.finish_auth(manager.begin_auth(context),(A,'{}'))
+        self.assertTrue(manager.worker_context())
+        self.oauth.side_effect=TimeoutError('synthetic callback timeout')
+        response=self.client.post('/authenticate')
+        self.finish()
+        job=self.client.get('/jobs/'+response.json()['job_id']).json()
+        self.assertEqual((job['status'],job['error_code']),('failed','sign_in_failed'))
+        self.assertTrue(self.client.get('/session').json()['connected'])
+        self.assertIsNotNone(manager.worker_context())
+        self.assertEqual(manager.worker_context().account_id,connected.account_id)
+
+    def test_second_account_switch_is_rejected_while_first_is_pending(self):
+        first=self.client.post('/authenticate')
+        self.assertEqual(first.status_code,202)
+        second=self.client.post('/authenticate')
+        self.assertEqual(second.status_code,409)
+
     def test_auth_jobs_are_not_visible_after_session_change(self):
         response=self.client.post('/authenticate')
         self.client.post('/logout')
-        self.pair()
+        self.open_session()
         self.assertEqual(self.client.get('/jobs/'+response.json()['job_id']).status_code,404)
         self.finish()
 
 
 class ProviderAndReadinessTests(unittest.TestCase):
+    def setUp(self):
+        with llm_api._model_cooldown_lock:
+            llm_api._model_cooldowns.clear()
+
     def test_typed_failures_ignore_error_wording(self):
         error=RuntimeError('secret quota 429')
         self.assertEqual(provider_failure(error).code,'provider_failed')

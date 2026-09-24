@@ -1,3 +1,4 @@
+from pathlib import Path
 from threading import Lock
 import hashlib
 import math
@@ -11,6 +12,73 @@ EMBEDDED_CHROMA_API = 'chromadb.api.rust.RustBindingsAPI'
 # Collection access is lazy and synchronized; there is no import-time client.
 _collection = None
 _lock = Lock()
+_clients = {}
+_client_lock = Lock()
+_search_embedding_functions = {}
+_search_embedding_lock = Lock()
+
+
+def _persistent_client(path, config):
+    """Return one embedded Chroma client per process and storage directory."""
+    target = Path(path or config.data_dir / "chroma_db").resolve()
+    key = str(target)
+    with _client_lock:
+        client = _clients.get(key)
+        if client is None:
+            import chromadb
+            from chromadb.config import Settings as ChromaSettings
+            candidate = chromadb.PersistentClient(
+                path=key,
+                settings=ChromaSettings(chroma_api_impl=EMBEDDED_CHROMA_API,
+                                        allow_reset=False, anonymized_telemetry=False),
+            )
+            server = getattr(candidate, '_server', None)
+            if type(server).__module__ != 'chromadb.api.rust' or type(server).__name__ != 'RustBindingsAPI':
+                raise RuntimeError('MailMind requires Chroma embedded Rust storage; HTTP/server clients are forbidden')
+            _clients[key] = candidate
+            client = candidate
+    return client
+
+
+def reset_persistent_client(path=None, *, settings=None):
+    '''Close and evict one process-local client so a stale store can reopen.'''
+    config=settings or Settings.from_environment()
+    target=Path(path or config.data_dir / 'chroma_db').resolve()
+    key=str(target)
+    with _client_lock:
+        client=_clients.pop(key,None)
+        if client is None:
+            return False
+        close=getattr(client,'close',None)
+        if callable(close):
+            close()
+    return True
+
+
+def _search_embedding_function(config):
+    key = (config.local_only, str(config.asset_manifest_path or ''))
+    with _search_embedding_lock:
+        embedding = _search_embedding_functions.get(key)
+        if embedding is None:
+            if config.local_only:
+                from .offline_assets import offline_embedding
+                embedding = offline_embedding(config.asset_manifest_path)
+            else:
+                from chromadb.api.types import DefaultEmbeddingFunction
+                embedding = DefaultEmbeddingFunction()
+            _search_embedding_functions[key] = embedding
+    return embedding
+
+
+def embed_search_documents(documents, *, settings=None):
+    """Compute inbox-search embeddings without opening or locking Chroma."""
+    if not documents or any(not isinstance(document, str) for document in documents):
+        raise ValueError('Search documents must be a non-empty list of text')
+    config = settings or Settings.from_environment()
+    values = _search_embedding_function(config)(documents)
+    if len(values) != len(documents):
+        raise ValueError('Search embedding count did not match the document count')
+    return [value.tolist() if hasattr(value, 'tolist') else list(value) for value in values]
 
 # Chroma's default local embedding may download assets on first query. Imports
 # and collection construction do not deliberately issue embedding requests;
@@ -22,15 +90,7 @@ def create_vector_collection(path=None, *, settings=None):
     if config.local_only:
         from .offline_assets import offline_embedding
         embedding=offline_embedding(config.asset_manifest_path)
-    import chromadb
-    from chromadb.config import Settings as ChromaSettings
-    client = chromadb.PersistentClient(
-        path=str(path or Settings.from_environment().data_dir / "chroma_db"),
-        settings=ChromaSettings(chroma_api_impl=EMBEDDED_CHROMA_API, allow_reset=False, anonymized_telemetry=False),
-    )
-    server = getattr(client, '_server', None)
-    if type(server).__module__ != 'chromadb.api.rust' or type(server).__name__ != 'RustBindingsAPI':
-        raise RuntimeError('MailMind requires Chroma embedded Rust storage; HTTP/server clients are forbidden')
+    client = _persistent_client(path, config)
     collection = client.get_or_create_collection(name="mailmind_emails", metadata={"hnsw:space": "cosine"}, **({"embedding_function":embedding} if embedding is not None else {}))
     configuration = collection.configuration
     if configuration.get('hnsw', {}).get('space') != 'cosine':
@@ -44,6 +104,22 @@ def get_collection():
         if _collection is None:
             _collection = create_vector_collection()
         return _collection
+
+
+def create_search_collection(path=None, *, settings=None):
+    '''Create the isolated semantic inbox-search collection.'''
+    config=settings or Settings.from_environment()
+    # Supply the same process-cached function used by background indexing.
+    # Leaving this implicit makes Chroma create a second DefaultEmbeddingFunction
+    # whose cold model load can repeatedly exceed the interactive search budget.
+    embedding=_search_embedding_function(config)
+    client = _persistent_client(path or config.data_dir / 'search_chroma_db', config)
+    collection=client.get_or_create_collection(
+        name='mailmind_email_search',metadata={'hnsw:space':'cosine'},
+        embedding_function=embedding)
+    if collection.configuration.get('hnsw',{}).get('space') != 'cosine':
+        raise ValueError('The search collection must use cosine distance; rebuild its derived index')
+    return collection
 
 def add_email_to_vector_db(email_id, subject, body, label, *, account_id=LEGACY_ACCOUNT, collection=None, revision_id=None):
     """

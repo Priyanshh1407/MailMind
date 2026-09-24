@@ -14,7 +14,7 @@ from . import vector_db
 from .config import Settings
 from .prediction import Prediction, checkpoint_labels
 from .logging_utils import log_event
-from .email_text import format_email_text, normalize_subject, normalize_text, MODEL_MAX_TOKENS
+from .email_text import format_email_text, format_model_text, normalize_subject, normalize_text, MODEL_MAX_TOKENS
 
 
 def _settings_payload(settings, model_path):
@@ -82,6 +82,7 @@ def _model_service(payload):
                 return
             with redirect_stdout(sys.stderr):
                 prediction = model.predict(request['subject'], request['body'],
+                                           sender=request.get('sender', ''),
                                            account_id=request.get('account_id'))
             response = {'type': 'prediction', 'id': request['id'],
                         'prediction': prediction.to_dict()}
@@ -189,10 +190,10 @@ class DeferredMailMindModel:
                 return 'model_process_failed'
             return self._load_reason
 
-    def predict(self, subject, body, *, account_id=None):
+    def predict(self, subject, body, *, sender='', account_id=None):
         model = self._current()
         if model is not None:
-            return model.predict(subject, body, account_id=account_id)
+            return model.predict(subject, body, sender=sender, account_id=account_id)
         if not self.model_loaded:
             return Prediction(outcome='UNAVAILABLE', source='local', reason=self.load_reason)
         with self._lock:
@@ -202,7 +203,7 @@ class DeferredMailMindModel:
             request_id = self._request_id
             try:
                 self._process.stdin.write(json.dumps({
-                    'id': request_id, 'subject': subject, 'body': body, 'account_id': account_id,
+                    'id': request_id, 'subject': subject, 'body': body, 'sender': sender, 'account_id': account_id,
                 }, separators=(',', ':')) + '\n')
                 self._process.stdin.flush()
             except (BrokenPipeError, OSError, ValueError):
@@ -272,25 +273,30 @@ class MailMindModel:
                 return
             self.id2label = checkpoint_labels(self.model.config)
             scope=getattr(self.model.config,"mailmind_training_scope",None)
-            self.training_scope=scope if scope == "synthetic_benchmark_only" else None
+            self.training_scope=scope if scope in ('synthetic_benchmark_only','private_user_approved_inbox') else None
             self.model.eval()
             version = getattr(self.model.config, 'mailmind_model_version', None)
             self.model_version = version if isinstance(version, str) and re.fullmatch(r'[A-Za-z0-9._:-]{1,80}', version) else 'local-three-class-unversioned'
             self.model_loaded = True
+            self.load_reason = 'ready'
         except Exception as error:
             log_event('model_load_failed', error=error)
 
-    def predict(self, subject, body, *, account_id=None):
+    def predict(self, subject, body, *, sender='', account_id=None):
         start = perf_counter()
+        sender = normalize_text(sender, limit=1000)
         subject, body = normalize_subject(subject), normalize_text(body)
         retrieval_status = 'rejected'
-        try:
-            result = self.vector_service.get_knn_prediction(subject, body, k=5, account_id=account_id)
-            if result is not None:
-                return replace(result, elapsed_ms=(perf_counter()-start)*1000)
-        except Exception as error:
-            retrieval_status = 'unavailable'
-            log_event('retrieval_failed', error=error)
+        # Evaluate the private shadow checkpoint directly so retrieval feedback
+        # cannot mask its actual three-class model performance.
+        if getattr(self, 'training_scope', None) != 'private_user_approved_inbox':
+            try:
+                result = self.vector_service.get_knn_prediction(subject, body, k=5, account_id=account_id)
+                if result is not None:
+                    return replace(result, elapsed_ms=(perf_counter()-start)*1000)
+            except Exception as error:
+                retrieval_status = 'unavailable'
+                log_event('retrieval_failed', error=error)
         if not self.model_loaded:
             return Prediction(outcome='ABSTAIN' if self.model_version == 'legacy-binary' else 'UNAVAILABLE',
                               model_version=self.model_version, reason=self.load_reason,
@@ -298,7 +304,8 @@ class MailMindModel:
         try:
             import torch
             import torch.nn.functional as F
-            inputs = self.tokenizer(format_email_text(subject, body), return_tensors='pt',
+            model_text = format_model_text(sender, subject, body) if sender else format_email_text(subject, body)
+            inputs = self.tokenizer(model_text, return_tensors='pt',
                                     truncation=True, max_length=MODEL_MAX_TOKENS)
             with torch.no_grad():
                 probabilities = F.softmax(self.model(**inputs).logits, dim=-1)

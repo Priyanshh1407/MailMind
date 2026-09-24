@@ -59,11 +59,13 @@ def finish_cycle(manager, context, token, job_id, error_code=None):
             conn.execute('UPDATE worker_health SET last_error_at=?,last_error_code=? WHERE account_id=?',(stamp,error_code,context.account_id))
             conn.execute('UPDATE runtime_state SET last_error_at=?,last_error_code=?',(stamp,error_code))
         else:
-            conn.execute('UPDATE worker_health SET last_success_at=? WHERE account_id=?',(stamp,context.account_id))
-            conn.execute('UPDATE runtime_state SET last_success_at=?',(stamp,))
+            conn.execute('UPDATE worker_health SET last_success_at=?,last_error_at=NULL,last_error_code=NULL WHERE account_id=?',(stamp,context.account_id))
+            conn.execute('UPDATE runtime_state SET last_success_at=?,last_error_at=NULL,last_error_code=NULL',(stamp,))
 
 
-def ingest_email(email, manager, context, token):
+def ingest_email(email, manager, context, token, *, source='backlog'):
+    if source not in ('live','backlog'):
+        raise ValueError('Invalid ingestion source')
     with manager.guard(context) as conn:
         fence(manager,context,token,conn)
         conn.execute("""INSERT INTO email_logs(account_id,email_id,sender,subject,body,created_at,body_truncated,body_kind,parse_warnings)
@@ -71,9 +73,9 @@ def ingest_email(email, manager, context, token):
             (context.account_id,email['id'],email['sender'],email['subject'],email['body'],utc_timestamp(),
              int(email.get('body_truncated',False)),email.get('body_kind'),json.dumps(email.get('parse_warnings',[]))))
         stamp=utc_timestamp()
-        conn.execute("""INSERT INTO processing_tasks(account_id,email_id,created_at,updated_at,read_required)
-            VALUES (?,?,?,?,?) ON CONFLICT(account_id,email_id) DO NOTHING""",
-            (context.account_id,email['id'],stamp,stamp,int(manager.settings.auto_mark_read)))
+        conn.execute("""INSERT INTO processing_tasks(account_id,email_id,created_at,updated_at,read_required,source)
+            VALUES (?,?,?,?,?,?) ON CONFLICT(account_id,email_id) DO NOTHING""",
+            (context.account_id,email['id'],stamp,stamp,int(manager.settings.auto_mark_read),source))
         conn.execute('DELETE FROM ingestion_failures WHERE account_id=? AND email_id=?',(context.account_id,email['id']))
 
 
@@ -103,6 +105,18 @@ def due_tasks(manager, context, token, limit):
     with manager.guard(context) as conn:
         fence(manager,context,token,conn)
         return [dict(row) for row in conn.execute("SELECT t.*,e.sender,e.subject,e.body FROM processing_tasks t JOIN email_logs e USING(account_id,email_id) WHERE t.account_id=? AND t.status IN ('queued','retry') AND t.next_retry_at<=? ORDER BY t.created_at,t.email_id LIMIT ?",(context.account_id,time.time(),limit))]
+
+
+def newest_due_tasks(manager, context, token, limit):
+    with manager.guard(context) as conn:
+        fence(manager,context,token,conn)
+        query = '''SELECT t.*,e.sender,e.subject,e.body
+            FROM processing_tasks t JOIN email_logs e USING(account_id,email_id)
+            WHERE t.account_id=? AND t.status IN ('queued','retry') AND t.next_retry_at<=?
+            ORDER BY CASE t.source WHEN 'live' THEN 0 ELSE 1 END,
+                     CASE t.status WHEN 'queued' THEN 0 ELSE 1 END,
+                     t.created_at DESC,t.email_id LIMIT ?'''
+        return [dict(row) for row in conn.execute(query,(context.account_id,time.time(),limit))]
 
 
 def attempt(conn, context, identity, stage, outcome, code=None):

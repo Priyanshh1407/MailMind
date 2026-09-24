@@ -1,5 +1,5 @@
 """Safe configuration names/paths; no environment files are read on import."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 import os
 from .prediction import Category
@@ -13,16 +13,18 @@ CATEGORIES = tuple(category.value for category in Category)
 class Settings:
     data_dir: Path = ROOT / "data"
     model_path: Path = ROOT / "models" / "MailMind-Final"
+    shadow_model_path: Path = ROOT / "models" / "inbox-approved-v2"
     retrieval_policy_path: Path | None = None
     local_only: bool = False
     asset_manifest_path: Path | None = None
     busy_timeout_ms: int = 5000
-    access_key: str | None = field(default=None, repr=False)
     frontend_origins: tuple = ("http://localhost:5173", "http://127.0.0.1:5173")
-    poll_interval_seconds: int = 60
+    poll_interval_seconds: int = 5
     batch_size: int = 20
     gmail_page_size: int = 10
     gmail_max_pages: int = 3
+    max_pending_tasks: int = 100
+    resume_pending_tasks: int = 50
     auto_mark_read: bool = False
     provider_timeout_seconds: int = 5
     classification_budget_seconds: int = 20
@@ -34,6 +36,8 @@ class Settings:
     def __post_init__(self):
         for name, low, high in (('poll_interval_seconds',5,86400), ('batch_size',1,200),
                                ('gmail_page_size',1,100), ('gmail_max_pages',1,20),
+                               ('max_pending_tasks',1,1000),
+                               ('resume_pending_tasks',0,999),
                                ('provider_timeout_seconds',1,30), ('classification_budget_seconds',3,60),
                                ('worker_lease_seconds',65,300), ('max_processing_attempts',1,10)):
             value = getattr(self, name)
@@ -41,6 +45,8 @@ class Settings:
                 raise ValueError(f'Invalid {name}: outside the supported range')
 
         if type(self.local_only) is not bool: raise ValueError('local_only must be a boolean')
+        if self.resume_pending_tasks >= self.max_pending_tasks:
+            raise ValueError('resume_pending_tasks must be lower than max_pending_tasks')
         if type(self.auto_mark_read) is not bool:
             raise ValueError('auto_mark_read must be a boolean')
         import re
@@ -72,12 +78,14 @@ class Settings:
             asset_manifest_path=Path(os.environ['MAILMIND_ASSET_MANIFEST']).resolve() if os.environ.get('MAILMIND_ASSET_MANIFEST') else None,
             data_dir=Path(os.environ.get("MAILMIND_DATA_DIR", ROOT / "data")).resolve(),
             model_path=Path(os.environ.get("MAILMIND_MODEL_PATH", ROOT / "models" / "MailMind-Final")).resolve(),
-            access_key=os.environ.get("MAILMIND_ACCESS_KEY") or None,
+            shadow_model_path=Path(os.environ.get("MAILMIND_SHADOW_MODEL_PATH", ROOT / "models" / "inbox-approved-v2")).resolve(),
             retrieval_policy_path=Path(os.environ["MAILMIND_RETRIEVAL_POLICY_PATH"]).resolve() if os.environ.get("MAILMIND_RETRIEVAL_POLICY_PATH") else None,
-            poll_interval_seconds=int(os.environ.get('MAILMIND_POLL_INTERVAL_SECONDS',60)),
+            poll_interval_seconds=int(os.environ.get('MAILMIND_POLL_INTERVAL_SECONDS',5)),
             batch_size=int(os.environ.get('MAILMIND_BATCH_SIZE',20)),
             gmail_page_size=int(os.environ.get('MAILMIND_GMAIL_PAGE_SIZE',10)),
             gmail_max_pages=int(os.environ.get('MAILMIND_GMAIL_MAX_PAGES',3)),
+            max_pending_tasks=int(os.environ.get('MAILMIND_MAX_PENDING_TASKS',100)),
+            resume_pending_tasks=int(os.environ.get('MAILMIND_RESUME_PENDING_TASKS',50)),
             auto_mark_read=os.environ.get('MAILMIND_AUTO_MARK_READ','false').lower() == 'true',
             provider_timeout_seconds=int(os.environ.get('MAILMIND_PROVIDER_TIMEOUT_SECONDS',5)),
             classification_budget_seconds=int(os.environ.get('MAILMIND_CLASSIFICATION_BUDGET_SECONDS',20)),

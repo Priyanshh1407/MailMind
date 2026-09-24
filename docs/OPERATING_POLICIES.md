@@ -1,97 +1,151 @@
 # MailMind operating policies
 
-Current product policies for the supported single-user local deployment. They provide defaults that must be changed only through explicit product decisions and measured evaluation.
+These policies define the supported behavior for the current single-user local deployment. Changes require an explicit product decision, corresponding tests, and updated public documentation.
 
-## Supported product scope
+## Supported scope
 
-The initial release target is one locally hosted personal application on Windows
-with one active Google account at a time. Switching between accounts is supported
-only with isolated persisted records and retrieval. Linux/macOS and remotely
-hosted multi-user use are not presently validated. Keep SQLite and Chroma for
-this scope; infrastructure changes must solve an observed requirement.
+MailMind supports:
 
-Account ownership applies to mail, feedback, embeddings, jobs, and notification
-state. Use account plus message identity, not Gmail message ID alone. Local HTTP
-callers must still be authenticated for private operations. Each processing job
-must check whether its account/session remains active before external effects.
+- one trusted user on one local workstation;
+- one selected Google account at a time;
+- sequential account switching with strict persisted-data isolation;
+- SQLite as authoritative storage;
+- embedded local Chroma collections as derived storage; and
+- the owned native supervisor for normal operation.
 
-## Categories versus processing outcomes
+Remote hosting, public network exposure, and concurrent multi-user operation are outside the supported scope.
 
-| Category | Meaning |
-|---|---|
-| IMPORTANT | Personal/direct or time-sensitive mail requiring attention |
-| UPDATES | Legitimate useful information that does not require urgent action |
-| SPAM | Unwanted/promotional/junk mail |
+## Connection boundary
 
-Use these labels consistently in APIs, feedback, storage, datasets, and checkpoint
-metadata. IGNORE is a legacy label: migrate it only with documented semantics;
-do not silently equate every nonurgent message with spam. Ham is not synonymous
-with IMPORTANT.
+MailMind must not access, display, classify, embed, or otherwise process account mail until Google OAuth connection succeeds.
 
-ABSTAIN, UNAVAILABLE, and ERROR are processing outcomes rather than categories.
-They must not become successful SPAM decisions. The structured API keeps these processing outcomes separate from categories. Vote share is not calibrated
-confidence. Original predictions must remain available separately from effective
-human-corrected categories and revised attempts.
+The semantic-indexer process may start before OAuth only so the supervisor can own and monitor it. Before connection, it must not read saved mail, initialize the embedding runtime, or open the semantic search collection.
 
-## Gmail read-state and delivery policy
+Account logout, disconnect, switching, deletion, restart, and authentication transitions must invalidate stale contexts through generation fencing.
 
-Default behavior preserves unread Gmail state. Automatic marking-read is an
-explicit opt-in processing policy, not an incidental consequence of inference.
+## Categories and system outcomes
+
+| Value | Meaning |
+| --- | --- |
+| IMPORTANT | Personal, direct, urgent, security-sensitive, or action-requiring mail |
+| UPDATES | Legitimate useful information that does not require urgent attention |
+| SPAM | Unwanted, promotional, deceptive, or junk mail |
+| NEEDS_REVIEW | A system presentation state for uncertainty, incomplete processing, or failure |
+
+Only Important, Updates, and Spam are model categories. Needs Review must never be added as a trained fourth class.
+
+Abstain, unavailable, timeout, malformed output, and error are processing outcomes. They must not silently become Spam.
+
+Original predictions, later provider attempts, local-shadow predictions, and effective human-corrected categories must remain distinguishable.
+
+## Inbox intake
+
+### Active-task cap
+
+The default maximum is 100 active queued, running, or retry tasks. Intake must not exceed the configured cap.
+
+### Initial historical batch
+
+The first connected intake admits at most the first 100 older messages. Historical pagination pauses after the admitted batch.
+
+### Live priority
+
+New messages discovered from the Gmail history cursor receive priority over older backlog and may use newly freed queue capacity.
+
+### User controls
+
+- **Sync new messages** queues a durable, rate-limited live check.
+- **Fetch next 100** authorizes another older batch only when the current historical state allows it.
+
+Sync must not authorize old backlog. Fetch Next 100 must not disable or delay live monitoring.
+
+## Classification
+
+Normal-mode cloud classification is authoritative. Configured Gemini models and Groq fallback use independent bounded-call capacity and typed failure handling.
+
+The local three-class model is a shadow evaluator in normal mode. It must not be advertised as production quality without adequate independent evidence.
+
+Provider output must match the strict category contract. A failed or malformed provider result must enter a reviewable processing state rather than disappear.
+
+## Feedback and retrieval
+
+Human feedback is authoritative after it is committed to SQLite.
+
+Derived feedback vectors may be updated asynchronously. A slow or unavailable vector store must not delay the feedback response or erase the saved correction.
+
+Retrieval may support classification only when examples are current, account-owned, revision-valid, sufficiently near, independently supported, and dominant under the configured conservative vote. Otherwise it abstains.
+
+Undo preserves prediction and feedback history.
+
+## Semantic search
+
+Lexical SQLite search is always the baseline. Semantic search may augment queries of at least three characters.
+
+Exact lexical matches rank before semantic-only matches. Semantic failure falls back to lexical search.
+
+The semantic index:
+
+- is account scoped;
+- is derived local state;
+- uses <code>data/search_chroma_db</code>;
+- is separate from feedback retrieval;
+- caps derived documents at 6,000 characters;
+- does not change the source email; and
+- runs in an isolated process only after Google connection.
+
+## Gmail read state and notifications
+
+Automatic mark-as-read defaults to off.
+
 When enabled:
 
-- IMPORTANT requires a valid classification and durably recorded successful
-  required notification before an automatic mark-read action is attempted.
-- UPDATES/SPAM require a valid classification and durably persisted processing
-  result before the optional mark-read action.
-- ABSTAIN/UNAVAILABLE/ERROR never automatically mark a message read.
-- Failed notifications remain retryable. Disabled/missing required notification
-  configuration is not successful delivery.
-- A failed mark-read action is retried independently of a completed notification.
-- Manual user-directed mark-read is distinct from automatic processing.
+- an Important message requires a valid classification and durably recorded required notification success before automatic mark-read;
+- Updates and Spam require a valid saved decision;
+- Needs Review and failed/unavailable outcomes are not automatically marked read;
+- mark-read retries independently from classification and notification; and
+- ambiguous external delivery does not trigger an unsafe automatic resend.
 
-Gmail unread status must not be the sole durable queue. Attempts and completed
-actions must be recorded. An ambiguous provider timeout needs an explicit delivery
-state; do not promise exactly-once external delivery without provider support.
-The durable worker implements these rules. Automatic marking-read defaults to OFF. Set
-`MAILMIND_AUTO_MARK_READ=true` and restart both services to opt in. An uncertain alert requires a human decision; it is never silently retried.
+Telegram is optional. Missing configuration is not successful delivery.
 
-## Account lifecycle and data retention
+## Account lifecycle
 
-The application implements the local session, account separation, cancellation, disconnect, and active-record deletion rules below.
+| Action | Processing effect | Data effect |
+| --- | --- | --- |
+| Stop processing | Ends the local session and pauses active work | Retains mail, feedback, credentials, and derived data |
+| Disconnect Google | Fences work and prevents Gmail access | Removes selected account’s local OAuth credential; retains saved data |
+| Switch Google account | Cancels old context and completes OAuth for the new selection | Loads only the selected account’s isolated records |
+| Delete this account data | Pauses/fences work and runs managed purge | Removes selected account mail, histories, jobs, vectors, and credentials |
+| Delete old unassigned data | No ordinary account transition | Removes only explicitly selected legacy/unassigned state |
 
-| Action | Target behavior | Data treatment |
-|---|---|---|
-| Logout | End local UI session, cancel/pause its processing, prevent unauthenticated access | Retain account-scoped mail/feedback unless purge is explicitly requested |
-| Disconnect Google | Disable Gmail access for the account, invalidate active account work, remove local stored OAuth credential | Retain isolated local records; provider revocation must be a documented separate capability if implemented |
-| Switch account | Cancel old account work, connect/authenticate the selected account, load only its records | No cross-account retrieval, examples, jobs, or notification state |
-| Delete local account data | Explicitly remove that account's stored mail, feedback, vector documents, and associated queued work | Apply across both stores; preserve unrelated accounts; honor documented backup retention |
+Deleting local credentials does not revoke Google permission. Account purge does not erase backups, exports, copied files, provider requests, or delivered messages.
 
-Logout and disconnect must never launch a new interactive OAuth flow from the
-scheduler. Work that has already contacted an external provider cannot be undone,
-but no subsequent side effects may proceed once cancellation is observed. Treat
-session invalidation and provider credential revocation as different operations.
+## Service ownership
 
-Data migrations preserve existing private records until the replacement is
-verified. Do not silently delete data to repair schema/account issues. Purge is
-an explicit operation, not the default behavior of a corrected logout.
+The native supervisor owns four processes: indexer, API, worker, and frontend.
 
-## Development and interview safety
+The indexer, worker, and frontend can be restarted within the bounded restart budget. API exit shuts down the owned set. Stop and fallback termination target only exact owned children.
 
-Use synthetic fixtures and temporary databases for regression tests. Do not read
-live environment/token/credential files to establish baseline behavior. No test
-should fetch real mail, mark it read, send a notification, or expose a service.
-Model/provider integration checks require a separate deliberate validation step.
+Do not use global process-name or port-based termination.
 
-Measure dashboard statistics and label modes accurately. Offline mode must state
-which assets need provisioning and which external features are disabled. Neither
-agreement nor a softmax/vote value proves accuracy. Do not claim deployment,
-performance, privacy guarantees, or scale beyond validated evidence.
+## Dashboard truthfulness
 
-## Dashboard behavior
+The dashboard must distinguish:
 
-The dashboard now uses account-wide saved counts, measured timing, loaded-model
-readiness and observed worker heartbeat. Configured cloud providers are labelled
-unverified. Pages and search use effective categories while original predictions
-remain separate. Feedback can be revised or withdrawn without deleting history;
-withdrawn vectors are immediately ineligible and their cleanup is retryable.
-Refreshes are completion-based, cancellable and account-generation checked.
+- configured versus observed provider health;
+- live sync versus historical backlog;
+- classification progress versus semantic indexing;
+- current failures versus historical failures;
+- model agreement versus measured accuracy; and
+- saved source data versus derived index state.
+
+No invented latency, provider-online count, confidence, or success state may be displayed.
+
+## Development and release safety
+
+- Use synthetic fixtures and temporary storage for automated tests.
+- Do not access live Gmail, provider keys, OAuth tokens, or private models during ordinary test runs.
+- Do not publish real-account screenshots or logs.
+- Resolve unexpected failures before describing a release as fully passing.
+- Keep dependency declarations, lock files, documentation, and runtime behavior consistent.
+- Do not claim production accuracy, hosted scale, or universal privacy beyond evidence.
+

@@ -1,4 +1,4 @@
-"""Bounded loopback readiness check; no pairing or provider calls."""
+"""Bounded loopback readiness check; no session creation or provider calls."""
 import argparse
 import json
 import time

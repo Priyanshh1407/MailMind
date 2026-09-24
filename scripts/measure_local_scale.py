@@ -44,7 +44,7 @@ def scenario(messages=100, delay_ms=0, reader=True):
     cycles = []
     provider_times = []
     with tempfile.TemporaryDirectory(prefix='mailmind-phase10-') as directory:
-        settings = Settings(data_dir=Path(directory), access_key='synthetic-phase10-pairing-key', auto_mark_read=True)
+        settings = Settings(data_dir=Path(directory), auto_mark_read=True)
         collection = FakeCollection()
         class Model:
             model_loaded = False
@@ -86,8 +86,8 @@ def scenario(messages=100, delay_ms=0, reader=True):
             stack.enter_context(patch.object(socket, 'getaddrinfo', side_effect=AssertionError('No external DNS')))
             client = stack.enter_context(TestClient(app, base_url='http://localhost'))
             client.headers['Origin'] = 'http://localhost:5173'
-            paired = client.post('/session', json={'code': settings.access_key})
-            client.headers['X-CSRF-Token'] = paired.json()['csrf_token']
+            session = client.post('/session')
+            client.headers['X-CSRF-Token'] = session.json()['csrf_token']
             authenticated = client.post('/authenticate')
             assert authenticated.status_code == 202
             app.state.auth_futures[authenticated.json()['job_id']].result(timeout=5)
@@ -146,7 +146,7 @@ def scenario(messages=100, delay_ms=0, reader=True):
                       'cycles': cycles, 'drain_seconds_without_poll_wait': seconds,
                       'synthetic_messages_per_second': messages / seconds,
                       'scheduled_drain_estimate_seconds': seconds + (len(cycles) - 1) * settings.poll_interval_seconds,
-                      'schedule_estimate_note': 'Existing backlog, first cycle immediate; adds 60s between cycles. Excludes ingestion, cold assets, retries and live providers.',
+                      'schedule_estimate_note': f'Existing backlog, first cycle immediate; adds {settings.poll_interval_seconds}s between cycles. Excludes ingestion, cold assets, retries and live providers.',
                       'classification_adapter_seconds': sum(provider_times),
                       'cpu_seconds': cpu_after.user + cpu_after.system - cpu_before.user - cpu_before.system,
                       'rss_baseline_bytes': baseline, 'rss_peak_sampled_bytes': peak[0],

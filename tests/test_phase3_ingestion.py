@@ -15,7 +15,7 @@ from src.account_state import AccountManager, WorkCancelled
 from src.config import Settings
 from src.database import connection, initialize_database, _migration_1, _migration_2, _migration_3, utc_timestamp
 from src.db_utils import get_email, get_ingestion_state, log_email_to_db, save_ingestion_state
-from src.email_client import get_unread_emails, FetchBatch
+from src.email_client import get_unread_emails, get_new_emails, FetchBatch
 from src.email_text import format_email_text, normalize_text, html_to_text, prepare_training_text, MAX_BODY_CHARS
 from src.mime_parser import parse_body, parse_gmail_message, parse_raw_email, MessageParseError, MAX_PARTS, MAX_DECODED_BYTES
 from tests.support import FakeRequest, FakeGmail, fixtures, load_function
@@ -272,6 +272,52 @@ class ParserTests(unittest.TestCase):
 
 
 class FetchTests(unittest.TestCase):
+    def test_history_sync_returns_only_new_unique_inbox_messages(self):
+        class HistoryMailbox(Mailbox):
+            def history(self): return self
+            def list(self, **kwargs):
+                if 'startHistoryId' in kwargs:
+                    return FakeRequest({'historyId':'12','history':[
+                        {'messagesAdded':[{'message':{'id':'synthetic-1'}},
+                                           {'message':{'id':'synthetic-1'}},
+                                           {'message':{'id':'synthetic-2'}}]}]})
+                return super().list(**kwargs)
+        service=HistoryMailbox({f'synthetic-{i}':{'payload':leaf(f'Live {i}')} for i in range(3)})
+        result=get_new_emails(service,'10',exclude_ids={'synthetic-2'})
+        self.assertEqual([row['id'] for row in result.emails],['synthetic-1'])
+        self.assertEqual(result.history_id,'12')
+
+    def test_expired_history_cursor_is_reported_without_guessing_a_cursor(self):
+        class ExpiredMailbox(Mailbox):
+            def history(self): return self
+            def list(self, **kwargs):
+                error=RuntimeError('synthetic expired history')
+                error.resp=Mock(status=404)
+                raise error
+        result=get_new_emails(ExpiredMailbox({}),'10')
+        self.assertTrue(result.history_expired)
+        self.assertTrue(result.listing_error)
+        self.assertEqual(result.emails,[])
+
+    def test_history_cursor_does_not_advance_past_queue_capacity(self):
+        class OverflowMailbox(Mailbox):
+            def history(self): return self
+            def list(self, **kwargs):
+                if 'startHistoryId' in kwargs:
+                    return FakeRequest({'historyId':'13','history':[
+                        {'messagesAdded':[{'message':{'id':'synthetic-0'}},
+                                           {'message':{'id':'synthetic-1'}},
+                                           {'message':{'id':'synthetic-2'}}]}]})
+                return super().list(**kwargs)
+        service=OverflowMailbox({f'synthetic-{i}':{'payload':leaf(f'Live {i}')} for i in range(3)})
+        first=get_new_emails(service,'10',max_results=1)
+        self.assertEqual([row['id'] for row in first.emails],['synthetic-0'])
+        self.assertEqual(first.history_id,'10')
+        self.assertTrue(first.has_more)
+        second=get_new_emails(service,'10',max_results=1,exclude_ids={'synthetic-0'})
+        self.assertEqual([row['id'] for row in second.emails],['synthetic-1'])
+        self.assertEqual(second.history_id,'10')
+
     def test_empty_inbox_and_failed_listing_are_different(self):
         self.assertEqual(get_unread_emails(mailbox(0)).status,'empty')
         service=mailbox(0)
@@ -393,6 +439,7 @@ class FetchTests(unittest.TestCase):
         self.assertIn('inline_fetch_limit',result.warnings)
 
     def test_settings_are_configurable_and_reject_bad_limits(self):
+        self.assertEqual(Settings().poll_interval_seconds,5)
         with patch.dict('os.environ',{'MAILMIND_POLL_INTERVAL_SECONDS':'90','MAILMIND_BATCH_SIZE':'7','MAILMIND_GMAIL_PAGE_SIZE':'3','MAILMIND_GMAIL_MAX_PAGES':'2'}):
             settings=Settings.from_environment()
         self.assertEqual((settings.poll_interval_seconds,settings.batch_size,settings.gmail_page_size,settings.gmail_max_pages),(90,7,3,2))
@@ -404,10 +451,10 @@ class WorkerTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='mailmind-phase3-')
         self.addCleanup(self.temp.cleanup)
-        self.settings=Settings(data_dir=Path(self.temp.name),access_key='synthetic-phase3-pairing-code',batch_size=2,gmail_page_size=1,gmail_max_pages=2,auto_mark_read=True)
+        self.settings=Settings(data_dir=Path(self.temp.name),batch_size=2,gmail_page_size=1,gmail_max_pages=2,auto_mark_read=True)
         initialize_database(self.settings.db_path)
         self.manager=AccountManager(self.settings)
-        token,_=self.manager.pair()
+        token,_=self.manager.open_session()
         context,_=self.manager.session(token)
         self.manager.finish_auth(self.manager.begin_auth(context),(A,'{}'))
         self.model=Mock(model_loaded=True)
@@ -443,6 +490,95 @@ class WorkerTests(unittest.TestCase):
             if not service.unread: break
         self.assertEqual(service.unread,[])
         self.assertEqual(len(service.gets),7)
+
+    def test_live_cycle_peeks_newest_page_and_time_slices_processing(self):
+        from src import main
+        service=mailbox(4)
+        with self.manager.transaction() as conn:
+            save_ingestion_state(A,FetchBatch(next_page_token='2',has_more=True),conn)
+            conn.execute("UPDATE ingestion_state SET backlog_authorized=1,backlog_remaining=2 WHERE account_id=?",(A,))
+        with patch.object(main,'refresh_gmail',return_value=service), \
+             patch.object(main,'classify_email',return_value=Prediction(category='UPDATES',outcome='CLASSIFIED',source='gemini')), \
+             patch.object(main,'send_telegram_alert',return_value=True):
+            result=main._run_agent(settings=self.settings,manager=self.manager,model=self.model,
+                collection=self.collection,newest_first=True,task_limit=1)
+        self.assertNotIn('pageToken',service.lists[0])
+        self.assertEqual(service.lists[1]['pageToken'],'2')
+        self.assertEqual((result['fetched_count'],result['attempted_count']),(3,1))
+        self.assertIsNotNone(get_email('synthetic-0',account_id=A,db_path=self.settings.db_path))
+        self.assertIsNotNone(get_email('synthetic-2',account_id=A,db_path=self.settings.db_path))
+
+    def test_initial_history_cursor_is_saved_without_crashing_the_cycle(self):
+        from src import main
+        with patch.object(main,'get_gmail_history_id',return_value='synthetic-history'):
+            result,_=self.run_cycle(mailbox(1))
+        with self.manager.transaction() as conn:
+            state=get_ingestion_state(A,conn)
+            task=conn.execute('SELECT source FROM processing_tasks WHERE account_id=? AND email_id=?',
+                              (A,'synthetic-0')).fetchone()
+        self.assertEqual(state['history_id'],'synthetic-history')
+        self.assertEqual(task['source'],'live')
+        self.assertIsNotNone(get_email('synthetic-0',account_id=A,db_path=self.settings.db_path))
+        self.assertEqual(result['processing_status'],'complete')
+
+    def test_existing_history_cursor_gets_one_time_newest_mail_catch_up(self):
+        from src import main
+        with self.manager.transaction() as conn:
+            save_ingestion_state(A,FetchBatch(has_more=True),conn)
+            conn.execute('UPDATE ingestion_state SET history_id=? WHERE account_id=?',
+                         ('already-seeded',A))
+        with patch.object(main,'get_gmail_history_id') as cursor:
+            self.run_cycle(mailbox(1))
+        cursor.assert_not_called()
+        with self.manager.transaction() as conn:
+            state=get_ingestion_state(A,conn)
+            task=conn.execute('SELECT source FROM processing_tasks WHERE account_id=? AND email_id=?',
+                              (A,'synthetic-0')).fetchone()
+        self.assertEqual(state['history_id'],'already-seeded')
+        self.assertEqual(state['history_bootstrap_complete'],1)
+        self.assertEqual(task['source'],'live')
+
+    def test_first_batch_is_bounded_and_pauses_after_one_hundred_admissions(self):
+        from src import main
+        settings=replace(self.settings,batch_size=100,gmail_page_size=100,gmail_max_pages=1,
+                         max_pending_tasks=100,resume_pending_tasks=50)
+        self.manager.settings=settings
+        service=mailbox(120)
+        with patch.object(main,'refresh_gmail',return_value=service), \
+             patch.object(main,'classify_email',return_value=Prediction(category='UPDATES',outcome='CLASSIFIED',source='gemini')), \
+             patch.object(main,'send_telegram_alert',return_value=True):
+            main._run_agent(settings=settings,manager=self.manager,model=self.model,
+                            collection=self.collection,task_limit=1)
+        with connection(settings.db_path) as conn:
+            counts=conn.execute("""SELECT COUNT(*) AS total,
+                SUM(status IN ('queued','retry','running')) AS active,
+                SUM(source='backlog') AS backlog FROM processing_tasks""").fetchone()
+            state=get_ingestion_state(A,conn)
+        self.assertEqual((counts['total'],counts['backlog']),(100,100))
+        self.assertLessEqual(counts['active'],100)
+        self.assertEqual((state['backlog_authorized'],state['backlog_remaining'],state['initial_batch_complete']),(0,0,1))
+
+    def test_new_mail_uses_freed_capacity_and_is_processed_before_backlog(self):
+        from src import main
+        settings=replace(self.settings,batch_size=3,gmail_page_size=3,gmail_max_pages=1,
+                         max_pending_tasks=3,resume_pending_tasks=1)
+        self.manager.settings=settings
+        service=mailbox(5)
+        def cycle():
+            with patch.object(main,'refresh_gmail',return_value=service), \
+                 patch.object(main,'classify_email',return_value=Prediction(category='UPDATES',outcome='CLASSIFIED',source='gemini')), \
+                 patch.object(main,'send_telegram_alert',return_value=True):
+                return main._run_agent(settings=settings,manager=self.manager,model=self.model,
+                                       collection=self.collection,task_limit=1)
+        cycle()
+        service.items['live-new']={'payload':leaf('Newest live message')}
+        service.unread.insert(0,'live-new')
+        cycle()
+        with connection(settings.db_path) as conn:
+            live=conn.execute("SELECT status,source FROM processing_tasks WHERE email_id='live-new'").fetchone()
+            active=conn.execute("SELECT COUNT(*) FROM processing_tasks WHERE status IN ('queued','retry','running')").fetchone()[0]
+        self.assertEqual((live['status'],live['source']),('complete','live'))
+        self.assertLessEqual(active,3)
 
     def test_bad_message_does_not_block_following_messages(self):
         service=mailbox(3)
@@ -480,7 +616,7 @@ class WorkerTests(unittest.TestCase):
         self.run_cycle(mailbox(4))
         with self.manager.transaction() as conn:
             self.assertIsNotNone(get_ingestion_state(A,conn)['page_token'])
-        token,_=self.manager.pair()
+        token,_=self.manager.open_session()
         context,_=self.manager.session(token)
         context=self.manager.disconnect(context)
         with self.manager.transaction() as conn:
@@ -494,8 +630,8 @@ class WorkerTests(unittest.TestCase):
         with self.manager.transaction() as conn:
             save_ingestion_state(A,FetchBatch(listing_error=True,next_page_token='synthetic-secret-cursor'),conn)
         with TestClient(app,base_url='http://localhost') as client:
-            paired=client.post('/session',json={'code':self.settings.access_key},headers={'Origin':'http://localhost:5173'})
-            client.headers.update({'Origin':'http://localhost:5173','X-CSRF-Token':paired.json()['csrf_token']})
+            session=client.post('/session',headers={'Origin':'http://localhost:5173'})
+            client.headers.update({'Origin':'http://localhost:5173','X-CSRF-Token':session.json()['csrf_token']})
             response=client.post('/authenticate')
             app.state.auth_futures[response.json()['job_id']].result(timeout=5)
             self.assertIsNone(client.get('/status').json()['ingestion'])
@@ -517,6 +653,6 @@ class WorkerTests(unittest.TestCase):
         initialize_database(path)
         initialize_database(path)
         with connection(path) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],7)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],10)
             row=conn.execute('SELECT body,body_truncated FROM email_logs').fetchone()
             self.assertEqual(tuple(row),('original saved body',0))

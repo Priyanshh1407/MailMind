@@ -8,6 +8,47 @@ from .prediction import Prediction, Category
 
 DB_PATH = Settings().db_path
 
+REVIEW_MESSAGES = {
+    'queued': 'Waiting for classification.',
+    'running': 'Classification is currently in progress.',
+    'retry': 'Classification will retry after a temporary failure.',
+    'dead': 'Classification stopped after repeated failures.',
+    'low_confidence': 'The model was not confident enough to choose a category.',
+    'category_tie': 'The two most likely categories were too close to choose safely.',
+    'provider_timeout': 'The classification provider took too long to respond.',
+    'invalid_provider_output': 'The provider returned a result MailMind could not safely use.',
+    'cloud_not_configured_or_unavailable': 'No configured cloud classifier was available.',
+    'missing_checkpoint': 'The local model checkpoint is unavailable.',
+    'model_loading': 'The local model is still loading.',
+    'model_process_failed': 'The local model process could not start.',
+    'local_inference_failed': 'The local model could not complete this prediction.',
+    'legacy_binary_has_no_updates_coverage': 'The installed local model cannot classify all three categories.',
+    'message_parse_failed': 'MailMind could not safely read enough of this message.',
+    'classification_unavailable': 'No reliable classification was available.',
+}
+
+
+def review_reason(row, latest, task):
+    if row['human_label'] or (latest and latest['category']):
+        return None
+    if task and task['status'] in ('queued','running'):
+        code=task['status']
+    elif task and task['error_code']:
+        code=task['error_code']
+    elif latest:
+        metadata=json.loads(latest['metadata'])
+        code=metadata.get('reason') or latest['outcome'].lower()
+    elif row['parse_warnings'] != '[]':
+        code='message_parse_failed'
+    else:
+        code='classification_unavailable'
+    message=REVIEW_MESSAGES.get(code)
+    if message is None:
+        state=task['status'] if task and task['status'] in ('retry','dead') else 'classification_unavailable'
+        message=REVIEW_MESSAGES[state]
+        code=state
+    return {'code':code,'message':message}
+
 
 def log_email_to_db(email_id, sender, subject, body, prediction, local_prediction, human_label=None, *, account_id=LEGACY_ACCOUNT, message_type="gmail", db_path=None, db_conn=None, body_truncated=False, body_kind=None, parse_warnings=None):
     result = prediction if isinstance(prediction, Prediction) else Prediction(category=prediction if prediction in CATEGORIES else None, outcome='CLASSIFIED' if prediction in CATEGORIES else 'ERROR', source='agent')
@@ -35,12 +76,22 @@ def log_email_to_db(email_id, sender, subject, body, prediction, local_predictio
             VALUES (?,?,?,?,?,?,?,?,?)""", (account_id,email_id,category,local_category,outcome,result.source,result.model_version,json.dumps(metadata),timestamp))
 
 
-def get_recent_emails(limit=50, *, account_id=None, db_path=None, db_conn=None, offset=0, search="", category=None):
+def get_recent_emails(limit=50, *, account_id=None, db_path=None, db_conn=None, offset=0, search='', category=None, ranked_ids=None):
     # None is reserved for deliberate local maintenance. HTTP/worker callers
     # always supply the authorized account.
     with (nullcontext(db_conn) if db_conn is not None else connection(db_path)) as conn:
-        where, parameters = email_filter(account_id, search, category)
-        rows = conn.execute(f"SELECT e.* FROM email_logs e {where} ORDER BY e.created_at DESC,e.account_id,e.email_id LIMIT ? OFFSET ?", (*parameters,limit,offset)).fetchall()
+        if ranked_ids is None:
+            where, parameters = email_filter(account_id, search, category)
+            rows = conn.execute(f'SELECT e.* FROM email_logs e {where} ORDER BY e.created_at DESC,e.account_id,e.email_id LIMIT ? OFFSET ?', (*parameters,limit,offset)).fetchall()
+        elif not ranked_ids:
+            rows = []
+        else:
+            page_ids = list(ranked_ids)[offset:offset+limit]
+            placeholders = ','.join('?' for _ in page_ids)
+            rows_by_id = {row['email_id']:row for row in conn.execute(
+                f'SELECT e.* FROM email_logs e WHERE e.account_id=? AND e.email_id IN ({placeholders})',
+                (account_id,*page_ids)).fetchall()}
+            rows = [rows_by_id[identity] for identity in page_ids if identity in rows_by_id]
         output = []
         for row in rows:
             latest = conn.execute('SELECT * FROM prediction_attempts WHERE account_id=? AND email_id=? ORDER BY attempt_id DESC LIMIT 1', (row['account_id'],row['email_id'])).fetchone()
@@ -50,6 +101,7 @@ def get_recent_emails(limit=50, *, account_id=None, db_path=None, db_conn=None, 
             output.append({'processing':dict(task) if task else None, 'notification':dict(delivery) if delivery else None, **dict(row), 'id':row['email_id'], 'body_snippet':preview_text(row['body']),
                            'parse_warnings':json.loads(row['parse_warnings']),
                            'latest_prediction': {**json.loads(latest['metadata']), 'category':latest['category'], 'outcome':latest['outcome'], 'source':latest['source'], 'model_version':latest['model_version']} if latest else None,
+                           'review_reason':review_reason(row,latest,task),
                            'effective_category':row['human_label'] or (latest['category'] if latest else row['prediction']),
                            'feedback':dict(feedback) if feedback else None})
         return output
@@ -83,6 +135,19 @@ def get_ingestion_state(account_id, conn):
     return dict(row) if row else None
 
 
+def ensure_ingestion_state(account_id, conn, *, batch_limit):
+    if type(batch_limit) is not int or batch_limit < 1:
+        raise ValueError('Invalid initial inbox batch limit')
+    stamp=utc_timestamp()
+    conn.execute("""INSERT INTO ingestion_state(
+        account_id,page_token,status,fetched_count,failed_count,pages_count,
+        scanned_count,warning_count,truncated_count,has_more,listing_error,last_checked_at,
+        backlog_authorized,backlog_remaining,initial_batch_complete)
+        VALUES (?,NULL,'empty',0,0,0,0,0,0,1,0,?,1,?,0)
+        ON CONFLICT(account_id) DO NOTHING""",(account_id,stamp,batch_limit))
+    return get_ingestion_state(account_id,conn)
+
+
 def save_ingestion_state(account_id, batch, conn):
     summary = batch.summary()
     conn.execute("""INSERT INTO ingestion_state(account_id,page_token,status,fetched_count,failed_count,pages_count,
@@ -94,6 +159,15 @@ def save_ingestion_state(account_id, batch, conn):
         (account_id,batch.next_page_token,summary['status'],summary['fetched_count'],summary['failed_count'],
          summary['pages_count'],summary['scanned_count'],summary['warning_count'],summary['truncated_count'],
          int(batch.has_more),int(batch.listing_error),utc_timestamp()))
+
+
+def save_live_ingestion_state(account_id, batch, conn, *, history_id=None, error_code=None):
+    summary=batch.summary()
+    conn.execute("""UPDATE ingestion_state SET
+        history_id=COALESCE(?,history_id),live_status=?,live_fetched_count=?,
+        last_live_sync_at=?,last_live_error=? WHERE account_id=?""",
+        (history_id,summary['status'],summary['fetched_count'],utc_timestamp(),
+         error_code,account_id))
 
 
 EFFECTIVE_SQL = """COALESCE(e.human_label, CASE WHEN EXISTS (
@@ -124,6 +198,25 @@ def email_filter(account_id, search="", category=None):
 def count_emails(account_id, conn, *, search="", category=None):
     where, parameters = email_filter(account_id, search, category)
     return conn.execute(f'SELECT COUNT(*) FROM email_logs e {where}', parameters).fetchone()[0]
+
+
+def lexical_search_ids(account_id, conn, search, category=None):
+    where, parameters = email_filter(account_id, search, category)
+    return [row['email_id'] for row in conn.execute(
+        f'SELECT e.email_id FROM email_logs e {where} ORDER BY e.created_at DESC,e.email_id',
+        parameters).fetchall()]
+
+
+def filter_ranked_ids(account_id, conn, identities, category=None):
+    ordered = list(dict.fromkeys(identities))[:900]
+    if not ordered:
+        return []
+    placeholders = ','.join('?' for _ in ordered)
+    where, parameters = email_filter(account_id, '', category)
+    allowed = {row['email_id'] for row in conn.execute(
+        f'SELECT e.email_id FROM email_logs e {where} AND e.email_id IN ({placeholders})',
+        (*parameters,*ordered)).fetchall()}
+    return [identity for identity in ordered if identity in allowed]
 
 
 def dashboard_totals(account_id, conn):

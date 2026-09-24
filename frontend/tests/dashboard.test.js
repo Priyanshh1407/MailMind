@@ -21,8 +21,10 @@ test('non-JSON HTTP errors preserve the status for session handling', async () =
   }
 });
 test('malformed email-page shapes and invalid categories are rejected', () => {
-  const page={account_id:'a',generation:1,emails:[],total:0,limit:20,offset:0,has_more:false};
+  const page={account_id:'a',generation:1,emails:[],total:0,limit:20,offset:0,has_more:false,
+    search_mode:'text',semantic_available:false,semantic_index:{pending:0,indexed:0,failed:0}};
   validateResponse('/emails?limit=20','GET',page);
+  validateResponse('/emails','GET',{...page,emails:[{id:'x',subject:'s',sender:'s',created_at:'date',effective_category:null,review_reason:{code:'low_confidence',message:'The model was not confident enough to choose a category.'}}]});
   for (const invalid of [{...page,total:'0'},{...page,emails:{}},{...page,generation:undefined},{...page,emails:[{id:'x',subject:'s',sender:'s',created_at:'date',effective_category:'BLOCKED'}]}]) assert.throws(()=>validateResponse('/emails','GET',invalid),/Unexpected/);
 });
 test('malformed mutation job acknowledgement is rejected', () => {
@@ -92,6 +94,23 @@ test('snapshot refresh timing is measured and disconnected snapshots skip mail',
   const api={request:async path=>{calls.push(path);return path==='/session'?{connected:false,email:null,generation:2}:{account_id:null,generation:2};}};
   const data=await loadDashboard(api,{offset:0,search:''},new AbortController().signal,null,()=>++ticks*12);
   assert.equal(data.refreshMs,12);assert.equal(data.page,null);assert.equal(calls.some(path=>path.startsWith('/emails')),false);
+});
+test('a missing local session is opened automatically and then loaded', async () => {
+  const calls=[];let csrf='';
+  const api={
+    setCsrf:value=>{csrf=value;},
+    request:async(path,options={})=>{
+      calls.push([path,options.method||'GET']);
+      if(path==='/session' && options.method!=='POST' && !csrf){const error=new Error('missing');error.status=401;throw error;}
+      if(path==='/session' && options.method==='POST')return {csrf_token:'synthetic-csrf'};
+      if(path==='/session')return {connected:false,email:null,generation:2,csrf_token:csrf};
+      return {account_id:null,generation:2};
+    },
+  };
+  const data=await loadDashboard(api,{offset:0,search:''},new AbortController().signal);
+  assert.equal(data.session.connected,false);
+  assert.equal(csrf,'synthetic-csrf');
+  assert.deepEqual(calls.slice(0,3),[['/session','GET'],['/session','POST'],['/session','GET']]);
 });
 test('snapshot loader refuses to publish switched-account email data', async () => {
   const api={request:async path=>path==='/session'?{connected:true,email:'a',generation:2}:{account_id:path.startsWith('/emails')?'b':'a',generation:2}};

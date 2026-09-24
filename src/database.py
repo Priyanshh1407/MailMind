@@ -6,7 +6,7 @@ import sqlite3
 
 from .config import CATEGORIES, LEGACY_ACCOUNT, Settings
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 10
 
 
 def utc_timestamp(value=None):
@@ -208,6 +208,52 @@ def _migration_7(conn):
     conn.execute('CREATE INDEX feedback_latest ON feedback_history(account_id,email_id,revision_id DESC)')
 
 
+def _migration_8(conn):
+    # Existing installations keep their backlog paused. New accounts explicitly
+    # initialize a first 100-message batch when their ingestion row is created.
+    for column in (
+        'history_id TEXT',
+        'backlog_authorized INTEGER NOT NULL DEFAULT 0 CHECK(backlog_authorized IN (0,1))',
+        'backlog_remaining INTEGER NOT NULL DEFAULT 0 CHECK(backlog_remaining>=0)',
+        'initial_batch_complete INTEGER NOT NULL DEFAULT 1 CHECK(initial_batch_complete IN (0,1))',
+        "live_status TEXT NOT NULL DEFAULT 'never' CHECK(live_status IN ('never','empty','success','partial','error','deferred'))",
+        'live_fetched_count INTEGER NOT NULL DEFAULT 0 CHECK(live_fetched_count>=0)',
+        'last_live_sync_at TEXT',
+        'last_live_error TEXT',
+        'last_manual_sync_at REAL NOT NULL DEFAULT 0',
+    ):
+        conn.execute('ALTER TABLE ingestion_state ADD COLUMN ' + column)
+    conn.execute("ALTER TABLE processing_tasks ADD COLUMN source TEXT NOT NULL DEFAULT 'backlog' CHECK(source IN ('live','backlog'))")
+    conn.execute('CREATE INDEX processing_priority ON processing_tasks(account_id,status,source,next_retry_at,created_at)')
+
+
+def _migration_9(conn):
+    conn.execute('''CREATE TABLE email_search_index (
+        account_id TEXT NOT NULL, email_id TEXT NOT NULL,
+        indexing_state TEXT NOT NULL DEFAULT 'pending' CHECK(indexing_state IN ('pending','indexed','failed')),
+        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count>=0), updated_at TEXT NOT NULL,
+        PRIMARY KEY(account_id,email_id),
+        FOREIGN KEY(account_id,email_id) REFERENCES email_logs(account_id,email_id) ON DELETE CASCADE)''')
+    conn.execute('''INSERT INTO email_search_index(account_id,email_id,updated_at)
+        SELECT account_id,email_id,created_at FROM email_logs''')
+    conn.execute('''CREATE TRIGGER email_search_queue_after_insert
+        AFTER INSERT ON email_logs BEGIN
+            INSERT INTO email_search_index(account_id,email_id,updated_at)
+            VALUES (NEW.account_id,NEW.email_id,NEW.created_at)
+            ON CONFLICT(account_id,email_id) DO UPDATE SET
+                indexing_state='pending',attempt_count=0,updated_at=excluded.updated_at;
+        END''')
+    conn.execute('CREATE INDEX email_search_pending ON email_search_index(account_id,indexing_state,updated_at)')
+
+
+def _migration_10(conn):
+    # Version 8 originally seeded a current Gmail history cursor before doing a
+    # newest-page catch-up. Existing installations need one safe catch-up cycle
+    # so mail already waiting at that boundary is not permanently skipped.
+    conn.execute('ALTER TABLE ingestion_state ADD COLUMN history_bootstrap_complete '
+                 'INTEGER NOT NULL DEFAULT 0 CHECK(history_bootstrap_complete IN (0,1))')
+
+
 def initialize_database(db_path=None, *, manual_timezone=timezone(timedelta(hours=5, minutes=30))):
     with connection(db_path) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
@@ -219,20 +265,21 @@ def initialize_database(db_path=None, *, manual_timezone=timezone(timedelta(hour
         for introduced, names in ((1, {'accounts','email_logs'}),
                                   (2, {'prediction_attempts','feedback_history','notification_attempts','worker_jobs'}),
                                   (3, {'runtime_state','local_sessions'}), (4, {'ingestion_state'}),
-                                  (6, {'processing_tasks','processing_attempts','notification_outbox','ingestion_failures','auth_jobs','worker_health'})):
+                                  (6, {'processing_tasks','processing_attempts','notification_outbox','ingestion_failures','auth_jobs','worker_health'}),
+                                  (9, {'email_search_index'})):
             if version >= introduced:
                 expected.update(names)
         existing = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not expected.issubset(existing):
             raise ValueError('Database schema is incomplete')
-        for number, migration in ((1, _migration_1), (2, _migration_2), (3, _migration_3), (4, _migration_4), (5, _migration_5), (6, _migration_6), (7, _migration_7)):
+        for number, migration in ((1, _migration_1), (2, _migration_2), (3, _migration_3), (4, _migration_4), (5, _migration_5), (6, _migration_6), (7, _migration_7), (8, _migration_8), (9, _migration_9), (10, _migration_10)):
             if version < number:
                 if number == 1:
                     migration(conn, manual_timezone)
                 else:
                     migration(conn)
                 conn.execute(f"PRAGMA user_version={number}")
-        required = {'accounts','email_logs','prediction_attempts','feedback_history','notification_attempts','worker_jobs','runtime_state','local_sessions','ingestion_state'}
+        required = {'accounts','email_logs','prediction_attempts','feedback_history','notification_attempts','worker_jobs','runtime_state','local_sessions','ingestion_state','email_search_index'}
         actual = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not required.issubset(actual):
             raise ValueError("Database schema is incomplete")

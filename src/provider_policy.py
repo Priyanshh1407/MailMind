@@ -100,8 +100,13 @@ class BoundedCalls:
         return value
 
 
-PROVIDER_CALLS=BoundedCalls(2)
+GMAIL_CALLS=BoundedCalls(2)
+GMAIL_CREDENTIAL_CALLS=BoundedCalls(1)
+TELEGRAM_CALLS=BoundedCalls(1)
 RETRIEVAL_CALLS=BoundedCalls(1)
 LOCAL_CALLS=BoundedCalls(1)
 
 INDEX_CALLS=BoundedCalls(1)
+SEARCH_CALLS=BoundedCalls(1)
+SEARCH_EMBEDDING_CALLS=BoundedCalls(1)
+SEARCH_COLLECTION_CALLS=BoundedCalls(1)

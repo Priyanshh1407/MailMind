@@ -8,10 +8,11 @@ from fastapi.testclient import TestClient
 from api.app import create_app
 from src.config import Settings
 from src.database import connection, initialize_database, utc_timestamp
-from src.db_utils import log_email_to_db
+from src.db_utils import log_email_to_db, ensure_ingestion_state
 from src.feedback import current_vector, reconcile_feedback
 from src.prediction import Prediction
-from src import database
+from src import database, vector_db
+from src.email_search import add_email_to_search_index, reconcile_search_index, MAX_SEARCH_DOCUMENT_CHARS
 from tests.test_phase2_security import FakeCollection
 
 A, B = 'phase6@example.test', 'other-phase6@example.test'
@@ -20,15 +21,18 @@ class DashboardTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='mailmind-phase6-')
         self.addCleanup(self.temp.cleanup)
-        self.settings=Settings(data_dir=Path(self.temp.name),access_key='synthetic-phase6-pairing-code')
+        self.settings=Settings(data_dir=Path(self.temp.name))
         self.collection=FakeCollection()
+        self.search_collection=FakeCollection()
         self.model=Mock(model_loaded=False,model_version='legacy-binary')
-        self.app=create_app(settings=self.settings,model_factory=Mock(return_value=self.model),vector_factory=Mock(return_value=self.collection))
+        self.app=create_app(settings=self.settings,model_factory=Mock(return_value=self.model),
+                            vector_factory=Mock(return_value=self.collection),
+                            search_vector_factory=Mock(return_value=self.search_collection))
         self.client=TestClient(self.app,base_url='http://localhost')
         self.client.__enter__()
         self.addCleanup(self.client.__exit__,None,None,None)
         self.client.headers['Origin']='http://localhost:5173'
-        csrf=self.client.post('/session',json={'code':self.settings.access_key}).json()['csrf_token']
+        csrf=self.client.post('/session').json()['csrf_token']
         self.client.headers['X-CSRF-Token']=csrf
         self.manager=self.app.state.accounts
         self.connect(A)
@@ -79,6 +83,92 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.client.get('/emails',params={'search':"' OR 1=1 --"}).json()['total'],0)
         self.assertEqual(self.client.get('/emails').json()['total'],1)
 
+    def test_hybrid_search_keeps_exact_matches_first_and_adds_related_mail(self):
+        self.mail('exact',subject='Flight problems',body='Please review this issue')
+        self.mail('related',subject='Departure cancelled',body='The airline changed the itinerary')
+        self.mail('other-account',account=B,subject='Private itinerary')
+        add_email_to_search_index('related','Airline','Departure cancelled','The airline changed the itinerary',
+                                  account_id=A,collection=self.search_collection)
+        add_email_to_search_index('other-account','Airline','Private itinerary','Flight problems',
+                                  account_id=B,collection=self.search_collection)
+        result=self.client.get('/emails',params={'search':'flight problems'}).json()
+        self.assertEqual(result['search_mode'],'hybrid')
+        self.assertTrue(result['semantic_available'])
+        self.assertEqual([row['id'] for row in result['emails']],['exact','related'])
+
+    def test_semantic_search_keeps_close_related_mail_but_rejects_distant_matches(self):
+        self.mail('related',subject='Synthetic related message')
+        self.mail('distant',subject='Synthetic distant message')
+        self.search_collection.query=Mock(return_value={
+            'metadatas': [[
+                {'account_id':A,'email_id':'related'},
+                {'account_id':A,'email_id':'distant'},
+            ]],
+            'distances': [[0.6619,0.8378]],
+        })
+
+        result=self.client.get('/emails',params={'search':'travel problems'}).json()
+
+        self.assertEqual(result['search_mode'],'hybrid')
+        self.assertEqual([row['id'] for row in result['emails']],['related'])
+
+    def test_stale_persistent_search_client_is_closed_before_reopening(self):
+        client=Mock()
+        path=self.settings.data_dir/'search_chroma_db'
+        key=str(path.resolve())
+        with patch.dict(vector_db._clients,{key:client},clear=True):
+            self.assertTrue(vector_db.reset_persistent_client(path,settings=self.settings))
+            self.assertNotIn(key,vector_db._clients)
+        client.close.assert_called_once_with()
+
+    def test_short_search_skips_semantics_and_vector_failure_falls_back_to_text(self):
+        self.mail('exact',subject='Budget review')
+        short=self.client.get('/emails',params={'search':'bu'}).json()
+        self.assertEqual((short['search_mode'],len(self.search_collection.queries)),('text',0))
+        self.search_collection.query=Mock(side_effect=RuntimeError('synthetic search outage'))
+        fallback=self.client.get('/emails',params={'search':'budget'}).json()
+        self.assertEqual([row['id'] for row in fallback['emails']],['exact'])
+        self.assertEqual((fallback['search_mode'],fallback['semantic_available']),('text',False))
+
+    def test_search_index_is_durable_and_reconciled_locally(self):
+        self.mail('pending-index',subject='Quarterly planning')
+        with connection(self.settings.db_path) as conn:
+            self.assertEqual(conn.execute('SELECT indexing_state FROM email_search_index WHERE account_id=? AND email_id=?',(A,'pending-index')).fetchone()[0],'pending')
+        def embeddings(documents):
+            # Embedding work must never run under the cross-process write lock.
+            from src.vector_lock import vector_write_lock
+            with vector_write_lock(self.settings.data_dir, timeout=.1):
+                return [[0.1, 0.2] for _ in documents]
+        result=reconcile_search_index(self.manager,self.manager.worker_context(),lambda:self.search_collection,
+                                      embedding_provider=embeddings)
+        self.assertEqual(result,{'indexed':1,'failed':0})
+        self.assertIn('From: Sender <synthetic@example.test>',next(iter(self.search_collection.rows.values()))[0])
+        with connection(self.settings.db_path) as conn:
+            self.assertEqual(conn.execute('SELECT indexing_state FROM email_search_index WHERE account_id=? AND email_id=?',(A,'pending-index')).fetchone()[0],'indexed')
+
+    def test_semantic_document_is_bounded_without_changing_saved_mail(self):
+        body='x'*32000
+        self.mail('large-index',subject='Large semantic message',body=body)
+        add_email_to_search_index('large-index','Sender','Large semantic message',body,
+                                  account_id=A,collection=self.search_collection)
+        document=next(iter(self.search_collection.rows.values()))[0]
+        self.assertLessEqual(len(document),MAX_SEARCH_DOCUMENT_CHARS)
+        with connection(self.settings.db_path) as conn:
+            self.assertEqual(len(conn.execute('SELECT body FROM email_logs WHERE account_id=? AND email_id=?',
+                                              (A,'large-index')).fetchone()[0]),32000)
+
+    def test_search_indexer_waits_for_google_connection(self):
+        self.mail('offline-index',subject='Local semantic work')
+        context=self.manager.worker_context()
+        self.manager.pause(context)
+        self.assertIsNone(self.manager.indexer_context())
+        with connection(self.settings.db_path) as conn:
+            self.assertEqual(conn.execute("SELECT indexing_state FROM email_search_index WHERE account_id=? AND email_id=?",(A,'offline-index')).fetchone()[0],'pending')
+        self.connect(A)
+        result=reconcile_search_index(self.manager,self.manager.indexer_context(),lambda:self.search_collection,
+            embedding_provider=lambda documents:[[0.1,0.2] for _ in documents],bounded=False)
+        self.assertEqual(result,{'indexed':1,'failed':0})
+
     def test_category_filter_uses_current_feedback(self):
         self.mail()
         self.feedback()
@@ -92,11 +182,52 @@ class DashboardTests(unittest.TestCase):
         row=self.client.get('/emails?category=NEEDS_REVIEW').json()['emails'][0]
         self.assertEqual(row['prediction'],'IMPORTANT')
         self.assertIsNone(row['effective_category'])
+        self.assertEqual(row['review_reason'],{
+            'code':'classification_unavailable',
+            'message':'No reliable classification was available.',
+        })
         self.assertEqual(self.client.get('/emails?category=IMPORTANT').json()['total'],0)
 
     def test_bad_query_parameters_are_rejected(self):
         for query in ['limit=0','limit=201','offset=-1','offset=1000001','category=BLOCKED','search='+('a'*201)]:
             self.assertEqual(self.client.get('/emails?'+query).status_code,422)
+
+    def test_forced_new_message_sync_is_queued_and_rate_limited(self):
+        first=self.client.post('/inbox/sync')
+        second=self.client.post('/inbox/sync')
+        self.assertEqual(first.status_code,202)
+        self.assertIn('live priority',first.json()['message'])
+        self.assertEqual(second.status_code,429)
+
+    def test_next_hundred_requires_finished_backlog_and_updates_status(self):
+        with self.manager.transaction() as conn:
+            ensure_ingestion_state(A,conn,batch_limit=100)
+            conn.execute("""UPDATE ingestion_state SET initial_batch_complete=1,
+                backlog_authorized=0,backlog_remaining=0,has_more=1 WHERE account_id=?""",(A,))
+        before=self.client.get('/status').json()
+        self.assertTrue(before['fetch_next_available'])
+        response=self.client.post('/ingestion/fetch-next')
+        self.assertEqual(response.status_code,202)
+        self.assertIn('next 100',response.json()['message'])
+        after=self.client.get('/status').json()
+        self.assertFalse(after['fetch_next_available'])
+        self.assertEqual(after['ingestion']['backlog_remaining'],100)
+        self.assertEqual(self.client.post('/ingestion/fetch-next').status_code,409)
+
+    def test_status_reports_visible_batch_and_workflow_progress(self):
+        self.mail('progress-complete')
+        self.mail('progress-queued')
+        with self.manager.transaction() as conn:
+            ensure_ingestion_state(A,conn,batch_limit=100)
+            conn.execute('UPDATE ingestion_state SET backlog_remaining=80 WHERE account_id=?',(A,))
+            stamp=utc_timestamp()
+            conn.execute("""INSERT INTO processing_tasks(account_id,email_id,status,stage,created_at,updated_at,source)
+                VALUES (?,?,?,'complete',?,?,'backlog')""",(A,'progress-complete','complete',stamp,stamp))
+            conn.execute("""INSERT INTO processing_tasks(account_id,email_id,status,stage,created_at,updated_at,source)
+                VALUES (?,?,?,'classify',?,?,'backlog')""",(A,'progress-queued','queued',stamp,stamp))
+        status=self.client.get('/status').json()
+        self.assertEqual((status['current_batch_admitted_tasks'],status['current_batch_target_tasks']),(20,100))
+        self.assertEqual((status['workflow_finished_tasks'],status['workflow_total_tasks']),(1,2))
 
     def test_totals_separate_saved_completed_feedback_and_corrections(self):
         self.mail('confirmed'); self.mail('corrected'); self.mail('no-original',category=None)
@@ -232,5 +363,5 @@ class DashboardTests(unittest.TestCase):
         with connection(path) as conn:
             row=conn.execute('SELECT revision_id,label,indexing_state,attempt_count FROM feedback_history').fetchone()
             self.assertEqual(tuple(row),(77,'SPAM','failed',2))
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],7)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],10)
             self.assertIsNone(conn.execute('PRAGMA foreign_key_check').fetchone())

@@ -1,9 +1,8 @@
-"""Local API: pair the browser, then explicitly connect one Google account."""
+"""Local API: open a loopback session, then explicitly connect one Google account."""
 from contextlib import asynccontextmanager
 import os
 import json
 import math
-import hmac
 import secrets
 import sqlite3
 import time
@@ -11,7 +10,7 @@ from threading import Lock
 from src.background_jobs import BackgroundJobs
 from src.database import utc_timestamp
 from src.work_queue import enqueue_cycle
-from src.provider_policy import LOCAL_CALLS
+from src.provider_policy import LOCAL_CALLS, SEARCH_CALLS
 from typing import Literal
 from fastapi import FastAPI, Request, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +21,10 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from src.config import Settings
 from src.database import initialize_database
 from src.account_state import AccountManager, AccessDenied, WorkCancelled, TransitionBusy
-from src.db_utils import get_recent_emails, get_email, update_human_label, get_ingestion_state, count_emails, dashboard_totals, withdraw_human_label
+from src.db_utils import (get_recent_emails, get_email, update_human_label,
+                          get_ingestion_state, ensure_ingestion_state, count_emails,
+                          dashboard_totals, withdraw_human_label, lexical_search_ids,
+                          filter_ranked_ids)
 from src.local_llm import DeferredMailMindModel, MailMindModel
 from src.llm_api import classify_email
 from src.logging_utils import log_event
@@ -30,12 +32,11 @@ from src import vector_db
 from src.prediction import Category, Prediction
 from src.retrieval_policy import load_policy
 from src.feedback import reconcile_feedback, current_vector
+from src.email_search import (MIN_SEMANTIC_QUERY, SEARCH_QUERY_TIMEOUT_SECONDS,
+                              semantic_candidates, hybrid_rank)
+from src.vector_lock import vector_write_lock
 
 COOKIE = 'mailmind_session'
-
-
-class PairRequest(BaseModel):
-    code: str = Field(min_length=1, max_length=256)
 
 
 class EmailRequest(BaseModel):
@@ -76,24 +77,20 @@ def manual_prediction(model, subject, body, account_id, settings, collection_pro
                            settings.classification_budget_seconds)
 
 def create_app(*, settings=None, model_factory=MailMindModel,
-               vector_factory=vector_db.create_vector_collection, oauth_factory=None):
-    vector_lock, pair_lock, auth_lock = Lock(), Lock(), Lock()
-    failed_pairs = []
+               vector_factory=vector_db.create_vector_collection, search_vector_factory=None,
+               oauth_factory=None):
+    vector_lock, auth_lock = Lock(), Lock()
 
     @asynccontextmanager
     async def lifespan(application):
         try:
             config = settings or Settings.from_environment(load_file=True)
-            if config.access_key and len(config.access_key) < 24:
-                raise ValueError('Use a local access key with at least 24 characters')
             await run_in_threadpool(initialize_database, config.db_path)
             application.state.settings = config
             application.state.accounts = AccountManager(config)
             await run_in_threadpool(application.state.accounts.restart)
-            application.state.access_key = config.access_key or secrets.token_urlsafe(32)
-            if not config.access_key:
-                print('\nMailMind local pairing code (paste into the browser):\n' + application.state.access_key + '\n', flush=True)
             application.state.collection = None
+            application.state.search_collection = None
             application.state.auth_executor = BackgroundJobs(max_workers=2)
             application.state.auth_futures = {}
             model_options = {'model_path': config.model_path,
@@ -101,7 +98,11 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             if model_factory is MailMindModel:
                 model_options['settings'] = config
             if model_factory is MailMindModel and not config.local_only:
-                application.state.model = DeferredMailMindModel(model_path=config.model_path, settings=config)
+                # Normal mode evaluates the trained three-class checkpoint in
+                # shadow mode. The legacy binary checkpoint cannot represent
+                # UPDATES and must never be advertised as the active model.
+                application.state.model = DeferredMailMindModel(
+                    model_path=config.shadow_model_path, settings=config)
             else:
                 application.state.model = await run_in_threadpool(model_factory, **model_options)
             yield
@@ -117,7 +118,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 await run_in_threadpool(model.close)
             application.state.model = None
             application.state.collection = None
-            application.state.access_key = None
+            application.state.search_collection = None
 
     application = FastAPI(title='MailMind Local API', lifespan=lifespan)
 
@@ -154,6 +155,15 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 application.state.collection = vector_factory(application.state.settings.data_dir / 'chroma_db',**({'settings':application.state.settings} if vector_factory is vector_db.create_vector_collection else {}))
             return application.state.collection
 
+    def search_collection():
+        with vector_lock:
+            if application.state.search_collection is None:
+                factory = search_vector_factory or (vector_db.create_search_collection
+                    if vector_factory is vector_db.create_vector_collection else vector_factory)
+                options = {'settings':application.state.settings} if factory is vector_db.create_search_collection else {}
+                application.state.search_collection = factory(application.state.settings.data_dir / 'search_chroma_db',**options)
+            return application.state.search_collection
+
     def allowed_origin(request):
         if request.headers.get('origin') not in application.state.settings.frontend_origins:
             raise HTTPException(403, 'Use the local MailMind page for this action.')
@@ -171,17 +181,10 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         return {'message': 'MailMind API is online.', 'model_loaded': bool(application.state.model.model_loaded)}
 
     @application.post('/session')
-    def pair(payload: PairRequest, request: Request):
+    def open_local_session(request: Request):
+        # Only the configured local frontend origin can create a browser session.
         allowed_origin(request)
-        with pair_lock:
-            now = time.monotonic()
-            failed_pairs[:] = [stamp for stamp in failed_pairs if now-stamp < 60]
-            if len(failed_pairs) >= 10:
-                raise HTTPException(429, 'Too many attempts. Wait one minute.')
-            if not hmac.compare_digest(payload.code.encode('utf-8'), application.state.access_key.encode('utf-8')):
-                failed_pairs.append(now)
-                raise HTTPException(401, 'The pairing code is wrong.')
-        token, csrf = application.state.accounts.pair()
+        token, csrf = application.state.accounts.open_session()
         response = JSONResponse({'csrf_token': csrf})
         response.set_cookie(COOKIE, token, httponly=True, samesite='strict', max_age=43200, path='/')
         return response
@@ -198,11 +201,58 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     def emails(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0, le=1000000),
                search: str = Query('', max_length=200), category: Literal['IMPORTANT','UPDATES','SPAM','NEEDS_REVIEW'] | None = None,
                context=Depends(session)):
+        query=search.strip()
+        search_mode='text'
+        semantic_available=False
         with application.state.accounts.guard(context) as conn:
-            total=count_emails(context.account_id,conn,search=search,category=category)
-            return {'emails':get_recent_emails(limit,account_id=context.account_id,db_conn=conn,offset=offset,search=search,category=category),
-                    'total':total,'limit':limit,'offset':offset,'has_more':offset+limit<total,
-                    'status':'success','account_id':context.account_id,'generation':context.generation}
+            lexical=lexical_search_ids(context.account_id,conn,query,category) if len(query) >= MIN_SEMANTIC_QUERY else None
+            index_counts={row['indexing_state']:row['count'] for row in conn.execute(
+                'SELECT indexing_state,COUNT(*) AS count FROM email_search_index WHERE account_id=? GROUP BY indexing_state',
+                (context.account_id,))}
+        semantic=[]
+        if lexical is not None:
+            try:
+                def run_semantic_query():
+                    try:
+                        return semantic_candidates(query,context.account_id,search_collection())
+                    except Exception as error:
+                        # The isolated indexer can update Chroma from another
+                        # process after the API cached its collection handle.
+                        # Reopen once when Rust reports a stale handle; real
+                        # outages still use the normal lexical fallback.
+                        if type(error).__name__ != 'InternalError':
+                            raise
+                        with vector_lock:
+                            application.state.search_collection = None
+                            if search_vector_factory is None:
+                                with vector_write_lock(application.state.settings.data_dir):
+                                    vector_db.reset_persistent_client(
+                                        application.state.settings.data_dir/'search_chroma_db',
+                                        settings=application.state.settings)
+                        return semantic_candidates(query,context.account_id,search_collection())
+                semantic=SEARCH_CALLS.run(run_semantic_query,SEARCH_QUERY_TIMEOUT_SECONDS)
+                semantic_available=True
+            except Exception as error:
+                log_event('semantic_search_fallback',error=error)
+        with application.state.accounts.guard(context) as conn:
+            if lexical is not None:
+                allowed_semantic=filter_ranked_ids(context.account_id,conn,
+                    [identity for identity,_distance in semantic],category)
+                allowed=set(allowed_semantic)
+                semantic=[row for row in semantic if row[0] in allowed]
+                ranked_ids=hybrid_rank(lexical,semantic)
+            else:
+                ranked_ids=None
+            total=len(ranked_ids) if ranked_ids is not None else count_emails(
+                context.account_id,conn,search=query,category=category)
+            if semantic:
+                search_mode='hybrid'
+            rows=get_recent_emails(limit,account_id=context.account_id,db_conn=conn,offset=offset,
+                                   search=query,category=category,ranked_ids=ranked_ids)
+        return {'emails':rows,'total':total,'limit':limit,'offset':offset,'has_more':offset+limit<total,
+                'status':'success','account_id':context.account_id,'generation':context.generation,
+                'search_mode':search_mode,'semantic_available':semantic_available,
+                'semantic_index':{key:index_counts.get(key,0) for key in ('pending','indexed','failed')}}
 
     @application.get('/emails/{email_id}/history')
     def email_history(email_id: str, context=Depends(session)):
@@ -294,14 +344,54 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             if ingestion:
                 # An opaque provider cursor is internal worker state.
                 ingestion.pop('page_token', None)
+                ingestion.pop('history_id', None)
+            active_pending=conn.execute(
+                'SELECT COUNT(*) FROM processing_tasks WHERE account_id=? AND status IN (?,?,?)',
+                (context.account_id,'queued','retry','running')).fetchone()[0]
+            pending_by_source={row['source']:row['count'] for row in conn.execute(
+                """SELECT source,COUNT(*) AS count FROM processing_tasks
+                   WHERE account_id=? AND status IN ('queued','retry','running')
+                   GROUP BY source""",(context.account_id,))}
+            processing_counts={row['status']:row['count'] for row in conn.execute(
+                'SELECT status,COUNT(*) AS count FROM processing_tasks WHERE account_id=? GROUP BY status',
+                (context.account_id,))}
+            search_index_counts={row['indexing_state']:row['count'] for row in conn.execute(
+                'SELECT indexing_state,COUNT(*) AS count FROM email_search_index WHERE account_id=? GROUP BY indexing_state',
+                (context.account_id,))}
+            backlog_pending=pending_by_source.get('backlog',0)
+            live_pending=pending_by_source.get('live',0)
+            batch_target=application.state.settings.max_pending_tasks
+            batch_remaining=min(batch_target,ingestion['backlog_remaining']) if ingestion else batch_target
+            batch_admitted=max(0,batch_target-batch_remaining)
+            workflow_total=sum(processing_counts.values())
+            workflow_finished=processing_counts.get('complete',0)+processing_counts.get('dead',0)
+            ingestion_paused=bool(ingestion and ingestion['has_more']
+                                  and not ingestion['backlog_authorized'])
+            fetch_next_available=bool(ingestion and ingestion['initial_batch_complete']
+                                      and ingestion['has_more']
+                                      and not ingestion['backlog_authorized']
+                                      and backlog_pending == 0)
             return {**{key: bool(state[key]) for key in ('connected', 'is_polling', 'auth_in_progress', 'purge_pending')},
                     'generation': state['generation'], 'account_id':context.account_id, 'ingestion':ingestion,
+                    'ingestion_paused':ingestion_paused,
+                    'active_pending_tasks':active_pending,
+                    'live_pending_tasks':live_pending,
+                    'backlog_pending_tasks':backlog_pending,
+                    'current_batch_target_tasks':batch_target,
+                    'current_batch_admitted_tasks':batch_admitted,
+                    'workflow_total_tasks':workflow_total,
+                    'workflow_finished_tasks':workflow_finished,
+                    'fetch_next_available':fetch_next_available,
+                    'live_monitoring':bool(state['connected'] and not application.state.settings.local_only),
+                    'max_pending_tasks':application.state.settings.max_pending_tasks,
+                    'resume_pending_tasks':application.state.settings.resume_pending_tasks,
                     'worker':dict(health) if (health:=conn.execute('SELECT heartbeat_at,last_success_at,last_error_at,last_error_code FROM worker_health WHERE account_id=?',(context.account_id,)).fetchone()) else None,
                     'auto_mark_read':application.state.settings.auto_mark_read,
                     'ingestion_failures':[dict(row) for row in conn.execute('SELECT email_id,status,attempt_count,next_retry_at,error_code FROM ingestion_failures WHERE account_id=? ORDER BY updated_at DESC,email_id LIMIT 50',(context.account_id,))],
-                    'processing_counts':{row['status']:row['count'] for row in conn.execute('SELECT status,COUNT(*) AS count FROM processing_tasks WHERE account_id=? GROUP BY status',(context.account_id,))},
+                    'processing_counts':processing_counts,
                     'notification_counts':{row['status']:row['count'] for row in conn.execute('SELECT status,COUNT(*) AS count FROM notification_outbox WHERE account_id=? GROUP BY status',(context.account_id,))},
                     'feedback_index_pending':conn.execute("SELECT COUNT(*) FROM feedback_history f WHERE account_id=? AND indexing_state!='indexed' AND revision_id=(SELECT MAX(revision_id) FROM feedback_history x WHERE x.account_id=f.account_id AND x.email_id=f.email_id)", (context.account_id,)).fetchone()[0],
+                    'semantic_search_index':{key:search_index_counts.get(key,0) for key in ('pending','indexed','failed')},
                     'poll_interval_seconds':application.state.settings.poll_interval_seconds,
                     'worker_lease_seconds':application.state.settings.worker_lease_seconds,
                     'batch_size':application.state.settings.batch_size}
@@ -327,7 +417,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     @application.delete('/account-data')
     def purge(context=Depends(session)):
         try:
-            application.state.accounts.purge(context, collection)
+            application.state.accounts.purge(context, collection, search_collection)
         except (WorkCancelled, AccessDenied, sqlite3.OperationalError):
             raise
         except ValueError:
@@ -340,7 +430,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     @application.delete('/legacy-data')
     def purge_legacy(payload: LegacyDeleteRequest, context=Depends(session)):
         try:
-            application.state.accounts.purge_legacy(context, collection())
+            application.state.accounts.purge_legacy(context, collection(), search_collection)
         except (WorkCancelled, AccessDenied, sqlite3.OperationalError):
             raise
         except Exception as error:
@@ -348,11 +438,47 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             raise HTTPException(503, 'Old-data deletion did not finish. Please retry.') from None
         return {'message': 'Old unassigned mail, its archive, vectors, and old shared credential files were deleted.'}
 
-    @application.post('/process',status_code=202)
-    def queue_processing(context=Depends(session)):
-        if application.state.settings.local_only: raise HTTPException(403,'Gmail inbox checks are disabled in local-only mode. Saved-task processing uses the local worker.')
+    @application.post('/inbox/sync',status_code=202)
+    def sync_new_messages(context=Depends(session)):
+        settings=application.state.settings
+        if settings.local_only:
+            raise HTTPException(403,'Gmail inbox checks are disabled in local-only mode.')
+        now=time.time()
+        with application.state.accounts.guard(context) as conn:
+            ingestion=ensure_ingestion_state(context.account_id,conn,batch_limit=settings.max_pending_tasks)
+            if now-ingestion['last_manual_sync_at'] < settings.poll_interval_seconds:
+                raise HTTPException(429,'A new-mail sync was requested recently. Please wait a few seconds.')
+            conn.execute('UPDATE ingestion_state SET last_manual_sync_at=? WHERE account_id=?',
+                         (now,context.account_id))
         job_id=enqueue_cycle(application.state.accounts,context)
-        return {'job_id':job_id,'status':'queued','message':'Inbox processing queued for the background worker.'}
+        return {'job_id':job_id,'status':'queued',
+                'message':'Checking Gmail for new messages. New mail will receive live priority.'}
+
+    @application.post('/ingestion/fetch-next',status_code=202)
+    @application.post('/ingestion/resume',status_code=202)
+    def fetch_next_backlog(context=Depends(session)):
+        settings=application.state.settings
+        if settings.local_only:
+            raise HTTPException(403,'Gmail inbox extraction is disabled in local-only mode.')
+        with application.state.accounts.guard(context) as conn:
+            ingestion=get_ingestion_state(context.account_id,conn)
+            if not ingestion or not ingestion['initial_batch_complete']:
+                raise HTTPException(409,'The initial inbox batch is not complete.')
+            if ingestion['backlog_authorized']:
+                raise HTTPException(409,'A backlog batch is already authorized.')
+            if not ingestion['has_more']:
+                raise HTTPException(409,'There are no older inbox messages waiting.')
+            pending=conn.execute(
+                """SELECT COUNT(*) FROM processing_tasks WHERE account_id=? AND source='backlog'
+                   AND status IN ('queued','retry','running')""",(context.account_id,)).fetchone()[0]
+            if pending:
+                raise HTTPException(409,'Finish the current backlog batch before fetching the next 100.')
+            conn.execute("""UPDATE ingestion_state SET backlog_authorized=1,
+                backlog_remaining=?,status='empty' WHERE account_id=?""",
+                (settings.max_pending_tasks,context.account_id))
+        job_id=enqueue_cycle(application.state.accounts,context)
+        return {'job_id':job_id,'status':'queued',
+                'message':'The next 100 older messages are authorized. New live mail still has priority.'}
 
     @application.get('/jobs/{job_id}')
     def job(job_id: str,context=Depends(session)):
@@ -412,8 +538,8 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         # Bound outstanding browser flows, including cancelled in-flight attempts.
         pending={key:value for key,value in application.state.auth_futures.items() if not value.done()}
         application.state.auth_futures=pending
-        if len(pending) >= 2:
-            raise HTTPException(503,'Previous Google sign-in is still closing. Try again shortly.')
+        if pending:
+            raise HTTPException(409,'Google sign-in is already in progress. Finish or cancel it before trying again.')
         attempt=manager.begin_auth(context)
         job_id=secrets.token_hex(16)
         with manager.guard(attempt,connected=False) as conn:

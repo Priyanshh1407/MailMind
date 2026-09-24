@@ -29,6 +29,7 @@ class AccountContext:
     account_id: str | None
     generation: int
     session_hash: str | None = None
+    restore_connected: bool = False
 
 
 class AccountManager:
@@ -53,13 +54,17 @@ class AccountManager:
         conn.execute('UPDATE ingestion_state SET page_token=NULL WHERE account_id=(SELECT account_id FROM runtime_state WHERE singleton=1)')
 
     def restart(self):
-        # A new API owner must pair again. Saved mail and credentials stay intact.
+        # A new API owner invalidates old browser sessions. Saved mail and credentials stay intact.
         with self.transaction() as conn:
             conn.execute("DELETE FROM local_sessions")
-            conn.execute("UPDATE runtime_state SET generation=generation+1,connected=0,auth_in_progress=0,is_polling=0")
+            # Transient health belongs to the previous process lifetime. Durable
+            # worker_jobs still retain its audited failures for troubleshooting.
+            conn.execute("UPDATE worker_health SET last_error_at=NULL,last_error_code=NULL WHERE account_id=(SELECT account_id FROM runtime_state WHERE singleton=1)")
+            conn.execute("""UPDATE runtime_state SET generation=generation+1,connected=0,
+                auth_in_progress=0,is_polling=0,last_error_at=NULL,last_error_code=NULL""")
             self._cancel(conn)
 
-    def pair(self):
+    def open_session(self):
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         with self.transaction() as conn:
             state = self.state(conn)
@@ -104,6 +109,15 @@ class AccountManager:
         with self.transaction() as conn:
             state = self.state(conn)
             if not state['connected'] or state['auth_in_progress'] or state['purge_pending']:
+                return None
+            return AccountContext(state['account_id'], state['generation'])
+
+    def indexer_context(self):
+        """Derived-index work is allowed only for a connected Google account."""
+        with self.transaction() as conn:
+            state = self.state(conn)
+            if (not state['connected'] or not state['account_id'] or state['account_id'] == LEGACY_ACCOUNT
+                    or state['auth_in_progress'] or state['purge_pending']):
                 return None
             return AccountContext(state['account_id'], state['generation'])
 
@@ -171,7 +185,11 @@ class AccountManager:
         return context
 
     def begin_auth(self, context):
-        return self._transition(context, auth=True)
+        with self.transaction() as conn:
+            state = self.state(conn)
+            restore_connected = bool(state['connected'])
+        attempt = self._transition(context, auth=True)
+        return AccountContext(attempt.account_id, attempt.generation, attempt.session_hash, restore_connected)
 
     def finish_auth(self, context, candidate):
         account_id, credential_json = candidate
@@ -189,11 +207,14 @@ class AccountManager:
     def fail_auth(self, context):
         try:
             with self.guard(context, connected=False) as conn:
-                conn.execute("UPDATE runtime_state SET auth_in_progress=0")
+                state = self.state(conn)
+                if state['auth_in_progress']:
+                    conn.execute("UPDATE runtime_state SET connected=?,auth_in_progress=0",
+                                 (int(context.restore_connected),))
         except (WorkCancelled, AccessDenied):
             pass
 
-    def purge(self, context, collection):
+    def purge(self, context, collection, search_collection=None):
         if not context.account_id:
             raise ValueError("No account to delete")
         context = self._transition(context, purge=True)
@@ -201,6 +222,9 @@ class AccountManager:
         with vector_write_lock(self.settings.data_dir), self.guard(context, connected=False) as conn:
             target = collection() if callable(collection) else collection
             target.delete(where={"account_id": context.account_id})
+            if search_collection is not None:
+                search_target = search_collection() if callable(search_collection) else search_collection
+                search_target.delete(where={'account_id': context.account_id})
             conn.execute("DELETE FROM email_logs WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM worker_jobs WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM ingestion_state WHERE account_id=?", (context.account_id,))
@@ -210,12 +234,15 @@ class AccountManager:
             conn.execute("UPDATE runtime_state SET purge_pending=0")
         return context
 
-    def purge_legacy(self, context, collection):
+    def purge_legacy(self, context, collection, search_collection=None):
         with vector_write_lock(self.settings.data_dir), self.guard(context, connected=False) as conn:
             records = collection.get(include=['metadatas'])
             ids = [key for key, meta in zip(records.get('ids', []), records.get('metadatas', [])) if not meta or meta.get('account_id') in (None, LEGACY_ACCOUNT)]
             if ids:
                 collection.delete(ids=ids)
+            if search_collection is not None:
+                search_target = search_collection() if callable(search_collection) else search_collection
+                search_target.delete(where={'account_id': LEGACY_ACCOUNT})
             conn.execute("DELETE FROM email_logs WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM worker_jobs WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM ingestion_state WHERE account_id=?", (LEGACY_ACCOUNT,))

@@ -35,9 +35,18 @@ export function useDashboard(api, query) {
   }, [api]);
   useEffect(() => {
     poller.current?.stop(); setLoading(true);
-    setSnapshot(previous => previous ? { ...previous, page: null } : previous);
     if (!locks.current.has('account')) poller.current?.start();
   }, [query.offset, query.search, query.category]);
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = window.setTimeout(() => setNotice(''), 6000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+  useEffect(() => {
+    if (!actionError) return undefined;
+    const timer = window.setTimeout(() => setActionError(null), 10000);
+    return () => window.clearTimeout(timer);
+  }, [actionError]);
   const refresh = useCallback(() => { setActionError(null); return poller.current?.refresh(); }, []);
   const mutate = useCallback(async (key, path, options = {}, account = false) => {
     if (locks.current.has(key) || (!account && locks.current.has('account'))) return false;
@@ -66,5 +75,6 @@ export function useDashboard(api, query) {
       }
     }
   }, [api, reset]);
-  return { snapshot, loading, error: actionError || error, notice, pending, refresh, mutate };
+  return { snapshot, loading, error, actionError, notice, pending, refresh, mutate,
+    dismissNotice: () => setNotice(''), dismissActionError: () => setActionError(null) };
 }

@@ -1,81 +1,114 @@
-# Security Maintenance Report
+# Security maintenance report
 
-**Review date:** 19 September 2026  
-**Supported deployment:** one trusted user on one workstation
+**Review date:** 25 September 2026  
+**Supported deployment:** one trusted user on one local workstation
 
 ## Result
 
-The dependency lock was rebuilt in a new virtual environment against current upstream releases. The exact Python closure contains 120 packages. `pip check` passed, all 345 strict backend tests passed, all 23 frontend unit tests passed, all 16 browser tests passed, and the frontend production build and lint passed. The clean Linux container build and runtime scenario also passed.
+The current documentation was reconciled against schema version 10, the four-process native supervisor, OAuth-gated semantic indexing, bounded inbox intake, account switching, hybrid search, current frontend behavior, and the current test inventory.
 
-This result does not certify MailMind for public hosting or multiple users. The final checks used synthetic messages and public cached demo assets. Real Gmail/OAuth, Gemini/Groq, Telegram delivery, provider retention behavior, and model accuracy on a real independently labelled inbox remain unvalidated.
+No Git commands, credentials, OAuth files, provider keys, private databases, Gmail content, or private model assets were used for this documentation review.
 
-## Dependency security
+## Current verification
 
-- Python direct requirements and the exact transitive lock were refreshed.
-- PyTorch 2.14.0 is installed from the official CPU wheel index before the PyPI lock.
-- The OSV batch audit checked all 120 locked Python package/version pairs.
-- OSV returned zero unexpected findings.
-- npm audit returned zero frontend findings.
-- Eight OSV records remain for ChromaDB 1.5.9. They represent four advisory families plus database aliases and are accepted only for the embedded boundary described below.
-- `scripts/audit_dependencies.py` fails if OSV returns an advisory outside the reviewed policy or if a policy ID becomes stale.
-- `config/security-advisory-policy.json` is a narrow exception list, not a claim that ChromaDB is generally safe.
+| Check | Result |
+| --- | --- |
+| Backend discovery | 384 passed |
+| Backend release-policy check | Passed; direct frontend dependencies match their exact lockfile versions |
+| Frontend unit tests | 26 passed |
+| Playwright browser scenarios | 19 passed |
+| Frontend lint | Passed |
+| Frontend production build | Passed |
 
-The older local phase audit contained findings for the previous lock. It is generated evidence, is ignored by Git, and is superseded by this review.
+All checks listed above passed on 25 September 2026. This is evidence for the tested behaviors, not a claim of universal security, provider availability, or real-inbox model accuracy.
 
-## ChromaDB assessment
+## Reviewed security boundaries
 
-Upstream lists no patched release for the four reviewed ChromaDB 1.5.9 advisory families:
+### Session and request protection
 
-| Advisory | Upstream affected surface | MailMind boundary |
-| --- | --- | --- |
-| [GHSA-f4j7-r4q5-qw2c](https://github.com/advisories/GHSA-f4j7-r4q5-qw2c) | Pre-authentication code injection through a Chroma server collection endpoint | No Chroma HTTP server or collection-creation endpoint is started or exposed |
-| [GHSA-36p7-vc44-83pf](https://github.com/advisories/GHSA-36p7-vc44-83pf) | Authenticated server code injection with collection-update permission | MailMind has no Chroma users, RBAC API, or remote update endpoint |
-| [GHSA-2wm9-hf6c-p5cr](https://github.com/advisories/GHSA-2wm9-hf6c-p5cr) | Cross-tenant collection access in the server authorization path | MailMind does not use Chroma tenants as a security boundary; application account and revision checks are re-applied before a result may vote |
-| [GHSA-xph7-9rjv-w5fr](https://github.com/advisories/GHSA-xph7-9rjv-w5fr) | Simple RBAC scope checks in the server | The SimpleRBAC server provider is not configured or reachable |
+- trusted loopback session creation;
+- HttpOnly, SameSite=Strict cookie;
+- CSRF and Origin checks for mutations;
+- trusted-host enforcement;
+- session expiry and restart invalidation;
+- automatic trusted-dashboard session creation without a pairing code.
 
-MailMind creates only `chromadb.PersistentClient` and now pins `chromadb.api.rust.RustBindingsAPI`. Startup fails closed if a different backend is returned. Compose has no Chroma service or published Chroma port. The vector index is derived state; SQLite remains authoritative, and every retrieved row is checked for account, revision, label, distance, and independent evidence.
+### Account isolation
 
-This is a deployment-specific risk acceptance. The vulnerable package code is still installed. Do not switch to `HttpClient`, start a Chroma server, add remote tenants, or host this stack without removing the exception and performing a new review.
+- account-scoped SQL and vector identifiers;
+- generation fencing around slow/external work;
+- account-switch response rejection;
+- separate account-specific OAuth credentials;
+- selected-account deletion that preserves unrelated accounts.
 
-## Prompt-injection and RAG controls
+### Background reliability
 
-Email text and retrieved precedents are treated as untrusted data:
+- durable tasks and processing history;
+- expiring worker leases;
+- stale-owner rejection;
+- bounded retries and provider pools;
+- explicit unknown notification state;
+- isolated semantic indexer;
+- exact supervisor child ownership and restart budget.
 
-- System instructions and user data are separate.
-- The user payload is a bounded JSON object.
-- Sender, subject, body, and precedents are normalized, redacted, and truncated.
-- At most three unique, schema-valid precedents are sent.
-- Provider output must be one JSON object with one known category; duplicate keys, trailing text, commands, and unknown labels are rejected.
-- Retrieval rows with malformed shapes, non-finite distances, stale revisions, wrong accounts, or invalid labels are ignored.
-- Replayed or correlated examples cannot inflate independent support.
-- Retrieval abstains unless the configured support and majority rules pass.
-- The React source contains no `dangerouslySetInnerHTML`, `innerHTML`, `document.write`, `eval`, or `new Function` sink.
+### Untrusted-content handling
 
-The focused adversarial suite contains 13 tests and passed. These controls constrain instructions and evidence. They do not prove that a statistical classifier will understand every adversarial email.
+- MIME and HTML normalization;
+- bounded email text;
+- system/data prompt separation;
+- strict provider output validation;
+- conservative account/revision-aware feedback retrieval;
+- React text rendering without raw HTML sinks.
 
-## Runtime and release checks
+### Privacy boundaries
 
-| Check | Result | Scope |
-| --- | --- | --- |
-| Upgraded isolated virtual environment | Passed | Exact lock installed; `pip check`; 345 strict backend tests |
-| Prompt/RAG security suite | Passed 13/13 | Synthetic hostile messages, poisoned precedents, malformed retrieval, backend pinning |
-| Frontend | Passed | 23 unit tests, build, lint, 16 Chrome browser scenarios |
-| Public offline assets | Passed | Real packaged synthetic classifier and embedding cache; provider credentials empty; Python external networking blocked |
-| Native launcher | Passed | API/worker/frontend ready; unauthorized stop rejected; graceful owned-process shutdown |
-| Docker Compose | Passed | Clean CPU Linux build; UID 10001; local-only actions rejected; persistence and restart/session behavior verified |
-| Python OSV policy audit | Passed | 120 packages; zero unexpected findings; eight accepted Chroma records |
-| npm audit | Passed | Zero findings |
-| Fresh Windows source snapshot | Limited | PyTorch installed, then the remaining lock download exceeded the helper's fixed 600-second timeout before tests began |
+- shared best-effort masking;
+- sender omission from supported external payloads;
+- local semantic embeddings;
+- application-level local-only routing;
+- verified asset manifests;
+- safe diagnostic output.
 
-The fresh-snapshot timeout is an installation/download limit, not a passing result. Re-run `python -m scripts.check_clean_release` on a stable connection before a release tag. The separately created clean maintenance environment and clean container both installed the refreshed lock successfully.
+## Current architecture observations
 
-## Remaining limits
+The native runtime owns four processes:
 
-- No real inbox or independently labelled private corpus was read.
-- The personalized model candidate was rejected because urgent-message regressions worsened.
-- No live Google OAuth/Gmail operation was performed.
-- No live Gemini, Groq, or Telegram operation was performed.
-- Regex masking is best effort and is not anonymization.
-- Local-only routing blocks application adapters; it is not an operating-system egress firewall.
-- Local databases are not an encrypted vault.
-- The supported scale is one local user with SQLite and one worker.
+1. semantic indexer;
+2. API;
+3. Gmail/classification worker;
+4. frontend.
+
+The semantic indexer waits for Google connection before reading mail or initializing semantic assets. This preserves the explicit OAuth boundary while keeping embedding startup isolated from Gmail.
+
+The current Compose demonstration runs API, worker, and frontend only. It does not include the semantic indexer and therefore does not establish native semantic-search parity.
+
+## Dependency policy
+
+Python dependency closure and npm integrity metadata are retained in lock files. Dependency status changes over time and must be re-audited for each release.
+
+The current unexpected failure is a declaration-policy mismatch, not an observed runtime vulnerability: the installed Lucide React version matches the lock, but <code>frontend/package.json</code> permits a compatible range. Resolve the declaration before publishing a fully passing release claim.
+
+## Remaining risks
+
+- Local data is not encrypted by the application.
+- Masking is not anonymization.
+- Provider retention and deletion are outside local control.
+- Desktop OAuth is not suitable for a public hosted service.
+- Local-only routing is not an operating-system firewall.
+- Statistical models remain vulnerable to misclassification and adversarial language.
+- The current personal training evidence is insufficient for production-quality claims.
+- The container topology lacks the semantic indexer.
+- Live provider reliability requires deliberate operator-owned testing.
+
+## Release requirements
+
+Before release:
+
+1. Resolve the exact dependency-declaration failure.
+2. Rerun the complete backend suite.
+3. Rerun frontend unit, lint, build, and browser checks.
+4. Run dependency and clean-release audits.
+5. Verify private files are excluded from source and Docker context.
+6. Use synthetic demonstrations and screenshots.
+7. Reconfirm OAuth-gated semantic indexing and account-switch isolation.
+8. Preserve the limitations stated in the public README, security policy, and privacy policy.

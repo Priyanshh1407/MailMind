@@ -18,6 +18,10 @@ import tests.test_phase5_recovery as recovery_support
 from src.work_queue import claim_cycle,ingest_email,finish_cycle
 
 class PrivacyTests(unittest.TestCase):
+    def setUp(self):
+        with llm_api._model_cooldown_lock:
+            llm_api._model_cooldowns.clear()
+
     def test_currency_alternatives_and_decimal(self):
         for text in ['Rs. 5,000.25','Rs 5000','₹5000','$50.20','INR 5000','USD 50']:
             self.assertEqual(redact(text),'[AMOUNT]')
@@ -150,7 +154,7 @@ class LocalFlowTests(unittest.TestCase):
     def test_api_disables_authentication_and_inbox_queue(self):
         self.app.state.settings=replace(self.settings,local_only=True)
         self.assertEqual(self.client.post('/authenticate').status_code,403)
-        self.assertEqual(self.client.post('/process').status_code,403)
+        self.assertEqual(self.client.post('/inbox/sync').status_code,403)
         data=self.client.get('/telemetry').json();self.assertTrue(data['mode']['local_only']);self.assertEqual(data['providers']['gemini'],'disabled_local_only')
     def test_local_predict_works_for_paired_disconnected_account(self):
         self.app.state.settings=replace(self.settings,local_only=True)

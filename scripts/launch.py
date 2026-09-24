@@ -6,6 +6,10 @@ from urllib.request import Request,urlopen
 import psutil
 
 ROOT=Path(__file__).resolve().parents[1]
+INDEXER_READY_TIMEOUT_SECONDS=180
+RECOVERABLE_SERVICES=frozenset({'indexer','worker','frontend'})
+SERVICE_RESTART_LIMIT=3
+SERVICE_RESTART_WINDOW_SECONDS=60
 
 
 def check_ports(ports=(8000,5173)):
@@ -61,6 +65,32 @@ def wait_ready(process,url,timeout=60,api=False):
     raise RuntimeError('Service readiness timed out; dependent services were not started')
 
 
+def wait_log_ready(process,path,marker,timeout=60):
+    deadline=time.monotonic()+timeout
+    while time.monotonic()<deadline:
+        if process.poll() is not None:raise RuntimeError('Service exited before becoming ready; inspect its local log')
+        try:
+            if marker in path.read_text(encoding='utf-8',errors='replace'):return
+        except OSError:pass
+        time.sleep(.1)
+    raise RuntimeError('Service readiness timed out; dependent services were not started')
+
+
+def restart_times_within_window(history, now):
+    recent=[stamp for stamp in history if now-stamp <= SERVICE_RESTART_WINDOW_SECONDS]
+    if len(recent) >= SERVICE_RESTART_LIMIT:
+        return None
+    return [*recent,now]
+
+
+def exited_service(services):
+    for name,service in services.items():
+        code=service['process'].poll()
+        if code is not None:
+            return name,service,code
+    return None
+
+
 def shutdown(children,grace=60):
     for process in children:
         if process.poll() is None:
@@ -99,22 +129,44 @@ def start(state_dir):
     descriptor=os.open(journal,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
     with os.fdopen(descriptor,'w',encoding='utf-8') as stream:json.dump(entry,stream)
     control=threading.Thread(target=server.serve_forever,daemon=True);control.start()
-    children=[];logs=[];forced=0
-    def spawn(name,command):
-        log_path=state_dir/(name+'.log');descriptor=os.open(log_path,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600);log=os.fdopen(descriptor,'wb');logs.append(log)
+    children=[];logs=[];services={};forced=0
+    def spawn(name,command,*,append=False,restarts=None):
+        log_path=state_dir/(name+'.log')
+        mode=os.O_CREAT|os.O_WRONLY|(os.O_APPEND if append else os.O_TRUNC)
+        descriptor=os.open(log_path,mode,0o600);log=os.fdopen(descriptor,'ab' if append else 'wb');logs.append(log)
         flags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0
         process=subprocess.Popen(command,cwd=ROOT,stdin=subprocess.PIPE,stdout=log,stderr=subprocess.STDOUT,creationflags=flags)
-        children.append(process);return process
+        children.append(process)
+        services[name]={'process':process,'command':command,'log':log,'restarts':restarts or []}
+        return process
     try:
+        indexer=spawn('indexer',[sys.executable,'-m','scripts.service_runner','indexer'])
+        print('Starting isolated semantic indexer...',flush=True)
+        wait_log_ready(indexer,state_dir/'indexer.log','MailMind semantic indexer ready',
+                       timeout=INDEXER_READY_TIMEOUT_SECONDS)
         api=spawn('api',[sys.executable,'-m','scripts.service_runner','api'])
         print('Starting API; the normal-mode local model will continue loading in the background...',flush=True)
         wait_ready(api,'http://127.0.0.1:8000/',api=True)
         worker=spawn('worker',[sys.executable,'-m','scripts.service_runner','worker'])
         ui=spawn('frontend',[node,str(ROOT/'frontend/serve.mjs')])
         wait_ready(ui,'http://127.0.0.1:5173/')
-        print('MailMind ready at http://127.0.0.1:5173. Pairing code is in the local API log. Keep this supervisor running; use stop or Ctrl+C.',flush=True)
+        print('MailMind ready at http://127.0.0.1:5173. The local browser session opens automatically. Keep this supervisor running; use stop or Ctrl+C.',flush=True)
         while not event.wait(.25):
-            if any(process.poll() is not None for process in children):raise RuntimeError('An owned service exited; shutting down the remaining owned services')
+            failed=exited_service(services)
+            if failed is None:
+                continue
+            name,service,code=failed
+            if name not in RECOVERABLE_SERVICES:
+                raise RuntimeError(f'Owned service {name} exited with code {code}; shutting down the remaining owned services')
+            restarts=restart_times_within_window(service['restarts'],time.monotonic())
+            if restarts is None:
+                raise RuntimeError(f'Owned service {name} exceeded its restart limit after exit code {code}')
+            service['log'].close()
+            print(json.dumps({'event':'owned_service_restarting','service':name,
+                              'exit_code':code,'attempt':len(restarts)}),flush=True)
+            replacement=spawn(name,service['command'],append=True,restarts=restarts)
+            if name=='frontend':
+                wait_ready(replacement,'http://127.0.0.1:5173/')
     except KeyboardInterrupt:event.set()
     finally:
         forced=shutdown(children);server.shutdown();server.server_close()

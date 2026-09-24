@@ -1,53 +1,94 @@
 import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, LockKeyhole, UserRound } from 'lucide-react';
+
 export function AccountControls({ snapshot, pending, mutate }) {
-  const [code, setCode] = useState(''), [open, setOpen] = useState(false);
-  const container = useRef(null), trigger = useRef(null), menu = useRef(null);
-  const paired = Boolean(snapshot), connected = snapshot?.session.connected, offline = snapshot?.telemetry?.mode?.local_only;
-  const email = snapshot?.session.email, busy = Boolean(pending.account), auth = snapshot?.status.auth_in_progress;
-  function close(restore = true) { setOpen(false); if (restore) trigger.current?.focus(); }
+  const [open, setOpen] = useState(false);
+  const container = useRef(null);
+  const trigger = useRef(null);
+  const menu = useRef(null);
+  const connected = Boolean(snapshot?.session.connected);
+  const offline = Boolean(snapshot?.telemetry?.mode?.local_only);
+  const email = snapshot?.session.email;
+  const busy = Boolean(pending.account);
+  const auth = Boolean(snapshot?.status.auth_in_progress);
+
+  function close(restore = true) {
+    setOpen(false);
+    if (restore) trigger.current?.focus();
+  }
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     menu.current?.querySelector('button:not(:disabled)')?.focus();
-    const outside = event => { if (!container.current?.contains(event.target)) setOpen(false); };
+    const outside = event => {
+      if (!container.current?.contains(event.target)) setOpen(false);
+    };
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
   }, [open]);
-  async function account(path, options) { close(); await mutate('account', path, options, true); }
+
+  async function account(path, options) {
+    close();
+    await mutate('account', path, options, true);
+  }
+
   function keys(event) {
-    if (event.key === 'Escape') { event.preventDefault(); close(); return; }
-    if (!['ArrowDown','ArrowUp','Home','End'].includes(event.key)) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
     const buttons = [...menu.current.querySelectorAll('button:not(:disabled)')];
     if (!buttons.length) return;
     event.preventDefault();
     const index = buttons.indexOf(document.activeElement);
-    const target = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+    const target = event.key === 'Home' ? 0 : event.key === 'End'
+      ? buttons.length - 1
+      : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
     buttons[target].focus();
   }
-  return <section aria-label="Account controls" className="glass-card account-panel">
-    {!paired ? <form onSubmit={async event => {
-      event.preventDefault();
-      if (await mutate('account', '/session', { body: { code } }, true)) setCode('');
-    }} className="pair-form">
-      <div><h2>Open your local session</h2><p>Copy the pairing code from the API terminal, then connect Google.</p></div>
-      <label htmlFor="pair-code">Pairing code</label>
-      <input id="pair-code" type="password" autoComplete="off" required maxLength={256} value={code} onChange={event => setCode(event.target.value)} disabled={busy} />
-      <button type="submit" disabled={busy}>{busy ? 'Opening…' : 'Open MailMind'}</button>
-    </form> : <>
-      <div className="account-row"><div><h2>{email || 'Local session'}</h2><p>{offline ? 'Local-only mode; Google networking disabled' : auth ? 'Finish Google sign-in in the opened tab.' : connected ? 'Google connected' : 'Google disconnected — processing paused'}</p></div>
-        <div ref={container} className="menu-container"><button ref={trigger} type="button" aria-expanded={open} aria-controls="account-options" onClick={() => setOpen(value => !value)}>Account options</button>
-          {open && <div ref={menu} id="account-options" className="account-menu" onKeyDown={keys} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(false); }}>
-            <button disabled={busy || offline || auth || snapshot.status.purge_pending} onClick={() => account('/authenticate')}>{connected ? 'Switch Google account' : 'Connect Google'}</button>
-            <button disabled={busy || auth || !email} onClick={() => account('/disconnect')}>Disconnect Google</button>
-            <button disabled={busy || !email} onClick={() => { if (window.confirm(`Delete saved mail, feedback and local Google credentials for ${email}? Other accounts are kept. This cannot be undone.`)) account('/account-data', { method: 'DELETE' }); }}>{snapshot.status.purge_pending ? 'Retry account deletion' : 'Delete this account data'}</button>
-            <button disabled={busy} onClick={() => { if (window.confirm('Delete old unassigned mail, archive, vectors and shared token files? This cannot be undone.')) account('/legacy-data', { method: 'DELETE', body: { confirmation: 'DELETE_UNASSIGNED_DATA' } }); }}>Delete old unassigned data</button>
-            <button disabled={busy} onClick={() => account('/logout')}>Logout</button>
-          </div>}
+
+  if (!snapshot) {
+    return <div className="header-account-loading"><span className="status-dot neutral" />Opening MailMind</div>;
+  }
+
+  return <div className="header-account-actions">
+    {!connected && !auth && <button className="button primary compact connect-header" disabled={busy || offline || snapshot.status.purge_pending} onClick={() => account('/authenticate')}>Connect Google</button>}
+    {auth && <button className="button secondary compact" disabled={busy} onClick={() => account('/logout')}>Cancel sign-in</button>}
+    <div ref={container} className="account-menu-container">
+      <button ref={trigger} type="button" className="header-pill account-trigger" aria-label="Account options" aria-expanded={open} aria-controls="account-options" onClick={() => setOpen(value => !value)}>
+        <span className="header-pill-icon"><UserRound size={15} /></span>
+        <span className="account-trigger-copy">
+          <strong>{email || (offline ? 'Local-only mode' : 'Local session')}</strong>
+          <small>{busy ? 'Account action pending' : auth ? 'Finish Google sign-in' : connected ? 'Google connected' : 'Processing paused'}</small>
+        </span>
+        <ChevronDown size={14} className={open ? 'rotate-icon' : ''} />
+      </button>
+      {open && <div ref={menu} id="account-options" role="menu" className="account-popover" onKeyDown={keys} onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) close(false);
+      }}>
+        <div className="popover-account-head">
+          <span className="account-avatar"><UserRound size={17} /></span>
+          <div>
+            <strong>{email || 'Local session'}</strong>
+            <p><span className={'status-dot ' + (connected ? 'success' : 'neutral')} />{offline ? 'Google networking disabled' : auth ? 'Sign-in is in progress' : connected ? 'Google connected - processing active' : 'Google disconnected - processing paused'}</p>
+          </div>
         </div>
-      </div>
-      {!connected && !auth && <button disabled={busy || offline || snapshot.status.purge_pending} onClick={() => account('/authenticate')}>Connect Google</button>}
-      {auth && <button disabled={busy} onClick={() => account('/logout')}>Cancel sign-in and logout</button>}
-      {snapshot.status.purge_pending && <p role="status">Deletion is pending. Processing stays paused. Retry account deletion.</p>}
-      <p className="muted">Logout keeps saved mail and credentials. Disconnect removes local Google credentials. Google permission can be removed separately in your Google account.</p>
-    </>}
-  </section>;
+        <div className="account-menu-actions">
+          <button disabled={busy || offline || auth || snapshot.status.purge_pending} onClick={() => account('/authenticate')}>{connected ? 'Switch Google account' : 'Connect Google'}</button>
+          <button disabled={busy || auth || !email} onClick={() => account('/disconnect')}>Disconnect Google</button>
+          <button disabled={busy || !email} className="danger-item" onClick={() => {
+            if (window.confirm('Delete saved mail, feedback and local Google credentials for ' + email + '? Other accounts are kept. This cannot be undone.')) account('/account-data', { method: 'DELETE' });
+          }}>{snapshot.status.purge_pending ? 'Retry account deletion' : 'Delete this account data'}</button>
+          <button disabled={busy} className="danger-item" onClick={() => {
+            if (window.confirm('Delete old unassigned mail, archive, vectors and shared token files? This cannot be undone.')) account('/legacy-data', { method: 'DELETE', body: { confirmation: 'DELETE_UNASSIGNED_DATA' } });
+          }}>Delete old unassigned data</button>
+          <button disabled={busy} onClick={() => account('/logout')}>Stop processing</button>
+        </div>
+        {snapshot.status.purge_pending && <p className="purge-notice" role="status">Deletion is pending. Processing stays paused. Retry account deletion.</p>}
+        <p className="account-privacy"><LockKeyhole size={13} /> Logout keeps saved mail and credentials. Disconnect removes local Google credentials. Revoke Google permission separately in your Google account.</p>
+      </div>}
+    </div>
+  </div>;
 }

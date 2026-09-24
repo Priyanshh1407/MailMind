@@ -4,7 +4,7 @@ import time
 from .account_state import WorkCancelled
 from .database import utc_timestamp
 from .prediction import Prediction
-from .provider_policy import provider_failure, retry_delay, PROVIDER_CALLS, LOCAL_CALLS
+from .provider_policy import provider_failure, retry_delay, TELEGRAM_CALLS, LOCAL_CALLS
 from .notifier import Delivery
 from .email_text import preview_text
 from .work_queue import fence, attempt, task_retry
@@ -33,7 +33,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
         try:
             if config.local_only:
                 with cycle_external(manager,context,token):
-                    decision=LOCAL_CALLS.run(lambda:model.predict(task['subject'],task['body'],account_id=context.account_id),config.classification_budget_seconds)
+                    decision=LOCAL_CALLS.run(lambda:model.predict(task['subject'],task['body'],sender=task['sender'],account_id=context.account_id),config.classification_budget_seconds)
                 local=decision
             else:
                 with cycle_external(manager,context,token):
@@ -42,7 +42,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
                         before_request=lambda:cycle_external(manager,context,token))
                 try:
                     with cycle_external(manager,context,token):
-                        local,_=LOCAL_CALLS.run(lambda:shadow(task['subject'],task['body'],decision,account_id=context.account_id,model=model),20)
+                        local,_=LOCAL_CALLS.run(lambda:shadow(task['sender'],task['subject'],task['body'],decision,account_id=context.account_id,model=model),20)
                 except WorkCancelled:
                     raise
                 except Exception:
@@ -105,7 +105,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
                             from .privacy import redact
                         from .notifier import send_telegram_alert
                         return notifier('[SENDER]',redact(task['subject']),preview_text(redact(task['body']))[:100]+'...',timeout=config.provider_timeout_seconds,**({'settings':config} if notifier is send_telegram_alert else {}))
-                    delivery=PROVIDER_CALLS.run(send,config.provider_timeout_seconds)
+                    delivery=TELEGRAM_CALLS.run(send,config.provider_timeout_seconds)
                 # Explicit compatibility for injected old boolean test adapters.
                 if isinstance(delivery,bool):
                     delivery=Delivery('sent' if delivery else 'retry','delivery_failed' if not delivery else None)

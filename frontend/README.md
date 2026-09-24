@@ -1,91 +1,139 @@
 # MailMind frontend
 
-The dashboard is a React 19 and Vite application for the local MailMind API. It
-shows saved email classifications, durable worker/retry state, provider readiness,
-feedback history and account actions. It does not contain provider keys, model
-weights or an independent authentication system.
+The MailMind dashboard is a React 19 and Vite application for the local FastAPI control plane. It presents account-scoped Gmail processing, health, hybrid search, category lanes, feedback, history, and explicit recovery actions.
 
-## Architecture
+The production launcher serves the built application locally. The browser never receives Gmail OAuth credentials, model weights, or provider keys.
 
-```mermaid
+## Design
+
+The current interface follows a dark, compact dashboard design with:
+
+- local MailMind logo and favicon assets;
+- Lucide React icons;
+- account-wide KPI cards;
+- inbox progress and intake panels;
+- non-sticky search and category controls;
+- four responsive category lanes;
+- single-line email action controls where space permits;
+- system-health and account popovers;
+- dismissible success/error feedback;
+- mobile overflow protection; and
+- reduced-motion behavior.
+
+## Data flow
+
+~~~mermaid
 flowchart LR
-  Browser[Local browser] -->|pairing cookie + CSRF| Client[React dashboard]
-  Client -->|JSON on localhost:8000| API[FastAPI]
-  Poller[Completion-based 5s poller] --> Client
-  Client --> Board[Four accessible category lanes]
-  Client --> Status[Worker, model and provider status]
-  Client --> Actions[Feedback and account actions]
-```
+  Browser[React dashboard]
+  APIClient[Validated API client]
+  Hook[Dashboard polling and mutations]
+  API[FastAPI on 127.0.0.1:8000]
 
-`src/api.js` owns request timeouts, cookies, CSRF headers and response validation.
-`src/dashboard.js` loads a consistent account generation and rejects mixed-account
-responses. `src/hooks/useDashboard.js` owns polling, aborts stale requests and
-serializes mutations. Components render API text through React; the source contains
-no raw-HTML rendering sink.
+  Browser --> APIClient
+  APIClient --> Hook
+  Hook --> API
+  API --> Hook
+  Hook --> Browser
+~~~
 
-## Requirements
+- <code>src/api.js</code> owns request timeouts, credentials, CSRF headers, and response validation.
+- <code>src/dashboard.js</code> coordinates account-consistent reads and presentation helpers.
+- <code>src/hooks/useDashboard.js</code> owns completion-based polling, cancellation, stale-response rejection, and serialized mutations.
+- Components render all server/email text through React. No raw-HTML rendering sink is used.
 
-- Node 22.17.1 (see `.nvmrc` in the repository root)
-- The exact packages in `package-lock.json`
-- For the normal UI, a MailMind API listening on `127.0.0.1:8000`
+## Main components
+
+| Component | Responsibility |
+| --- | --- |
+| <code>AppHeader</code> | Brand, system health, connected-account controls |
+| <code>HealthPopover</code> | Model, provider, worker, prediction, and refresh state |
+| <code>AccountControls</code> | Connect, switch, disconnect, delete, and stop-processing actions |
+| <code>DashboardStats</code> | Account-wide saved, processed, feedback, and latency KPIs |
+| <code>InboxProgress</code> | Current admitted batch and durable workflow counts |
+| <code>InboxIntake</code> | Live sync and bounded historical-backlog controls |
+| <code>SearchFilters</code> | Debounced hybrid query, category filter, and semantic progress |
+| <code>EmailBoard</code> | Important, Updates, Spam, and Review lanes |
+| <code>EmailCard</code> | Classification details, feedback, history, and recovery |
+| <code>Pagination</code> | Stable 20-message pages |
+| <code>AppFeedback</code> | Persistent outages and timed action notices |
+
+## Search behavior
+
+Search input is debounced by approximately 300 ms.
+
+- Short queries use lexical matching.
+- Queries of at least three characters can combine lexical and semantic results.
+- The current board remains visible while the new request is loading.
+- Stale requests are aborted.
+- The category filter and Search button remain grouped and aligned across responsive widths.
+- The search panel scrolls with the document and is not sticky.
+- Semantic failure does not prevent lexical results.
+
+## Account behavior
+
+The trusted loopback browser session opens automatically. There is no pairing-code UI.
+
+Mail data is rendered only while Google is connected. Account actions have deliberately different meanings:
+
+- stop processing retains mail and credentials;
+- disconnect removes the local Google credential but retains saved data;
+- delete removes managed data for the selected account;
+- switch performs a fenced account transition.
+
+A refresh that mixes account generations is rejected.
+
+## Feedback behavior
+
+Confirming or correcting a category saves authoritative feedback before derived vector indexing completes. The card moves to its effective lane after a successful response. Feedback can be edited or undone without deleting prediction or revision history.
+
+Buttons are disabled while their mutation is pending, preventing duplicate actions.
 
 ## Install and build
 
-From this directory:
+From <code>frontend</code>:
 
-```powershell
+~~~powershell
 npm ci
-npm test
+npm test -- --run
 npm run lint
 npm run build
-```
+~~~
 
-Run the development server with `npm run dev`. The production launcher does not use
-Vite's development server; it serves `dist/` through `serve.mjs`, so rebuild after
-frontend changes.
+The production launcher serves <code>dist</code> through <code>serve.mjs</code>. Rebuild after changing frontend source.
+
+Development server:
+
+~~~powershell
+npm run dev
+~~~
 
 ## Browser tests
 
-```powershell
+~~~powershell
 npx playwright install chromium
 npm run test:browser
-```
+~~~
 
-The browser suite uses a synthetic in-browser API fixture. It does not sign in to
-Google, read an inbox, call cloud models or deliver Telegram messages. Keep ports
-5173 and 8000 free for the real launcher checks described in the root README.
+The browser suite uses synthetic in-browser API fixtures. It exercises account menus, category lanes, search, pagination, feedback, error handling, sync/backlog controls, history, responsive overflow, reduced motion, account transitions, provider display, and local-only behavior.
 
-## Security and privacy behavior
+It does not sign in to Google, read real mail, call live cloud providers, or send Telegram messages.
 
-- Requests include credentials only for the local API and mutation requests include
-  the session CSRF token.
-- The API enforces allowed origins and account generations; the UI also rejects a
-  refresh that mixes responses from different account generations.
-- Provider and email text is rendered as React text, not injected HTML.
-- Account deletion requires an explicit browser confirmation. Logout, disconnect
-  and deletion have different effects described beside the controls.
-- Local-only mode disables Google/cloud/alert actions and reports that state.
-- Normal mode shows `Loading` while the API model initializes; configured cloud classification handles manual predictions during that window.
-- A failed refresh leaves the last snapshot visible but disables mutations.
+At the 25 September 2026 refresh:
 
-The frontend cannot make an unsafe backend or an untrusted workstation safe. Pairing
-codes and local browser access must still be protected. Regex masking is best effort,
-and live provider behavior remains outside the synthetic browser test scope.
+- 26 frontend unit tests passed;
+- 19 Playwright scenarios passed;
+- lint passed; and
+- the production build passed.
 
-## Main files
+## Security and privacy
 
-| File | Responsibility |
-| --- | --- |
-| `src/App.jsx` | Page composition, filtering and pagination |
-| `src/api.js` | Bounded API client and response contracts |
-| `src/dashboard.js` | Coordinated dashboard reads and display helpers |
-| `src/hooks/useDashboard.js` | Polling, cancellation and mutation lifecycle |
-| `src/components/` | Account, metrics, board and email-card UI |
-| `src/index.css` | Responsive, keyboard-visible, reduced-motion-aware styles |
-| `serve.mjs` | Minimal built-asset server for the owned launcher/container |
-| `tests/` | Unit tests for API/polling/dashboard behavior |
-| `e2e/` | Synthetic Playwright interaction and responsive tests |
+- Requests carry credentials only to the local API.
+- Mutations include the session CSRF token.
+- The API enforces host, origin, session, account, and generation boundaries.
+- React escapes provider and email text.
+- Account deletion requires explicit confirmation.
+- A failed refresh retains the last snapshot but disables unsafe mutations.
+- Local-only mode disables unavailable external controls.
+- UI status distinguishes configured providers from observed health.
 
-For complete installation, model/assets, Docker and release instructions, use the
-[root README](../README.md). For known limits, read the model card and security
-report linked there.
+The frontend cannot make an untrusted workstation safe. Review the root security and privacy documentation before using real mail.

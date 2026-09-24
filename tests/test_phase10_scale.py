@@ -1,6 +1,7 @@
 """Small offline workload checks; performance numbers are not pass thresholds."""
 import unittest
 from scripts.measure_local_scale import percentile, scenario
+from src.config import Settings
 
 
 class ScaleTests(unittest.TestCase):
@@ -20,5 +21,5 @@ class ScaleTests(unittest.TestCase):
         self.assertEqual([c['completed'] for c in result['cycles']], [20, 1])
         self.assertEqual(result['prediction_attempts'], 21)
         self.assertEqual(result['api']['emails']['samples'], 0)
-        self.assertGreaterEqual(result['scheduled_drain_estimate_seconds'], 60)
+        self.assertGreaterEqual(result['scheduled_drain_estimate_seconds'], Settings().poll_interval_seconds)
         self.assertTrue(result['all_passed'])

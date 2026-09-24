@@ -1,266 +1,281 @@
 # MailMind
 
-MailMind is a local-first email triage system that classifies saved mail as
-**IMPORTANT**, **UPDATES**, or **SPAM**. It combines a FastAPI control plane, a
-durable SQLite workflow, conservative feedback retrieval, an optional local model,
-and a responsive React dashboard. The supported product is one trusted user on one
-workstation; it is not presented as a public multi-tenant service.
+MailMind is a private, local-first Gmail intelligence layer for one trusted user on one workstation. It connects through Google OAuth, discovers new inbox mail, stores durable processing work in SQLite, classifies messages as **Important**, **Updates**, or **Spam**, and exposes uncertain or failed decisions as **Needs Review**.
 
-> **Evidence before claims:** all automated checks use synthetic data. The current
-> personalized model was **not promoted** because its urgent-message regressions are
-> unacceptable. Live Gmail, cloud-model and Telegram behavior still requires a
-> deliberate test with the operator's own accounts.
+The React dashboard combines live Gmail intake, recoverable background processing, user feedback, provider health, and hybrid lexical/semantic search. MailMind complements Gmail; it is not intended to replace a full email client or operate as a public multi-user service.
 
-## Why this project is interview ready
+> [!IMPORTANT]
+> Mail access and derived processing begin only after a successful Google connection. The semantic-indexer process may be running beforehand, but it waits without reading saved mail, loading the embedding runtime, or opening the semantic search store.
 
-- Account-scoped sessions, CSRF/origin checks and generation fencing stop stale work.
-- Gmail ingestion handles nested MIME, HTML, malformed messages and bounded pages.
-- Durable task/outbox states distinguish retries, ambiguous sends and completed work.
-- Feedback is committed to SQLite before the derived vector index and can be undone.
-- RAG requires current, account-owned, independently supported neighbors and can abstain.
-- Prompt inputs are bounded untrusted JSON data, separate from system instructions.
-- Local-only mode blocks application provider routes and verifies offline asset hashes.
-- Owned launch/stop, nonroot containers, exact locks and clean-release checks make the
-  supported environment reproducible.
+## Highlights
 
-## Architecture
+- Google OAuth with automatic completion-page close and safe dashboard fallback.
+- Strict account isolation with generation fencing during logout, disconnect, deletion, and account switching.
+- Durable SQLite jobs with bounded retries, expiring worker leases, and auditable processing history.
+- Three-category classification through Gemini and Groq fallback, plus a local three-class shadow model.
+- `NEEDS_REVIEW` as a system outcome—not a fourth model-generated category.
+- Conservative feedback retrieval that abstains unless current, account-owned examples provide sufficient independent support.
+- Live hybrid search across sender, subject, and body, with exact lexical matches ranked before semantic matches.
+- Separate derived Chroma collections for feedback retrieval and inbox search.
+- A responsive dark dashboard with health, intake, progress, search, review, feedback, and recovery controls.
+- Optional Telegram alerts and opt-in automatic Gmail mark-as-read behavior.
+- Local-only mode with verified pre-provisioned assets and no cloud/Gmail/Telegram routing.
+
+## Product workflow
+
+```mermaid
+flowchart LR
+  A[Connect Google] --> B[Discover inbox changes]
+  B --> C[Save durable tasks]
+  C --> D[Classify newest mail first]
+  D --> E{Result}
+  E -->|Important / Updates / Spam| F[Persist decision]
+  E -->|Unavailable or uncertain| G[Needs Review]
+  F --> H[Optional Telegram alert]
+  F --> I[Queue local semantic indexing]
+  I --> J[Hybrid dashboard search]
+  F --> K[User confirmation or correction]
+  K --> L[Durable feedback + derived RAG index]
+```
+
+## Runtime architecture
+
+The native supervisor owns four child processes:
+
+1. **Semantic indexer** — waits for Google connection, then drains durable search-index rows in batches of ten.
+2. **API** — serves the local session, account lifecycle, dashboard data, search, feedback, and recovery endpoints.
+3. **Gmail/classification worker** — discovers live mail, admits bounded historical work, classifies messages, and handles notification/read-state stages.
+4. **Frontend** — serves the built React application at `127.0.0.1:5173`.
 
 ```mermaid
 flowchart TB
-  Browser[React dashboard<br/>localhost:5173] -->|HttpOnly cookie + CSRF<br/>JSON| API[FastAPI<br/>localhost:8000]
-  API --> Accounts[Session and account generation guard]
-  API --> DB[(SQLite<br/>mail, feedback, tasks, outbox)]
-  API --> Model[Local classifier]
-  API --> Retrieval[Conservative feedback retrieval]
-  Worker[Single durable worker] --> Accounts
+  Browser[React dashboard<br/>127.0.0.1:5173]
+  API[FastAPI<br/>127.0.0.1:8000]
+  DB[(SQLite<br/>authoritative state)]
+  Worker[Gmail and classification worker]
+  Indexer[Isolated semantic indexer]
+  Feedback[(data/chroma_db<br/>feedback RAG)]
+  Search[(data/search_chroma_db<br/>email search)]
+  Gmail[Gmail API]
+  Models[Gemini / Groq]
+  Local[Local shadow classifier]
+  Telegram[Telegram]
+
+  Browser -->|HttpOnly session + CSRF| API
+  API --> DB
+  API --> Search
+  API --> Local
   Worker --> DB
-  Worker --> Model
-  Retrieval --> Embedded[(Embedded Chroma<br/>local Rust client only)]
-  Retrieval --> DB
-  Worker -. normal mode only .-> Gmail[Gmail]
-  Worker -. masked classification .-> Cloud[Gemini / Groq]
-  Worker -. masked urgent alert .-> Telegram[Telegram]
+  Worker --> Gmail
+  Worker --> Models
+  Worker --> Local
+  Worker --> Telegram
+  Worker --> Feedback
+  Indexer --> DB
+  Indexer --> Search
 ```
 
-The API owns browser access and account transitions. The worker owns ingestion and
-durable processing. SQLite is authoritative; Chroma is a retryable derived index.
-There is no Chroma server or remote Chroma tenant surface in the supported launcher
-or Compose stack.
+SQLite is authoritative. Both Chroma stores are local, embedded, account-scoped derived data that can be rebuilt or reconciled. Semantic indexing is isolated from the Gmail worker so ONNX or Chroma startup cannot block live inbox discovery.
 
-## Security model
+Read [Current architecture](docs/ARCHITECTURE.md) for component boundaries and failure behavior.
 
-Mail and retrieved examples are untrusted. Cloud prompts use one bounded JSON
-envelope and a separate system instruction. Provider output must be exactly one JSON
-`category` from the shared enum. RAG results are revalidated for account, current
-revision, label, finite distance and unique evidence before voting. Three relevant
-independent items and a conservative majority are required; otherwise retrieval
-abstains. These controls reduce prompt/RAG injection risk but cannot prove that a
-statistical model will interpret every adversarial message correctly.
+## Gmail intake and queue policy
 
-Chroma 1.5.9 remains because upstream has no patched release for the reviewed
-server/RBAC advisories. MailMind pins and verifies the embedded Rust backend at
-runtime, does not start a Chroma HTTP service, and publishes no Chroma port. The
-accepted IDs and boundary are recorded in `config/security-advisory-policy.json`.
-Any advisory outside that narrow policy fails `scripts.audit_dependencies`.
+MailMind deliberately separates three kinds of work:
 
-Read [SECURITY.md](SECURITY.md), the
-[security maintenance report](docs/SECURITY_MAINTENANCE_REPORT.md), and the
-[privacy/local-only policy](docs/PRIVACY_AND_LOCAL_ONLY.md) before using real mail.
+| Workflow | Purpose | User control |
+| --- | --- | --- |
+| Live sync | Discover messages arriving after the saved Gmail history cursor | **Sync new messages** forces a rate-limited live check |
+| Historical backlog | Admit older inbox mail in bounded batches | **Fetch next 100** becomes available after the current older batch finishes |
+| Semantic indexing | Build local derived search embeddings for saved mail | Runs automatically after Google is connected |
 
-## Measured model result
+Key rules:
 
-The tracked CC0 synthetic benchmark has 180 examples and 36 final-test variants.
-Base accuracy was **22/36**; personalization was **25/36**, but urgent misses rose
-from 2 to 11 and nine urgent regressions appeared. Retrieval answered only 2/36
-and did not improve the hybrid result. The candidate was rejected. These numbers do
-not establish real-inbox quality. The packaged checkpoint remains a synthetic demonstration asset.
+- At most 100 processing tasks may be active by default.
+- The first connection admits at most the first 100 older messages.
+- New live mail uses freed capacity and is processed before old backlog.
+- **Sync new messages** never authorizes another historical page.
+- **Fetch next 100** controls only older backlog.
+- The Gmail worker processes small, newest-first slices to preserve responsiveness.
+- Semantic documents are capped at 6,000 characters; the stored source email is not shortened by that search-specific limit.
+
+## Classification and feedback
+
+Normal mode uses cloud classification as the authoritative decision. Provider attempts are isolated and bounded:
+
+1. Configured Gemini primary model
+2. Configured Gemini fallback model
+3. Configured Groq model
+
+Retryable failures can advance to the next provider. Permanent failures and invalid structured output do not silently become Spam. The local model remains a three-category shadow evaluator in normal mode and may be unavailable while loading.
+
+Feedback is committed to SQLite first. The dashboard immediately uses the corrected label, while the derived feedback vector is reconciled asynchronously. A vector-store delay cannot block the user’s correction. Original predictions and revision history remain available for audit and undo.
+
+## Hybrid search
+
+Search begins approximately 300 ms after typing pauses:
+
+- One- and two-character queries use parameterized lexical search only.
+- Longer queries can combine lexical results with local semantic candidates.
+- Exact text matches remain first.
+- Search gracefully falls back to lexical results if semantic search is unavailable.
+- Search results remain account-scoped.
+- The source email remains unchanged; only the derived embedding document is bounded.
+
+The search index is stored separately from feedback retrieval:
+
+- `data/chroma_db` — feedback/RAG collection
+- `data/search_chroma_db` — saved-email semantic search collection
+
+## Account and privacy boundary
+
+The trusted local dashboard opens its loopback session automatically. There is no pairing-code step. Google OAuth is still explicit.
+
+| Action | Effect |
+| --- | --- |
+| Connect Google | Authorizes Gmail and enables account mail access and processing |
+| Switch Google account | Cancels/fences old work, completes OAuth for the new account, and loads only its data |
+| Stop processing | Ends the local session and pauses work; saved mail and credentials remain |
+| Disconnect Google | Stops Gmail access and removes the selected account’s local OAuth credential; saved local records remain |
+| Delete this account data | Removes that account’s managed mail, jobs, feedback, vectors, and credentials |
+| Delete old unassigned data | Separately removes explicit legacy/unassigned state |
+
+Restarting invalidates the active local browser session and pauses account work until the trusted dashboard opens a fresh session and Google is reconnected as required. Late operations cannot commit across an account-generation change.
+
+Read [Security policy](SECURITY.md) and [Privacy and local-only policy](docs/PRIVACY_AND_LOCAL_ONLY.md) before using real mail.
+
+## Dashboard
+
+The dashboard provides:
+
+- Account-wide saved, processed, feedback, and measured-latency KPIs
+- Live work progress and bounded-queue counts
+- Separate live-sync and historical-backlog controls
+- Worker, model, provider, and refresh health
+- Four category lanes: Important, Updates, Spam, and Review
+- Live sender/subject/body/meaning search and category filters
+- Classification details, confirmation, correction, undo, and history
+- Explicit retry/recovery controls for unfinished processing and ambiguous notifications
+- Responsive keyboard-accessible layouts and reduced-motion behavior
+
+See [User guide](docs/USER_GUIDE.md) and [Frontend guide](frontend/README.md).
 
 ## Requirements
 
-Validated targets:
+Validated native target:
 
-- x64 CPython 3.14
-- Node 22.17.1
-- CPU inference on Windows and the supplied Linux container
-- Docker Desktop/Engine with Compose for the container demo
+- Windows x64
+- CPython 3.14 virtual environment
+- Node.js 22.x
+- CPU inference
+- Ports `127.0.0.1:8000` and `127.0.0.1:5173`
 
-macOS, ARM, GPU execution, remote hosting and multiple simultaneous users are not
-claimed supported.
+The supplied Docker Compose configuration is a local-only demonstration. It currently contains API, worker, and frontend services; it does **not** contain the native supervisor’s semantic-indexer service. Do not claim complete semantic-search draining in the Compose demo until that service is added and verified.
 
-## Clean installation
+## Installation
 
-From a fresh source folder on Windows PowerShell:
+From PowerShell:
 
 ```powershell
 py -3.14 -m venv venv
-venv/Scripts/python.exe -m pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
-venv/Scripts/python.exe -m pip install -r requirements-dev.txt --index-url https://pypi.org/simple
-venv/Scripts/python.exe -m pip check
-cd frontend
+.\venv\Scripts\python.exe -m pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+.\venv\Scripts\python.exe -m pip install -r requirements-dev.txt --index-url https://pypi.org/simple
+.\venv\Scripts\python.exe -m pip check
+
+Set-Location frontend
 npm ci
 npm run build
-cd ..
+Set-Location ..
 ```
 
-On Linux use `python3.14 -m venv venv` and `venv/bin/python`. Install Torch from the
-official CPU index first so Linux does not resolve GPU support packages. Python's
-exact dependency closure is in `requirements.lock`; npm integrity data is in
-`frontend/package-lock.json`. Locks improve repeatability but are not wheel hashes
-or a substitute for recurring vulnerability review.
-
-## Safe configuration
-
-The application starts in an honest unconfigured/degraded state. Copy `.env.example`
-to `.env` only when optional providers are needed. Never commit `.env`, OAuth JSON,
-tokens, databases, exports, private mail, or model weights.
+Copy `.env.example` to `.env` only when you intentionally configure providers. Never commit `.env`, `credentials.json`, OAuth tokens, databases, logs, exports, private mail, or private model assets.
 
 For Gmail:
 
-1. Enable the Gmail API in a Google Cloud project.
-2. Configure the consent screen and your test-user access.
+1. Enable the Gmail API in Google Cloud.
+2. Configure the OAuth consent screen and test-user access.
 3. Create a **Desktop app** OAuth client.
-4. Save it as ignored root `credentials.json`.
-5. Start MailMind, pair the local browser, then choose **Connect Google**.
+4. Save its ignored JSON file as `credentials.json` in the project root.
+5. Start MailMind and choose **Connect Google**.
 
-MailMind requests Gmail modify scope. `MAILMIND_AUTO_MARK_READ` defaults to false;
-when enabled, an IMPORTANT message is marked read only after an alert is confirmed.
-Desktop loopback OAuth is not a remote/container callback design.
+Detailed setup and release instructions are in [Setup and release](docs/SETUP_AND_RELEASE.md).
 
-Optional Gemini, Groq and Telegram values are documented in `.env.example`. Normal
-mode sends the minimized payloads described in the privacy policy. Regex masking is
-best effort and can miss sensitive context.
-
-## Run the native stack
-
-Build the frontend first, then keep the supervisor terminal open:
+## Run
 
 ```powershell
-./start_all.bat
-# another terminal
-venv/Scripts/python.exe -m scripts.launch status
-./end_all.bat
+.\start_all.bat
 ```
 
-Linux:
+Open <http://127.0.0.1:5173>.
 
-```bash
-bash start_all.sh
-bash end_all.sh
-```
-
-Open `http://127.0.0.1:5173`. Copy the pairing code from `.run/api.log` into the
-page. The supervisor checks port conflicts, waits for readiness, monitors its exact
-children and uses an authenticated loopback stop endpoint. Normal shutdown drains
-API, worker and UI; a bounded fallback applies only to owned children.
-
-In normal mode, the API and dashboard become ready while the local model loads in an isolated background process. Telemetry reports `loading`; manual `/predict` calls use the configured cloud classifier during that window and automatically return to local inference when loading completes. Saved Gmail processing can proceed with the cloud primary while its local shadow model loads; the shadow is recorded as unavailable during that short window and both results are recorded once local loading completes. Local-only mode never uses this cloud fallback.
-
-The launcher serves `frontend/dist`, not Vite hot reload. During UI development run
-`npm run dev` inside `frontend/`, then rebuild before using the normal launcher.
-
-## Local-only mode and assets
-
-Local-only mode skips `.env` when the flag is set before startup and blocks Gmail,
-cloud and Telegram application routes. It still needs localhost networking. Prepare
-an explicitly synthetic classifier and cached public embedding, then package them:
+Status and privacy-safe diagnostics:
 
 ```powershell
-venv/Scripts/python.exe -m scripts.evaluate_priority --output models/new-demo --report-dir docs/evaluation/new-demo
-venv/Scripts/python.exe -m scripts.prepare_offline_assets --model models/new-demo/base --embedding-cache <cached-embedding-folder> --output models/offline-demo-v1
+.\venv\Scripts\python.exe -m scripts.launch status
+.\venv\Scripts\python.exe -m scripts.runtime_diagnostics
 ```
 
-Use a fresh output directory. Then follow `config/local-only.example.ps1`. Asset
-manifests validate presence and SHA-256 integrity, not upstream publisher identity.
-Missing/tampered assets fail closed; no cloud fallback occurs in local-only mode.
-
-## Docker demo
-
-After preparing `models/offline-demo-v1`:
+Stop only MailMind-owned services:
 
 ```powershell
-venv/Scripts/python.exe -m scripts.write_container_manifest
-docker compose up --build --wait
-# keeps the named data volume
-docker compose down
+.\venv\Scripts\python.exe -m scripts.launch stop
 ```
 
-The default stack is local-only, loopback-published, nonroot and CPU-only. It mounts
-assets read-only, persists SQLite/Chroma data in a named volume, and waits for API
-health. `.dockerignore` is an allowlist, so credentials, private data, models, Git
-history and virtual environments do not enter the build context. Adding `--volumes`
-deletes the demo volume and should be deliberate.
-
-## Synthetic interview demo
-
-```powershell
-venv/Scripts/python.exe -m scripts.demo_interview
-```
-
-This rehearses three categories, failed-provider and failed-alert recovery, feedback,
-retrieval support, account switching and disconnect. Providers and similarity are
-fake; API/storage/recovery/account boundaries are real. It is not an accuracy test.
+The supervisor refuses conflicting ports instead of terminating unrelated processes. It restarts the indexer, worker, or frontend within a bounded restart budget; an API exit or exhausted restart budget shuts down the owned service set.
 
 ## Verification
 
-Run local checks before sharing a change. GitHub automation is intentionally absent.
+Backend:
 
 ```powershell
-venv/Scripts/python.exe -m pip check
-venv/Scripts/python.exe -m tests.run_baseline --strict
-venv/Scripts/python.exe -m unittest tests.test_security_hardening -v
-venv/Scripts/python.exe -m scripts.audit_dependencies
-venv/Scripts/python.exe -m scripts.verify_local_only --model <classifier> --embedding-cache <cache>
-venv/Scripts/python.exe -m scripts.verify_launcher
-venv/Scripts/python.exe -m scripts.verify_containers
-venv/Scripts/python.exe -m scripts.check_clean_release
-cd frontend
-npm test
+.\venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Frontend:
+
+```powershell
+Set-Location frontend
+npm test -- --run
 npm run lint
 npm run build
 npm run test:browser
 ```
 
-The clean-release helper copies a private-file-free snapshot into a temporary folder,
-creates a new venv, installs the exact lock, and runs backend/frontend/browser checks.
-The launcher helper uses temporary local-only storage. The container helper creates
-an unpredictable Compose project and removes only its own containers/volume.
+At the documentation refresh on 25 September 2026:
 
-## Repository map
+- Backend discovery: 384 tests passed.
+- Frontend unit suite: 26 passed.
+- Playwright browser suite: 19 passed.
+- Frontend lint and production build passed.
 
-| Path | Purpose |
-| --- | --- |
-| `api/` | Protected local HTTP API and lifecycle |
-| `src/` | Account state, ingestion, processing, providers, model and retrieval |
-| `frontend/` | React dashboard, tests and built-asset server |
-| `scripts/` | Explicit maintenance, training, verification and launch tools |
-| `tests/` | Synthetic backend regression and security checks |
-| `fixtures/` | Public synthetic benchmark fixtures and provenance |
-| `config/` | Opt-in local-only example and reviewed advisory policy |
-| `docs/` | Phase evidence, model card, privacy, operations and security reports |
+These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
+
+See [Test guide](tests/README.md).
 
 ## Current limitations
 
-- Real independently labelled inbox evaluation is still required before model use.
-- Live Gmail/OAuth, cloud classification and Telegram delivery were not exercised by
-  the final automated security pass.
-- Masking is not anonymization, and local storage is not an encrypted vault.
-- Local-only routing is not an operating-system egress firewall.
-- Chroma server/RBAC advisories remain upstream-unpatched; only embedded use is accepted.
-- SQLite/single-worker scale is retained for one user; no hosted capacity is claimed.
-- Provider retention, quotas and account policies remain outside local control.
+- The approved personal dataset is too limited to claim production classifier quality.
+- The local shadow model is useful for evaluation and demonstration, not an accuracy guarantee.
+- Regex masking is minimization, not anonymization.
+- Local storage is not encrypted by MailMind.
+- Local-only mode is an application routing boundary, not an operating-system firewall.
+- Gmail desktop OAuth is not a remote hosted callback design.
+- The Compose demo does not yet run the semantic indexer.
+- Provider quotas, retention, and service policies remain external.
+- The supported product is one trusted local user, not a hosted multi-tenant service.
 
-## Further documentation
+## Documentation
 
-- [Frontend guide](frontend/README.md)
+- [Documentation index](docs/README.md)
+- [User guide](docs/USER_GUIDE.md)
+- [Current architecture](docs/ARCHITECTURE.md)
+- [Setup and release](docs/SETUP_AND_RELEASE.md)
 - [Security policy](SECURITY.md)
-- [Security maintenance report](docs/SECURITY_MAINTENANCE_REPORT.md)
-- [Privacy and local-only policy](docs/PRIVACY_AND_LOCAL_ONLY.md)
-- [Setup and release guide](docs/SETUP_AND_RELEASE.md)
-- [Operating policies](docs/OPERATING_POLICIES.md)
-- [Local scale decision](docs/LOCAL_SCALE_DECISION.md)
+- [Privacy and local-only](docs/PRIVACY_AND_LOCAL_ONLY.md)
+- [Security design showcase](docs/SECURITY_FEATURES_SHOWCASE.md)
+- [Frontend guide](frontend/README.md)
+- [Test guide](tests/README.md)
 
 ## License and data note
 
-The tracked priority benchmark fixture is CC0 as documented in its provenance and
-license files. No repository-wide software license is currently declared; add one
-before external distribution. Model/data/provider terms remain separate obligations.
+The tracked synthetic priority benchmark is CC0 as documented with its fixture provenance. No repository-wide software license is currently declared. Add one before external distribution, and review model, dataset, Gmail, Gemini, Groq, Telegram, and dependency terms independently.

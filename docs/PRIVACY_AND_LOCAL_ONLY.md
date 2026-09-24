@@ -1,54 +1,116 @@
 # Privacy and local-only policy
 
-## What leaves the computer
+## Summary
 
-| Destination | Why it is contacted in normal mode | Email data sent |
+MailMind is local-first, not exclusively local in normal mode. Gmail already hosts the inbox, and configured cloud providers may receive minimized, masked text for classification. Semantic search and feedback retrieval use local embedded stores.
+
+No account mail is accessed before successful Google OAuth connection. The semantic-indexer process may be running, but it waits without reading saved mail, loading embeddings, or opening the search collection until the selected account is connected.
+
+## Data destinations in normal mode
+
+| Destination | Purpose | Data involved |
 | --- | --- | --- |
-| Google Gmail | Sign in, list/read messages, optional mark-read | OAuth requests, account/message IDs and read-state changes; Google already hosts this inbox. Gmail input is not masked before local ingestion. |
-| Gemini | Primary cloud classification | Sender replaced by `[SENDER]`; masked subject/body; up to three masked retrieved precedents with category labels. |
-| Groq | Cloud fallback | The same minimized email and precedents. Keys go in authorization headers, not the prompt. |
-| Telegram | IMPORTANT alerts | Sender replaced by `[SENDER]`, masked subject and masked short body snippet. Bot/chat identifiers are necessary to deliver the alert. |
-| Public asset servers | Explicit first-time provisioning in normal mode | Public model/embedding downloads. The normal embedding function may download if its cache is missing. Do not confuse local execution with guaranteed offline availability. |
-| Local browser/API | Dashboard, pairing and predictions | Saved account data stays between the local browser and API. Pairing and CSRF checks still apply. |
+| Google Gmail | OAuth, profile, message discovery/read, optional mark-read | OAuth requests, account/message identifiers, Gmail content, and optional read-state changes |
+| Gemini | Primary and fallback classification | Sender omitted or replaced; masked and bounded subject/body; optionally bounded masked feedback examples |
+| Groq | Provider fallback | The same minimized classification payload |
+| Telegram | Optional Important alerts | Minimized masked subject and short body snippet plus delivery identifiers |
+| Local API/browser | Dashboard and controls | Account-scoped saved data over loopback |
+| Embedded Chroma | Feedback retrieval and semantic search | Local account-scoped derived text and embeddings |
 
-The app does not guarantee provider-side retention limits or deletion. Check each provider's current account settings and terms before sharing sensitive data. Local purge cannot retract previous provider requests or delivered Telegram messages. Framework/server diagnostics outside the app's logger need separate operational review.
+Provider keys are carried through configuration or authorization mechanisms, not inserted into email prompts.
 
-## Masking and safe exports
+## Masking
 
-`src/privacy.py` is the shared, best-effort policy. It masks currency amounts with `$`, `₹`, Rs/Rs., INR or USD prefixes; full email addresses; VPA/UPI-like handles; PAN-shaped IDs; phone/long numeric sequences; and HTTP/HTTPS/www links. A phone or long number uses the generic `[ACCOUNT_NUM]` placeholder. Sender names are omitted entirely from external email payloads.
+The shared privacy policy in <code>src/privacy.py</code> applies best-effort masking before supported external classification, Telegram, and export flows. It targets email addresses, payment handles, phone and long numeric identifiers, supported currency-prefixed values, PAN-shaped identifiers, and web links.
 
-Email addresses are masked before VPA handles, so a domain suffix is not left behind. Non-string/null inputs become empty text. Mask before truncating outgoing snippets and retrieved examples. The cloud prompt retains category instructions separately from untrusted data.
+Sender identity is omitted from supported outgoing email payloads.
 
-This is minimization, not anonymization. Names inside subject/body, postal addresses, short IDs, unusual currencies, encoded identifiers, attachments and contextual clues can remain. Numeric/date false positives are possible. Regex cannot guarantee sensitive information is absent or preserve classification quality. Do not upload private mail merely because a masker ran.
+Masking is minimization, not anonymization. Names inside subjects or bodies, addresses, short identifiers, attachments, unusual formats, and contextual clues can remain. Regex can also produce false positives. Review provider policies before using sensitive mail.
 
-The export CLI requires an explicit database, assigned account and fresh output path. Only labelled rows for that account are selected. Only subject, body and canonical human label are exported; subject/body are masked. Sender, account/message IDs, credentials, timestamps, histories and model metadata are omitted. Leading spreadsheet formula characters are neutralized with an apostrophe. Parent directories are created. Existing exports are never overwritten. Review exports before sharing. Exported labels do not imply independently reviewed dataset provenance.
+## Local retention
 
-## What is retained locally
+SQLite stores account-scoped source mail, ingestion cursors, predictions, feedback, processing attempts, notification state, semantic-index reconciliation, and worker/account runtime state.
 
-SQLite retains original sender, subject/body, predictions, feedback revisions, processing attempts, notifications and jobs. Chroma holds account-scoped feedback text/labels and derived embeddings. Google OAuth credentials are account-specific local files. Application events contain allowlisted codes/types rather than mail or raw exception messages. The normal application is not an encrypted vault. Local disk permissions, encryption, backups and who can access the machine remain the operator's responsibility.
+Embedded Chroma stores:
 
-There is no automatic expiry policy. Data stays until deliberately deleted. Logout ends the session and pauses work; saved mail/credentials remain. Disconnect stops Gmail access and deletes local Google credentials; mail/feedback remain. Delete-account removes that account's managed mail/histories/jobs/vectors/credentials while preserving other accounts. Failed vector deletion remains pending and retryable; the UI does not claim complete success. The selected account name can remain in local account state. Delete-legacy is a separate explicit operation for unassigned records/archives/shared old credentials. See `OPERATING_POLICIES.md` and the Phase 2 review.
+- <code>data/chroma_db</code> for feedback retrieval;
+- <code>data/search_chroma_db</code> for semantic inbox search.
 
-Google permission revocation is separate from deleting local credentials. Backups, filesystem snapshots, manual CSV exports, copied training datasets and model assets outside managed account storage are not removed by account purge. Purge is not a promise of forensic secure erasure. Do not manually delete a database while the app is using it.
+The search embedding document is capped at 6,000 characters. This does not shorten the source email stored in SQLite or the classification input.
+
+OAuth credentials are stored in account-specific local files. MailMind does not encrypt these stores at the application layer.
+
+## Retention and deletion
+
+MailMind has no automatic expiry policy.
+
+| Action | Local effect |
+| --- | --- |
+| Stop processing | Pauses work and ends the local session; mail and credentials remain |
+| Disconnect Google | Removes the selected account’s local OAuth credential; saved mail and feedback remain |
+| Delete this account data | Removes that account’s managed mail, jobs, histories, vectors, and credentials |
+| Delete old unassigned data | Separately removes explicit legacy and unassigned storage |
+
+Google-side permission revocation must be performed separately. Application deletion cannot remove backups, snapshots, manual exports, copied models or datasets, delivered Telegram messages, or earlier provider requests.
+
+## Account switching
+
+Switching accounts advances the generation fence before the new account becomes active. Old asynchronous work cannot commit into the new generation. Dashboard responses and vector candidates are rechecked against the selected account.
+
+Only one account is active in the dashboard at a time.
 
 ## Local-only contract
 
-Set `MAILMIND_LOCAL_ONLY=true` in the process environment before starting API and worker. This bypasses `.env` loading, so cloud credential files need not be read. If the flag comes only from `.env`, the file must first be read to discover it; routing still becomes local, but that does not meet a no-credential-file-read claim. Unknown flag values fail instead of quietly selecting online behavior.
+Set <code>MAILMIND_LOCAL_ONLY=true</code> in the process environment before startup for the strongest documented boundary.
 
-Local-only mode does not construct cloud email prompts, initialize cloud clients, call Gemini/Groq, run Google authentication/refresh/list/read/write operations, or deliver Telegram alerts. The API rejects Google authentication and inbox-check requests. UI controls disable those actions and telemetry labels disabled providers. The worker classifies already saved, due tasks locally for an existing active account. It does not fetch new Gmail messages.
+Local-only mode:
 
-Standalone prediction works for a paired local session even without Google connected. On a fresh offline demo profile, there is no inbox to fetch; use `/predict` after pairing. Full saved-message processing requires already assigned account records and an active, unpaused account state. Logout/disconnect still pause worker processing. This phase does not add an offline account-import or account-picker feature.
+- does not authenticate to or read Gmail;
+- does not construct or send Gemini or Groq prompts;
+- does not initialize cloud provider clients;
+- does not send Telegram alerts;
+- rejects Google and inbox actions through the API;
+- uses explicitly prepared local model and embedding assets;
+- disables cloud fallback; and
+- reports external providers as disabled.
 
-IMPORTANT messages whose alerts were not sent remain blocked for user attention; they are not falsely marked notified or silently marked read. Already sent alerts and unknown/sending states remain intact, preventing duplicate delivery after mode changes. Local-only mode never executes Gmail mark-read, even if the old setting requested it. Switching back online does not automatically recover dead/blocked tasks: inspect saved state and deliberately use the existing retry/resolution actions where appropriate.
+The UI and API still communicate over localhost. Local-only mode is an application routing boundary, not an operating-system firewall.
 
-The API/worker remain local processes and the UI still needs localhost HTTP. Removing internet access is compatible with local-only mode; shutting down localhost access is not. Fonts use locally available system fonts/fallbacks. UI code has no third-party avatar seeds or font requests; static JS/CSS/favicon are served locally. No install/build/download is guaranteed to work without internet. Do not claim a service-worker-cached app or offline OAuth.
+## Local-only saved work
 
-## Verified assets and missing-file behavior
+Local-only mode can process eligible already-saved tasks for an existing account when local runtime state permits it. It cannot fetch new Gmail mail.
 
-The asset packager copies only required files from an explicitly chosen classifier and an already cached public embedding. It downloads nothing. Its manifest records SHA-256 hashes for both roles and the default all-MiniLM-L6-v2 embedding identity. Paths must stay inside the declared asset root. Required files, integrity and classifier path are checked before local loading. The inventory proves local integrity/availability, not independent upstream authenticity.
+Important items whose alert cannot be delivered remain blocked or reviewable. They are not falsely marked notified or read.
 
-The local-model factory sets Hugging Face offline and telemetry-disable flags before framework loading. Restart processes when changing modes; these process flags are not silently undone. The local embedding adapter retains the benchmark's default model and cosine behavior but overrides download hooks to fail. Chroma anonymized telemetry is disabled in both modes. A missing or changed classifier leaves inference unavailable; missing embeddings reject retrieval/indexing and can fall back to the verified classifier. No cloud fallback occurs. Initialization/model loading may be slower because large files are hashed. Assets must be provisioned before disconnecting internet. After moving the package, rebuild a manifest/package for the new paths.
+Switching back to normal mode does not blindly repeat ambiguous external sends. Inspect the saved recovery state and use explicit recovery controls.
 
-The selected demonstration checkpoint has synthetic-only evidence and is not production validated. Phase 7's urgent personalization regressions remain unresolved; local-only mode does not fix ML quality.
+## Verified assets
 
-For underlying behavior, see [Chroma embedding documentation](https://docs.trychroma.com/docs/embeddings/embedding-functions) and [Hugging Face offline/telemetry variables](https://huggingface.co/docs/huggingface_hub/main/package_reference/environment_variables). The adapter is checked against installed Chroma; clean-machine/version compatibility remains Phase 9.
+The asset packager copies an explicitly selected classifier and cached embedding package into a new directory. Its manifest records paths and SHA-256 hashes.
+
+Verification establishes that required files exist, paths remain inside the asset root, and files match recorded hashes. It does not establish upstream authenticity, licensing, or model accuracy.
+
+Missing or modified required assets fail closed. No cloud fallback is used in local-only mode.
+
+## Exports
+
+Safe export tooling requires an explicit database, assigned account, fresh output path, and human-labelled rows.
+
+Exports omit sender, account/message identifiers, credentials, timestamps, histories, and provider metadata. Subject and body are masked, and spreadsheet formula prefixes are neutralized. Review every export before sharing.
+
+## Semantic-index privacy
+
+Semantic indexing is local derived work. It starts only after Google connection, operates on the selected account, and is fenced during account, authentication, and deletion transitions.
+
+Semantic embeddings are not sent to Gemini or Groq. Search falls back to lexical SQLite matching when the derived store is unavailable.
+
+## Operator responsibilities
+
+- Protect the workstation with OS access controls and disk encryption.
+- Keep configuration, logs, databases, and private data outside version control.
+- Review screenshots and logs before sharing.
+- Check current provider retention and account settings.
+- Revoke Google access separately when required.
+- Treat masking as exposure reduction, not a privacy guarantee.
+- Do not claim production model quality without independent evaluation.
+

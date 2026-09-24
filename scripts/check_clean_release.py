@@ -26,7 +26,7 @@ def check(report,browser=True):
         subprocess.run([sys.executable,'-m','venv',str(root/'venv')],check=True)
         python=root/'venv'/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
         env=os.environ.copy()
-        for key in ['GEMINI_API_KEY','GROQ_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','MAILMIND_ACCESS_KEY','MAILMIND_MODEL_PATH','MAILMIND_ASSET_MANIFEST','MAILMIND_RETRIEVAL_POLICY_PATH']:
+        for key in ['GEMINI_API_KEY','GROQ_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','MAILMIND_MODEL_PATH','MAILMIND_ASSET_MANIFEST','MAILMIND_RETRIEVAL_POLICY_PATH']:
             env.pop(key,None)
         env.update({'MAILMIND_LOCAL_ONLY':'false','MAILMIND_DATA_DIR':str(root/'data'),'HF_HUB_OFFLINE':'1','HF_HUB_DISABLE_TELEMETRY':'1','PIP_DISABLE_PIP_VERSION_CHECK':'1'})
         def run(name,command,cwd=root,timeout=600):

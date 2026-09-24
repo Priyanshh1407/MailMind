@@ -30,6 +30,22 @@ class ServiceTests(unittest.TestCase):
             self.assertIsNone(email_client.authenticate_gmail())
         self.assertNotIn('synthetic-secret',' '.join(captured.output))
 
+    def test_oauth_completion_page_attempts_to_close_its_tab(self):
+        from src.email_client import _ClosingOAuthCallback
+        callback=_ClosingOAuthCallback();response={}
+        environ={'wsgi.url_scheme':'http','SERVER_NAME':'127.0.0.1','SERVER_PORT':'12345',
+                 'REQUEST_METHOD':'GET','SCRIPT_NAME':'','PATH_INFO':'/','QUERY_STRING':'code=synthetic',
+                 'SERVER_PROTOCOL':'HTTP/1.1','HTTP_HOST':'127.0.0.1:12345'}
+        body=b''.join(callback(environ,lambda status,headers:response.update(status=status,headers=dict(headers))))
+        self.assertEqual(response['status'],'200 OK')
+        self.assertEqual(response['headers']['Content-Type'],'text/html; charset=utf-8')
+        self.assertEqual(response['headers']['Cache-Control'],'no-store')
+        self.assertIn(b'window.close()',body)
+        self.assertIn(b'window.location.replace(target)',body)
+        self.assertIn(b'http://127.0.0.1:5173/',body)
+        self.assertEqual(response['headers']['Referrer-Policy'],'no-referrer')
+        self.assertEqual(callback.last_request_uri,'http://127.0.0.1:12345/?code=synthetic')
+
     def test_imports_need_no_provider_key_model_or_vector_dependency(self):
         code = '''
 import sys, importlib.abc, importlib, pathlib, os, socket
@@ -96,10 +112,10 @@ class ApiTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='mailmind-api-')
         self.addCleanup(self.temp.cleanup)
-        self.settings=Settings(data_dir=Path(self.temp.name),model_path=Path(self.temp.name)/'model',access_key='synthetic-test-pairing-code')
+        self.settings=Settings(data_dir=Path(self.temp.name),model_path=Path(self.temp.name)/'model')
 
     def connect(self, client, application):
-        result=client.post('/session',json={'code':self.settings.access_key},headers={'Origin':'http://localhost:5173'})
+        result=client.post('/session',headers={'Origin':'http://localhost:5173'})
         client.headers.update({'Origin':'http://localhost:5173','X-CSRF-Token':result.json()['csrf_token']})
         manager=application.state.accounts
         context,_=manager.session(client.cookies.get('mailmind_session'))
@@ -124,6 +140,20 @@ class ApiTests(unittest.TestCase):
         model_factory.assert_called_once()
         vector_factory.assert_not_called()
         self.assertIsNone(application.state.model)
+
+    def test_normal_mode_api_loads_the_three_class_shadow_checkpoint(self):
+        from fastapi.testclient import TestClient
+        from api.app import create_app
+        settings=Settings(data_dir=Path(self.temp.name),
+                          model_path=Path(self.temp.name)/'legacy-binary',
+                          shadow_model_path=Path(self.temp.name)/'three-class-shadow')
+        model=Mock(model_loaded=True,model_version='synthetic-three-class',
+                   training_scope='private_user_approved_inbox',load_reason='ready')
+        with patch('api.app.DeferredMailMindModel',return_value=model) as factory:
+            application=create_app(settings=settings)
+            with TestClient(application,base_url='http://localhost'):
+                factory.assert_called_once_with(model_path=settings.shadow_model_path,
+                                                settings=settings)
 
     def test_request_failures_are_generic_and_redacted(self):
         from fastapi.testclient import TestClient

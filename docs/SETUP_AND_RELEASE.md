@@ -1,135 +1,200 @@
-# Setup, assets and release guide
+# Setup and release guide
 
-## Installation and ownership
+## Supported environment
 
-Use the README's x64 Python 3.14 CPU and Node 22.17.1 steps. The dependency lock
-is an exact version closure, not a wheel-hash lock or guarantee of byte-identical
-builds. CPU wheels differ by OS. Public images/action major tags can change within
-their version; package updates must be followed by release checks. Do not silently
-install unrelated packages from an old pip freeze.
+The current native target is Windows x64, CPython 3.14, Node.js 22.x, CPU inference, and one trusted local user. The API and dashboard use loopback ports 8000 and 5173.
 
-The supervisor starts from the project root, checks ports 8000/5173, writes a
-private state/control token under `.run`, starts API, waits for readiness, then
-starts worker and built UI. It retains Popen objects for those exact children.
-Stop validates supervisor PID creation time, cwd and module identity, authenticates
-its control request, and drains owned services over stdin. A reused PID is never
-signalled; stale state alone can be removed. An unresponsive owned child gets a
-reported forced fallback after the grace deadline. Persisted ambiguous notification
-state still requires careful recovery. Abrupt supervisor exit closes stdin pipes;
-service wrappers stop on EOF. Do not edit launcher state to manage other processes.
+Linux is used by the local-only container demonstration. Remote hosting, macOS, ARM, GPU execution, and concurrent multi-user deployment are not validated.
 
-The API does not need the standalone `setup_db` command first; its lifespan
-initializes/migrates the database. Directory creation already happens in schema,
-export, dataset conversion and asset/report scripts. Synthetic checks use temporary
-databases. Your real `.env`, Google JSON, tokens and existing databases/models
-were not used for release validation.
+## Clean installation
 
-## Google and optional providers
+From the project root in PowerShell:
 
-Gmail is a desktop flow. Follow [Google's quickstart](https://developers.google.com/workspace/gmail/api/quickstart/python)
-for an enabled API, consent screen and Desktop OAuth JSON. Put it in ignored
-root `credentials.json`. Do not put provider keys in frontend source. Leave optional
-Gemini/Groq/Telegram variables empty to show unconfigured state. Missing cloud
-classification does not silently consume mail. Gmail modify permission is requested;
-auto-mark-read remains opt-in and alerts must succeed first in normal mode.
+~~~powershell
+py -3.14 -m venv venv
+.\venv\Scripts\python.exe -m pip install --upgrade pip
+.\venv\Scripts\python.exe -m pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+.\venv\Scripts\python.exe -m pip install -r requirements-dev.txt --index-url https://pypi.org/simple
+.\venv\Scripts\python.exe -m pip check
 
-Native desktop sign-in is not a remote-server/container callback design. The
-Docker demo disables Google/cloud/Telegram instead of suggesting hosted OAuth
-works. Google consent restrictions and provider account access must be checked
-for a real demonstration by the developer, not through a synthetic test.
+Set-Location frontend
+npm ci
+npm run build
+Set-Location ..
+~~~
 
-## Model acquisition and release strategy
+<code>requirements.lock</code> records the exact Python dependency closure. <code>frontend/package-lock.json</code> records npm integrity metadata. These improve repeatability but do not replace recurring vulnerability review.
 
-There is no trustworthy public MailMind production checkpoint to download in this
-repository. The old private checkpoints remain local/ignored. Do not publish
-personalization weights trained on private mail just because raw examples are absent;
-models can still retain sensitive information.
+## Configuration
 
-Tracked acquisition is **rebuild from the original CC0 synthetic fixture**:
+Copy the example only when needed:
 
-```powershell
-venv/Scripts/python.exe -m scripts.evaluate_priority --output models/new-demo --report-dir docs/evaluation/new-demo
-```
+~~~powershell
+Copy-Item .env.example .env
+~~~
 
-This trains new explicitly three-category tiny models, not the original pretrained
-weights. The scope stays synthetic-only. Model versions, split manifests, predictions,
-metrics, training histories and safetensors hashes are recorded. Base/personal
-quality is insufficient for promotion, particularly urgent regressions. Existing
-outputs are not overwritten. For a future approved release, publish a model card,
-verified source/license, independent evaluation, mappings, immutable version and
-weight checksum; require explicit selection. No future production download is
-invented here.
+Never commit environment files, OAuth JSON, tokens, databases, launcher logs, exports, private mail, or private model checkpoints.
 
-The default runtime path remains the old `models/MailMind-Final`; missing or binary
-checkpoints show unavailable/abstain. Rebuilding a demo does not change that path.
-The local-only example explicitly selects a separate synthetic base model and data
-folder. It is an opt-in demonstration, not default promotion.
+### Core settings
 
-## Embedding provisioning and packaging
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| <code>MAILMIND_LOCAL_ONLY</code> | <code>false</code> | Disable Gmail, cloud providers, and Telegram routing |
+| <code>MAILMIND_AUTO_MARK_READ</code> | <code>false</code> | Opt in to the durable mark-read stage |
+| <code>MAILMIND_POLL_INTERVAL_SECONDS</code> | <code>5</code> | Worker interval; values below five are rejected |
+| <code>MAILMIND_MAX_PENDING_TASKS</code> | <code>100</code> | Maximum active queued, running, and retry tasks |
+| <code>MAILMIND_RESUME_PENDING_TASKS</code> | <code>50</code> | Lower threshold used by bounded intake |
+| <code>MAILMIND_MODEL_PATH</code> | optional | Explicit local classifier path |
+| <code>MAILMIND_SHADOW_MODEL_PATH</code> | optional | Normal-mode three-class shadow checkpoint |
+| <code>MAILMIND_ASSET_MANIFEST</code> | optional | Verified local-only asset manifest |
 
-If Chroma's default public cache is missing, provision it deliberately while online
-with synthetic text only:
+Provider variables are listed in <code>.env.example</code>. Never place provider keys in frontend source or documentation.
 
-```powershell
-venv/Scripts/python.exe -c "from chromadb.utils.embedding_functions import DefaultEmbeddingFunction; DefaultEmbeddingFunction()(['Public synthetic asset check'])"
-```
+## Google OAuth
 
-Normal Chroma embedding behavior can download public assets; see its
-[documentation](https://docs.trychroma.com/docs/embeddings/embedding-functions).
-Do not run this as an offline availability test. The local-only adapter disables
-downloads and requires a verified cache instead.
+1. Create or select a Google Cloud project.
+2. Enable the Gmail API.
+3. Configure the OAuth consent screen.
+4. Add the intended account as a test user when required.
+5. Create a **Desktop app** OAuth client.
+6. Save the downloaded JSON as ignored root <code>credentials.json</code>.
+7. Start MailMind and choose **Connect Google**.
 
-Choose a fresh package destination:
+MailMind requests Gmail modify scope because optional read-state changes are supported. Automatic mark-as-read still defaults to off.
 
-```powershell
-venv/Scripts/python.exe -m scripts.prepare_offline_assets --model models/new-demo/base --embedding-cache "$env:USERPROFILE/.cache/chroma/onnx_models/all-MiniLM-L6-v2/onnx" --output models/offline-demo-v1
-venv/Scripts/python.exe -m scripts.write_container_manifest
-```
+The OAuth flow is designed for an interactive local desktop. It is not a hosted callback architecture.
 
-On Linux the public cache is normally under `~/.cache/chroma/onnx_models/all-MiniLM-L6-v2/onnx`;
-pass it explicitly. A package has classifier/embedding folders, required files
-and SHA-256 manifest entries. The native manifest records absolute local paths;
-rebuild it after relocation. `manifest.container.json` verifies those same files
-then rewrites roots to `/app/models/classifier` and `/app/models/embedding` for the
-fixed read-only mount. Models are ignored by Git and excluded from image build
-context. The package inventory proves local integrity, not independent authenticity.
+## Frontend build
 
-## Docker and persistence
+The native launcher serves <code>frontend/dist</code>, not Vite hot reload.
 
-The Dockerfile has a CPU Python backend and a Node build/runtime UI. Backend
-UID/GID 10001 owns its data directory; UI uses node. Compose mounts a named demo
-volume and read-only assets, enables init, waits on healthy API and uses loopback
-host ports. See [Docker's dependency/health documentation](https://docs.docker.com/compose/how-tos/startup-order/).
-`docker compose down` retains data. Removing volumes is an explicit data deletion,
-not a normal shutdown. Build context is allowlisted; private project files, user
-models and venvs cannot enter it through the configured COPY operations.
+After frontend changes:
 
-Local-only is an application routing boundary, not an OS firewall. Containers
-need internal/loopback networking for readiness and the browser. Worker on a fresh
-demo volume is paused; a local prediction requires pairing but not Google. No
-inbox-import feature is claimed. Native `/predict`/worker checks and the synthetic
-engineering rehearsal are separate from production ML validation.
+~~~powershell
+Set-Location frontend
+npm test -- --run
+npm run lint
+npm run build
+Set-Location ..
+~~~
 
-## Release checks and evidence
+For development only:
 
-Read `docs/SECURITY_MAINTENANCE_REPORT.md` for the latest launcher, container, clean-environment, dependency, and security results. The clean helper copies allowed source roots
-from the current working tree, excludes private roots, installs a fresh venv and
-locked frontend, and runs checks.
+~~~powershell
+Set-Location frontend
+npm run dev
+~~~
 
-The launcher smoke refuses occupied ports and uses temporary local-only data.
-The container smoke uses an unpredictable unique Compose project, checks nonroot
-UID, actual model inference, blocked external routes and saved mail after API restart and required browser re-pairing, then cleans only its synthetic project resources. Do not substitute
-those helpers for a live Gmail or notification test.
+## Native startup
 
-GitHub CI was removed at the developer's request. Run the README's local
-verification commands before sharing changes. No hosted checks, push, deployment
-or live messaging were performed.
+~~~powershell
+.\start_all.bat
+~~~
 
-## Interview presentation
+Equivalent direct command:
 
-Start with `python -m scripts.demo_interview`. Explain that provider replies and
-similarity are mocked while APIs, revisions, recovery and account guards are real.
-Show failures before recovery, retained history, three current corrections and
-account separation. Then present the measured negative promotion decision in the root README. Describe what you measured instead of promising that feedback
-always improves a user's inbox. Explain the tradeoff between local-only privacy,
-missing assets and inability to fetch Gmail or deliver alerts offline.
+~~~powershell
+.\venv\Scripts\python.exe -m scripts.launch start
+~~~
+
+The supervisor starts the semantic indexer, API, Gmail/classification worker, and built frontend. The indexer readiness marker means the process is ready to wait; it does not mean mail has been accessed. Mail and embedding initialization begin only after Google connection.
+
+## Status and diagnostics
+
+~~~powershell
+.\venv\Scripts\python.exe -m scripts.launch status
+.\venv\Scripts\python.exe -m scripts.runtime_diagnostics
+~~~
+
+Diagnostics report counts, timestamps, safe status codes, configuration presence, schema version, and semantic-index progress. They do not print Gmail content, account identifiers, OAuth tokens, or provider keys.
+
+Owned logs are stored under <code>.run</code>:
+
+- <code>indexer.log</code>
+- <code>api.log</code>
+- <code>worker.log</code>
+- <code>frontend.log</code>
+
+## Stop
+
+~~~powershell
+.\venv\Scripts\python.exe -m scripts.launch stop
+~~~
+
+The authenticated loopback stop request applies only to the recorded supervisor and its exact owned children. The supervisor never searches for arbitrary processes by executable name or port.
+
+## Restart behavior
+
+The supervisor can restart the indexer, worker, or frontend at most three times inside a 60-second window. An API exit or exhausted restart budget shuts down the owned service set.
+
+Graceful shutdown uses child stdin. A bounded terminate/kill fallback applies only to the exact owned child objects.
+
+## Local-only preparation
+
+Local-only mode requires pre-provisioned classifier and embedding assets.
+
+~~~powershell
+.\venv\Scripts\python.exe -m scripts.prepare_offline_assets --model <classifier-directory> --embedding-cache <cached-embedding-directory> --output models/offline-demo-v1
+~~~
+
+Set local-only mode in the process environment before startup for the strongest documented boundary. Verified manifests check presence and SHA-256 integrity; they do not establish publisher identity, licensing, or model quality.
+
+## Docker Compose demonstration
+
+The current Compose stack is local-only and loopback-published:
+
+~~~powershell
+.\venv\Scripts\python.exe -m scripts.write_container_manifest
+docker compose up --build --wait
+docker compose down
+~~~
+
+It runs API, worker, and frontend services. It does not currently run the native semantic-indexer service, so semantic-search indexing parity with the native runtime is not claimed.
+
+The stack is CPU-only, nonroot, and persists data in a named volume. Running <code>docker compose down --volumes</code> deletes that demo volume and must be deliberate.
+
+## Verification
+
+Backend:
+
+~~~powershell
+.\venv\Scripts\python.exe -m unittest discover -s tests -v
+.\venv\Scripts\python.exe -m scripts.audit_dependencies
+~~~
+
+Frontend:
+
+~~~powershell
+Set-Location frontend
+npm test -- --run
+npm run lint
+npm run build
+npm run test:browser
+Set-Location ..
+~~~
+
+Integration helpers:
+
+~~~powershell
+.\venv\Scripts\python.exe -m scripts.verify_launcher
+.\venv\Scripts\python.exe -m scripts.verify_local_only --model <classifier> --embedding-cache <cache>
+.\venv\Scripts\python.exe -m scripts.verify_containers
+.\venv\Scripts\python.exe -m scripts.check_clean_release
+~~~
+
+At the 25 September 2026 documentation refresh, all 384 backend tests, 26 frontend unit tests, 19 browser scenarios, frontend lint, and the production build passed.
+
+## Release checklist
+
+- [ ] Resolve every unexpected test failure.
+- [ ] Run <code>pip check</code>.
+- [ ] Run the complete backend suite.
+- [ ] Run frontend unit, lint, build, and browser suites.
+- [ ] Run dependency and clean-release checks.
+- [ ] Confirm secrets, private data, logs, databases, and model assets remain excluded.
+- [ ] Use only synthetic screenshots and demonstrations.
+- [ ] Confirm the launcher starts four native services and stops only its owned set.
+- [ ] Confirm semantic indexing waits for Google connection.
+- [ ] Confirm account switching cannot expose the previous account.
+- [ ] Keep current limitations visible in public documentation.
+- [ ] Do not claim live-provider reliability or production model accuracy without deliberate evidence.

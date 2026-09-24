@@ -23,12 +23,12 @@ def verify(model_path,report_dir,dataset):
     examples=sorted(rows,key=lambda row:row['id'])
     expected={row['id']:row['personalized_local'] for row in json.loads((Path(report_dir)/'test_predictions.json').read_text(encoding='utf-8'))}
     with tempfile.TemporaryDirectory(prefix='mailmind-model-smoke-') as temp:
-        settings=Settings(data_dir=Path(temp),model_path=Path(model_path),access_key='synthetic-phase7-smoke-pairing')
+        settings=Settings(data_dir=Path(temp),model_path=Path(model_path))
         collection=FakeCollection()
         app=create_app(settings=settings,model_factory=lambda model_path,**kwargs:MailMindModel(model_path,vector_service=NoRetrieval()),vector_factory=lambda path:collection)
         with TestClient(app,base_url='http://localhost') as client:
             client.headers['Origin']='http://localhost:5173'
-            response=client.post('/session',json={'code':settings.access_key})
+            response=client.post('/session')
             client.headers['X-CSRF-Token']=response.json()['csrf_token']
             context,_=app.state.accounts.session(client.cookies.get('mailmind_session'))
             app.state.accounts.finish_auth(app.state.accounts.begin_auth(context),('synthetic-smoke@example.test','{}'))

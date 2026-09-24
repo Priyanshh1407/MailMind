@@ -19,7 +19,7 @@ def verify_workspace(model_path,embedding_cache,report_path,workspace):
     torch.set_num_threads(2)
     if True:
         root=Path(workspace);manifest=prepare(model_path,embedding_cache,root/'assets')
-        settings=Settings(data_dir=root/'data',model_path=root/'assets/classifier',asset_manifest_path=manifest,local_only=True,access_key='synthetic-offline-pairing-code')
+        settings=Settings(data_dir=root/'data',model_path=root/'assets/classifier',asset_manifest_path=manifest,local_only=True)
         def forbidden(*args,**kwargs):raise AssertionError('External networking forbidden in offline verification')
         original_connect=socket.socket.connect;original_connect_ex=socket.socket.connect_ex
         def local_connect(sock,address):
@@ -35,7 +35,7 @@ def verify_workspace(model_path,embedding_cache,report_path,workspace):
             app=create_app(settings=settings)
             with TestClient(app,base_url='http://localhost') as client:
                 client.headers['Origin']='http://localhost:5173'
-                paired=client.post('/session',json={'code':settings.access_key});client.headers['X-CSRF-Token']=paired.json()['csrf_token']
+                session=client.post('/session');client.headers['X-CSRF-Token']=session.json()['csrf_token']
                 prediction=client.post('/predict',json={'subject':'Synthetic receipt','body':'Payment was received. No response is required.'})
                 if prediction.status_code!=200 or prediction.json().get('category') not in LABEL2ID:raise ValueError('Actual classifier not available offline')
                 manager=app.state.accounts;context,_=manager.session(client.cookies.get('mailmind_session'))

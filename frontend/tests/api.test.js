@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApi, validateResponse } from '../src/api.js';
 
-test('private requests include cookies and mutation CSRF, without saving a pairing code', async () => {
+test('private requests include the loopback cookie and mutation CSRF', async () => {
   const calls = [];
   const api = createApi('http://localhost:8000', async (...args) => {
     calls.push(args);
@@ -35,4 +35,26 @@ test('telemetry accepts disabled local providers only with a consistent boolean 
   assert.throws(()=>validateResponse('/telemetry','GET',{...data,mode:{local_only:'true'}}));
   assert.throws(()=>validateResponse('/telemetry','GET',{...data,mode:{local_only:false}}));
   assert.throws(()=>validateResponse('/telemetry','GET',{...data,providers:{gemini:'configured_unverified',groq:'disabled_local_only'}}));
+});
+
+test('status validates live and backlog intake controls',()=>{
+  const data={account_id:'synthetic@example.test',generation:1,connected:true,is_polling:false,
+    auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,
+    fetch_next_available:true,live_monitoring:true,active_pending_tasks:7,live_pending_tasks:2,
+    backlog_pending_tasks:5,max_pending_tasks:100,resume_pending_tasks:50,
+    current_batch_target_tasks:100,current_batch_admitted_tasks:20,
+    workflow_total_tasks:20,workflow_finished_tasks:13,
+    processing_counts:{queued:7},notification_counts:{},ingestion_failures:[],
+    semantic_search_index:{pending:2,indexed:18,failed:0}};
+  assert.doesNotThrow(()=>validateResponse('/status','GET',data));
+  assert.throws(()=>validateResponse('/status','GET',{...data,live_pending_tasks:-1}));
+  assert.throws(()=>validateResponse('/status','GET',{...data,fetch_next_available:'yes'}));
+});
+
+test('new inbox mutations require durable job acknowledgements',()=>{
+  const result={job_id:4,status:'queued',message:'Queued.'};
+  for(const route of ['/inbox/sync','/ingestion/fetch-next']) {
+    assert.doesNotThrow(()=>validateResponse(route,'POST',result));
+    assert.throws(()=>validateResponse(route,'POST',{message:'Queued.'}));
+  }
 });

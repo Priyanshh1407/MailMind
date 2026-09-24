@@ -27,7 +27,7 @@ class FakeCollection:
         self.fail_delete = False
         self.queries = []
 
-    def upsert(self, ids, documents, metadatas):
+    def upsert(self, ids, documents, metadatas, embeddings=None):
         for key, doc, meta in zip(ids, documents, metadatas):
             self.rows[key] = (doc, meta)
 
@@ -51,7 +51,7 @@ class SecurityTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='mailmind-phase2-')
         self.addCleanup(self.temp.cleanup)
-        self.settings = Settings(data_dir=Path(self.temp.name), access_key='synthetic-pairing-code-for-tests')
+        self.settings = Settings(data_dir=Path(self.temp.name))
         self.collection = FakeCollection()
         self.model = Mock(model_loaded=True)
         self.model.predict.return_value = Prediction(category='IMPORTANT',outcome='CLASSIFIED')
@@ -63,16 +63,16 @@ class SecurityTests(unittest.TestCase):
         self.addCleanup(self.client.__exit__, None, None, None)
         self.manager = self.app.state.accounts
 
-    def pair(self, client=None):
+    def open_session(self, client=None):
         client = client or self.client
-        response = client.post('/session', json={'code':self.settings.access_key}, headers={'Origin':ORIGIN})
+        response = client.post('/session', headers={'Origin':ORIGIN})
         self.assertEqual(response.status_code,200)
         client.headers.update({'Origin':ORIGIN,'X-CSRF-Token':response.json()['csrf_token']})
         return response
 
     def connect(self, account=A):
         if not self.client.cookies.get('mailmind_session'):
-            self.pair()
+            self.open_session()
         self.oauth.return_value = (account,'{}')
         response=self.client.post('/authenticate')
         self.assertEqual(response.status_code,202)
@@ -95,8 +95,8 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(self.client.get('/').status_code,200)
         self.oauth.assert_not_called()
 
-    def test_pairing_cookie_flags_and_no_raw_token_in_database(self):
-        response=self.pair()
+    def test_loopback_session_cookie_flags_and_no_raw_token_in_database(self):
+        response=self.open_session()
         cookie=response.headers['set-cookie'].lower()
         self.assertIn('httponly',cookie)
         self.assertIn('samesite=strict',cookie)
@@ -105,10 +105,10 @@ class SecurityTests(unittest.TestCase):
             self.assertNotEqual(conn.execute('SELECT token_hash FROM local_sessions').fetchone()[0],token)
         self.assertEqual(self.client.get('/session').headers['cache-control'],'no-store')
 
-    def test_bad_pairing_code_is_rate_limited(self):
-        for _ in range(10):
-            self.assertEqual(self.client.post('/session',json={'code':'wrong'},headers={'Origin':ORIGIN}).status_code,401)
-        self.assertEqual(self.client.post('/session',json={'code':'wrong'},headers={'Origin':ORIGIN}).status_code,429)
+    def test_local_session_can_only_open_from_the_dashboard_origin(self):
+        self.assertEqual(self.client.post('/session').status_code,403)
+        self.assertEqual(self.client.post('/session',headers={'Origin':'http://evil.example'}).status_code,403)
+        self.assertEqual(self.client.post('/session',headers={'Origin':ORIGIN}).status_code,200)
 
     def test_origin_csrf_and_host_are_checked(self):
         self.connect()
@@ -121,7 +121,7 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.headers['access-control-allow-origin'],ORIGIN)
 
     def test_expired_session_is_rejected(self):
-        self.pair()
+        self.open_session()
         with connection(self.settings.db_path) as conn:
             conn.execute('UPDATE local_sessions SET expires_at=0')
         self.assertEqual(self.client.get('/session').status_code,401)
@@ -158,7 +158,7 @@ class SecurityTests(unittest.TestCase):
 
     def test_switch_account_invalidates_old_context_and_other_browser(self):
         old=self.connect(A)
-        token,csrf=self.manager.pair()
+        token,csrf=self.manager.open_session()
         self.seed(A)
         self.seed(B)
         self.connect(B)
@@ -183,7 +183,7 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(self.client.get('/emails').status_code,401)
 
     def test_late_oauth_cannot_save_after_logout(self):
-        self.pair()
+        self.open_session()
         context,_=self.manager.session(self.client.cookies.get('mailmind_session'))
         attempt=self.manager.begin_auth(context)
         self.assertEqual(self.client.post('/logout').status_code,200)
@@ -252,11 +252,19 @@ class SecurityTests(unittest.TestCase):
         self.connect()
         token=self.client.cookies.get('mailmind_session')
         self.seed(A)
+        with connection(self.settings.db_path) as conn:
+            conn.execute("INSERT INTO worker_health(account_id,last_error_at,last_error_code) VALUES (?,?,?) ON CONFLICT(account_id) DO UPDATE SET last_error_at=excluded.last_error_at,last_error_code=excluded.last_error_code",(A,'2026-01-01T00:00:00Z','gmail_unavailable'))
+            conn.execute("UPDATE runtime_state SET last_error_at=?,last_error_code=?",('2026-01-01T00:00:00Z','gmail_unavailable'))
         self.manager.restart()
         with self.assertRaises(AccessDenied):
             self.manager.session(token)
         self.assertIsNone(self.manager.worker_context())
         self.assertIsNotNone(get_email('same',account_id=A,db_path=self.settings.db_path))
+        with connection(self.settings.db_path) as conn:
+            health=conn.execute('SELECT last_error_at,last_error_code FROM worker_health WHERE account_id=?',(A,)).fetchone()
+            runtime=conn.execute('SELECT last_error_at,last_error_code FROM runtime_state').fetchone()
+        self.assertEqual((health['last_error_at'],health['last_error_code']),(None,None))
+        self.assertEqual((runtime['last_error_at'],runtime['last_error_code']),(None,None))
 
     def test_side_effect_lock_coordinates_independent_manager_instances(self):
         context=self.connect()
@@ -309,6 +317,18 @@ class SecurityTests(unittest.TestCase):
             self.assertIsNone(email_client.refresh_gmail(self.manager,context))
         interactive.assert_not_called()
         self.assertEqual(path.read_text(),original)
+
+    def test_credential_refresh_is_bounded_before_gmail_profile_access(self):
+        from src import email_client
+        context=self.connect()
+        creds=Mock(valid=False,expired=True,refresh_token='synthetic')
+        with patch.object(email_client.Credentials,'from_authorized_user_file',return_value=creds), \
+             patch.object(email_client.GMAIL_CREDENTIAL_CALLS,'run',side_effect=TimeoutError) as bounded, \
+             patch.object(email_client,'build_gmail') as build, self.assertLogs('mailmind',level='ERROR'):
+            self.assertIsNone(email_client.refresh_gmail(self.manager,context))
+        bounded.assert_called_once()
+        self.assertEqual(bounded.call_args.args[1],self.settings.provider_timeout_seconds)
+        build.assert_not_called()
 
     def test_logout_between_worker_steps_blocks_all_later_effects(self):
         from src import main
@@ -383,12 +403,13 @@ class SecurityTests(unittest.TestCase):
         from src import email_client
         service=Mock()
         service.users.return_value.getProfile.return_value.execute.return_value={'emailAddress':A}
-        flow=Mock()
-        flow.run_local_server.return_value.to_json.return_value='{}'
-        with patch.object(email_client.InstalledAppFlow,'from_client_secrets_file',return_value=flow), \
-             patch.object(email_client,'build',return_value=service):
-            self.assertEqual(email_client.authenticate_gmail(),(A,'{}'))
-        self.assertEqual(flow.run_local_server.call_args.kwargs['prompt'],'select_account')
+        flow=Mock();credentials=Mock()
+        credentials.to_json.return_value='{}'
+        with patch.object(email_client.InstalledAppFlow,'from_client_secrets_file',return_value=flow):
+            with patch.object(email_client,'_run_oauth_with_closing_tab',return_value=credentials) as oauth:
+                with patch.object(email_client,'build',return_value=service):
+                    self.assertEqual(email_client.authenticate_gmail(),(A,'{}'))
+        oauth.assert_called_once_with(flow)
         self.assertFalse(self.manager.credential_path(A).exists())
         self.assertFalse((self.settings.data_dir/'user_profile.json').exists())
 
@@ -403,7 +424,7 @@ class SecurityTests(unittest.TestCase):
         self.assertTrue(self.client.get('/session').json()['purge_pending'])
 
     def test_request_bounds_and_unicode_wrong_code(self):
-        self.assertEqual(self.client.post('/session',json={'code':'wrong-☃'},headers={'Origin':ORIGIN}).status_code,401)
+        self.assertEqual(self.client.post('/session').status_code,403)
         self.connect()
         self.assertEqual(self.client.get('/emails?limit=0').status_code,422)
         self.assertEqual(self.client.get('/emails?limit=201').status_code,422)

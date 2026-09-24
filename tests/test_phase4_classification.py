@@ -25,6 +25,8 @@ A = 'phase4@example.test'
 
 class ClassificationTests(unittest.TestCase):
     def setUp(self):
+        with llm_api._model_cooldown_lock:
+            llm_api._model_cooldowns.clear()
         self.addCleanup(patch.stopall)
         patch.object(socket,'create_connection',side_effect=AssertionError('Network forbidden')).start()
         patch.object(socket,'getaddrinfo',side_effect=AssertionError('DNS forbidden')).start()
@@ -203,6 +205,16 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(result.model_version,'gemini-3.5-flash-lite')
         self.assertEqual(result.category,'UPDATES')
 
+    def test_stuck_primary_pool_does_not_block_gemini_fallback(self):
+        client=Mock()
+        client.models.generate_content.return_value.text=json.dumps({'category':'UPDATES'})
+        with patch.object(llm_api,'get_client',return_value=client), \
+             patch.object(llm_api.GEMINI_CALLS[0],'run',side_effect=TimeoutError('synthetic stuck primary')):
+            result=llm_api.classify_email('s','s','b')
+        self.assertEqual((result.category,result.model_version),('UPDATES','gemini-3.5-flash-lite'))
+        config=client.models.generate_content.call_args.kwargs['config']
+        self.assertEqual(config['thinking_config'],{'thinking_level':'low'})
+
     def test_groq_fallback_uses_current_configured_model(self):
         quota=RuntimeError('quota')
         quota.code=429
@@ -293,9 +305,11 @@ class ClassificationTests(unittest.TestCase):
 
 class FeedbackTests(unittest.TestCase):
     def setUp(self):
+        with llm_api._model_cooldown_lock:
+            llm_api._model_cooldowns.clear()
         self.temp=tempfile.TemporaryDirectory(prefix='mailmind-phase4-')
         self.addCleanup(self.temp.cleanup)
-        self.settings=Settings(data_dir=Path(self.temp.name),access_key='synthetic-phase4-pairing-key')
+        self.settings=Settings(data_dir=Path(self.temp.name))
         self.collection=FakeCollection()
         self.model=Mock(model_loaded=False)
         self.model.predict.return_value=Prediction(reason='missing_checkpoint')
@@ -305,7 +319,7 @@ class FeedbackTests(unittest.TestCase):
         self.client.__enter__()
         self.addCleanup(self.client.__exit__,None,None,None)
         self.client.headers['Origin']='http://localhost:5173'
-        csrf=self.client.post('/session',json={'code':self.settings.access_key}).json()['csrf_token']
+        csrf=self.client.post('/session').json()['csrf_token']
         self.client.headers['X-CSRF-Token']=csrf
         self.manager=self.app.state.accounts
         context,_=self.manager.session(self.client.cookies.get('mailmind_session'))
@@ -420,6 +434,14 @@ class FeedbackTests(unittest.TestCase):
             main._run_agent(settings=self.settings,manager=self.manager,model=self.model,collection=self.collection)
         self.assertEqual(self.client.get('/status').json()['feedback_index_pending'],0)
 
+    def test_stuck_feedback_reconciliation_does_not_block_inbox_check(self):
+        service=mailbox(0)
+        with patch.object(main._FEEDBACK_RECONCILIATION_CALLS,'run',side_effect=TimeoutError('synthetic timeout')), \
+             patch.object(main,'refresh_gmail',return_value=service) as refresh:
+            result=main._run_agent(settings=self.settings,manager=self.manager,model=self.model,collection=self.collection)
+        refresh.assert_called_once()
+        self.assertEqual(result['status'],'empty')
+
     def test_worker_failure_records_metadata_without_reading_or_alerting(self):
         service=mailbox(1)
         with patch.object(main,'refresh_gmail',return_value=service),patch.object(main,'classify_email',return_value=Prediction(outcome='ERROR',source='gemini',reason='invalid_provider_output')),patch.object(main,'send_telegram_alert') as alert:
@@ -442,7 +464,7 @@ class FeedbackTests(unittest.TestCase):
         initialize_database(path)
         initialize_database(path)
         with connection(path) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],7)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],10)
             self.assertEqual(conn.execute('SELECT body FROM email_logs').fetchone()[0],'original body')
             self.assertEqual(tuple(conn.execute('SELECT label,indexing_state,attempt_count FROM feedback_history').fetchone()),('UPDATES','pending',0))
 
@@ -466,7 +488,10 @@ class FeedbackTests(unittest.TestCase):
         service=mailbox(1)
         client=Mock()
         client.models.generate_content.return_value.text='{"category":"UPDATES"}'
-        with patch.object(main,'refresh_gmail',return_value=service),patch.object(main,'create_vector_collection',side_effect=RuntimeError('outage')),patch.object(llm_api,'get_client',return_value=client):
+        with patch.object(main,'refresh_gmail',return_value=service),\
+             patch.object(main,'create_vector_collection',side_effect=RuntimeError('outage')),\
+             patch.object(main,'create_search_collection',side_effect=RuntimeError('outage')),\
+             patch.object(llm_api,'get_client',return_value=client):
             result=main._run_agent(settings=self.settings,manager=self.manager,model=self.model)
         self.assertEqual(result['processed_count'],1)
         self.assertEqual(service.unread,['synthetic-0'])

@@ -122,6 +122,20 @@ class RagSecurityTests(unittest.TestCase):
         self.assertFalse(kwargs['allow_reset'])
         self.assertFalse(kwargs['anonymized_telemetry'])
 
+    def test_feedback_and_search_collections_share_one_embedded_client(self):
+        class Client:
+            _server = type('RustBindingsAPI', (), {'__module__':'chromadb.api.rust'})()
+            def get_or_create_collection(self, **kwargs):
+                return Mock(configuration={'hnsw':{'space':'cosine'}})
+        chroma = Mock(PersistentClient=Mock(return_value=Client()))
+        with patch.dict('sys.modules', {'chromadb':chroma, 'chromadb.config':Mock(Settings=Mock())}):
+            with tempfile.TemporaryDirectory() as directory:
+                path=Path(directory)/'chroma_db'
+                settings=Settings(data_dir=Path(directory))
+                vector_db.create_vector_collection(path,settings=settings)
+                vector_db.create_search_collection(path,settings=settings)
+        self.assertEqual(chroma.PersistentClient.call_count,1)
+
     def test_chroma_factory_rejects_nonembedded_backend(self):
         client = Mock(_server=type('ServerAPI', (), {'__module__':'chromadb.api.fastapi'})())
         chroma = Mock(PersistentClient=Mock(return_value=client))

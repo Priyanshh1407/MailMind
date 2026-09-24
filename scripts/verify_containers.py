@@ -9,7 +9,7 @@ from scripts.launch import ROOT,check_ports
 def verify(report='docs/evaluation/phase9/container_smoke.json'):
     check_ports();project='mailmind-phase9-check-'+secrets.token_hex(4)
     with tempfile.TemporaryDirectory(prefix='mailmind-compose-check-') as directory:
-        override=Path(directory)/'override.yml';override.write_text('services:\n  api:\n    environment:\n      MAILMIND_ACCESS_KEY: synthetic-container-phase9-pairing\n',encoding='utf-8')
+        override=Path(directory)/'override.yml';override.write_text('services: {}\n',encoding='utf-8')
         base=['docker','compose','-p',project,'-f',str(ROOT/'docker-compose.yml'),'-f',str(override)]
         def command(*args):return subprocess.run([*base,*args],cwd=ROOT,check=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=900,encoding='utf-8',errors='replace').stdout
         try:
@@ -19,12 +19,12 @@ def verify(report='docs/evaluation/phase9/container_smoke.json'):
                 request=Request('http://127.0.0.1:8000'+path,data=json.dumps(body).encode() if body is not None else None,headers={'Content-Type':'application/json','Origin':'http://127.0.0.1:5173'})
                 if body is not None and path!='/session':request.add_header('X-CSRF-Token',csrf)
                 with opener.open(request,timeout=30) as response:return response.status,json.load(response)
-            _,session=api('/session',{'code':'synthetic-container-phase9-pairing'});csrf=session['csrf_token']
+            _,session=api('/session',{});csrf=session['csrf_token']
             _,prediction=api('/predict',{'subject':'Synthetic receipt','body':'Payment was received. No response is required.'})
             if prediction.get('outcome')!='CLASSIFIED' or 'synthetic_benchmark_only' not in prediction.get('limitations',[]):raise AssertionError('Verified demo checkpoint did not run in container')
             _,telemetry=api('/telemetry')
             if not telemetry['mode']['local_only']:raise AssertionError('Container not local-only')
-            for path in ['/authenticate','/process']:
+            for path in ['/authenticate','/inbox/sync']:
                 try:api(path,{});raise AssertionError('External action was allowed')
                 except HTTPError as error:
                     if error.code!=403:raise
@@ -43,11 +43,11 @@ def verify(report='docs/evaluation/phase9/container_smoke.json'):
             try:api('/telemetry');raise AssertionError('Restart did not invalidate old session')
             except HTTPError as error:
                 if error.code!=401:raise
-            _,session=api('/session',{'code':'synthetic-container-phase9-pairing'});csrf=session['csrf_token']
+            _,session=api('/session',{});csrf=session['csrf_token']
             api('/telemetry')
             retained=command('exec','-T','api','python','-c',"from src.db_utils import get_email;print(get_email('phase9-persistence',account_id='phase9@example.test',db_path='/app/data/email_logs.db')['subject'])").strip()
             if retained!='Synthetic retained receipt':raise AssertionError('Saved mail lost after restart')
-            result={'all_passed':True,'scope':'real CPU Linux containers, public cached assets and synthetic pairing only; no Gmail/cloud/Telegram calls','services':['api','worker','frontend'],'api_uid':int(uid),'ui_status':ui,'model_prediction':prediction['category'],'model_scope':telemetry['local_model']['evaluation_scope'],'local_only':True,'external_actions':'rejected','sqlite_saved_mail_survives_api_restart':True,'old_session_rejected_after_restart':True,'re_pair_after_restart':'passed','compose_health_dependencies':'passed','private_build_context':'excluded by allowlist','network_note':'Containers retain networking for localhost/health; local-only adapters block providers. Not an OS egress-firewall audit.'}
+            result={'all_passed':True,'scope':'real CPU Linux containers and public cached assets; no Gmail/cloud/Telegram calls','services':['api','worker','frontend'],'api_uid':int(uid),'ui_status':ui,'model_prediction':prediction['category'],'model_scope':telemetry['local_model']['evaluation_scope'],'local_only':True,'external_actions':'rejected','sqlite_saved_mail_survives_api_restart':True,'old_session_rejected_after_restart':True,'new_session_after_restart':'passed','compose_health_dependencies':'passed','private_build_context':'excluded by allowlist','network_note':'Containers retain networking for localhost/health; local-only adapters block providers. Not an OS egress-firewall audit.'}
         except subprocess.CalledProcessError as error:
             print(error.stdout[-12000:]);raise
         finally:

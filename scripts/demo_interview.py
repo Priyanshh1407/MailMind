@@ -21,7 +21,7 @@ def demo():
         if not condition:raise AssertionError(name)
         steps.append({'check':name,'passed':True})
     with tempfile.TemporaryDirectory(prefix='mailmind-interview-demo-') as directory:
-        settings=Settings(data_dir=Path(directory),access_key='synthetic-interview-demo-pairing',auto_mark_read=True)
+        settings=Settings(data_dir=Path(directory),auto_mark_read=True)
         collection=FakeCollection();vector=VectorService(lambda:collection,lambda metadata:current_vector(metadata,settings.db_path))
         class DemoModel:
             model_loaded=False;model_version='fake-demo-fallback';training_scope=None
@@ -39,7 +39,7 @@ def demo():
             return Prediction(category=category,outcome='CLASSIFIED',source='fake-cloud',model_version='synthetic-provider-v1')
         alerts=Mock(side_effect=[Delivery('retry','provider_transient'),Delivery('sent',message_id='synthetic-alert')]);marker=Mock(return_value=True)
         with patch.object(socket,'create_connection',side_effect=AssertionError('No network')),patch.object(socket,'getaddrinfo',side_effect=AssertionError('No DNS')),TestClient(app,base_url='http://localhost') as client:
-            client.headers['Origin']='http://localhost:5173';paired=client.post('/session',json={'code':settings.access_key});client.headers['X-CSRF-Token']=paired.json()['csrf_token']
+            client.headers['Origin']='http://localhost:5173';session=client.post('/session');client.headers['X-CSRF-Token']=session.json()['csrf_token']
             def connect(account):
                 oauth.return_value=(account,'{}');response=client.post('/authenticate');check(response.status_code==202,'Fake OAuth accepted for '+account);app.state.auth_futures[response.json()['job_id']].result(timeout=5)
             connect('demo-a@example.test');manager=app.state.accounts
