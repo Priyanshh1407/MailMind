@@ -45,7 +45,8 @@ test('status validates live and backlog intake controls',()=>{
     current_batch_target_tasks:100,current_batch_admitted_tasks:20,
     workflow_total_tasks:20,workflow_finished_tasks:13,
     processing_counts:{queued:7},notification_counts:{},ingestion_failures:[],
-    semantic_search_index:{pending:2,indexed:18,failed:0}};
+    semantic_search_index:{pending:2,indexed:18,failed:0},
+    intelligence_backfill:{enabled:true,eligible:3,queued:0,running:0,retry:0,complete:0,dead:0}};
   assert.doesNotThrow(()=>validateResponse('/status','GET',data));
   assert.throws(()=>validateResponse('/status','GET',{...data,live_pending_tasks:-1}));
   assert.throws(()=>validateResponse('/status','GET',{...data,fetch_next_available:'yes'}));

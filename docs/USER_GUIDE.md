@@ -55,9 +55,26 @@ The progress panel distinguishes saved work, waiting tasks, active classificatio
 
 - **Sync new messages** queues a durable, rate-limited live Gmail check.
 - **Fetch next 100** authorizes another historical page only after the current older batch is eligible.
+- **Analyze up to 20 saved emails** explicitly enriches eligible saved mail after Action Center extraction is enabled.
 - Active, live-pending, historical-pending, and last-live-sync values are separate.
 
-The two buttons are not equivalent. Sync never grants more historical backlog.
+These controls are not equivalent. Sync never grants more historical backlog. Saved-mail analysis never sends historical alerts, changes Gmail read state, or creates automatic reminders. Live mail remains ahead of backfill work.
+
+## Intelligence tabs
+
+### Inbox explanations
+
+Expanded cards can show a bounded explanation, evidence signals, model/source label, and retrieval-use indicator. Explanations summarize decision signals; they are not hidden chain-of-thought. A correction changes the effective category but preserves the original analysis for audit.
+
+### Action Center
+
+The Action Center lists extracted replies, tasks, approvals, payments, meetings, and deadlines. Filters include open, due soon, overdue, snoozed, and completed. You can complete, dismiss, reopen, or snooze an action, and navigate to its account-owned source email.
+
+Automatic dashboard reminders require explicit configuration. Telegram action reminders require a separate opt-in. Ambiguous, past-due, low-confidence, or date-unknown candidates do not silently create automatic reminders.
+
+### Usage
+
+Usage shows day, week, and month token totals with Recharts trends and an accessible data table. Provider-billed tokens and locally processed tokens are separate. Counts can be provider-reported, tokenizer-counted, estimated, or unavailable; they are usage measurements, not prices.
 
 ## Categories
 
@@ -185,6 +202,10 @@ Lexical search remains available. Keep MailMind connected and running while the 
 
 Wait for the admitted batch to finish, then choose **Fetch next 100**. Live mail continues to receive priority.
 
+### Saved-mail analysis is unavailable
+
+Enable Action Center extraction through the staged configuration, restart the API and worker together, and reconnect the intended account. The disabled control is deliberate; backfill cannot run before its dependent schema and action pipeline are enabled.
+
 ## Logs
 
 Owned service logs are written under `.run`:
@@ -201,6 +222,8 @@ Logs are intended to contain safe event types rather than email content or raw p
 - Do not share screenshots containing real email, account identifiers, or provider details.
 - Local storage is not encrypted by MailMind.
 - Cloud classification receives minimized, masked content in normal mode.
+- Explicit saved-mail backfill can send the same minimized, masked saved content to configured cloud classifiers; it does not reread Gmail.
+- Token events store counts and safe metadata, not prompts, email text, or provider responses.
 - Masking reduces exposure but is not anonymization.
 - Local-only mode blocks cloud/Gmail/Telegram routing but is not an operating-system firewall.
 

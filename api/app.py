@@ -6,7 +6,8 @@ import math
 import secrets
 import sqlite3
 import time
-from threading import Lock
+from threading import Event, Lock
+from datetime import datetime, timezone
 from src.background_jobs import BackgroundJobs
 from src.database import utc_timestamp
 from src.work_queue import enqueue_cycle
@@ -21,20 +22,53 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from src.config import Settings
 from src.database import initialize_database
 from src.account_state import AccountManager, AccessDenied, WorkCancelled, TransitionBusy
-from src.db_utils import (get_recent_emails, get_email, update_human_label,
+from src.db_utils import (get_recent_emails, get_email, log_email_to_db, update_human_label,
                           get_ingestion_state, ensure_ingestion_state, count_emails,
                           dashboard_totals, withdraw_human_label, lexical_search_ids,
                           filter_ranked_ids)
-from src.local_llm import DeferredMailMindModel, MailMindModel
+from src.local_llm import (DeferredMailMindModel, MailMindModel,
+                           local_retrieval_expected, predict_with_token_count)
 from src.llm_api import classify_email
 from src.logging_utils import log_event
+from src.email_text import format_email_text
 from src import vector_db
 from src.prediction import Category, Prediction
+from src.email_analysis import ensure_prediction_analysis, save_analysis_result
 from src.retrieval_policy import load_policy
 from src.feedback import reconcile_feedback, current_vector
 from src.email_search import (MIN_SEMANTIC_QUERY, SEARCH_QUERY_TIMEOUT_SECONDS,
                               semantic_candidates, hybrid_rank)
 from src.vector_lock import vector_write_lock
+from src.intelligence_contract import ActionStatus, ReminderChannel, TokenOperation, TokenOutcome
+from src.token_usage import (
+    EMBEDDING_MODEL_VERSION,
+    TokenRecorder,
+    aggregate_token_usage,
+    estimate_text_tokens,
+    tokenizer_usage_measurement,
+    unavailable_measurement,
+    usage_request_prefix,
+)
+from src.action_center import (
+    ActionRevisionConflict,
+    ActionTransitionError,
+    action_summary,
+    get_action,
+    list_actions,
+    persist_analysis_actions,
+    schedule_reminder,
+    update_action_status,
+)
+
+from src.intelligence_safety import (
+    MutationRateLimited,
+    claim_mutation_slot,
+    intelligence_diagnostics,
+)
+from src.intelligence_backfill import (
+    backfill_summary,
+    queue_intelligence_backfill,
+)
 
 COOKIE = 'mailmind_session'
 
@@ -62,19 +96,122 @@ class DeliveryResolution(BaseModel):
     action: Literal['confirmed_sent','retry']
 
 
+class ActionUpdateRequest(BaseModel):
+    status: Literal['open','completed','dismissed']
+    expected_revision: int = Field(ge=0)
+
+
+class ActionSnoozeRequest(BaseModel):
+    snoozed_until: datetime
+    expected_revision: int = Field(ge=0)
+
+
+class ActionReminderRequest(BaseModel):
+    remind_at: datetime
+    channel: Literal['dashboard','telegram'] = 'dashboard'
+    expected_revision: int = Field(ge=0)
+
+
+class ActionReanalysisRequest(BaseModel):
+    expected_analysis_updated_at: str | None = Field(
+        default=None, max_length=32)
+
+
+class IntelligenceBackfillRequest(BaseModel):
+    limit: int = Field(default=20, ge=1, le=100)
+
+
 class LegacyDeleteRequest(BaseModel):
     confirmation: Literal['DELETE_UNASSIGNED_DATA']
 
 
-def manual_prediction(model, subject, body, account_id, settings, collection_provider, validator,
-                      classifier=classify_email):
+def manual_prediction(model, subject, body, account_id, settings,
+                      collection_provider, validator, classifier=classify_email,
+                      usage_recorder=None,
+                      usage_operation=TokenOperation.MANUAL_PREDICTION.value,
+                      sender='[MANUAL]', source_timestamp=None):
     """Use cloud temporarily in normal mode while the local API model loads."""
     if not settings.local_only and getattr(model, 'load_reason', None) == 'model_loading':
-        return classifier('[MANUAL]', subject, body, account_id=account_id,
-                          collection_provider=collection_provider, validator=validator,
-                          settings=settings)
-    return LOCAL_CALLS.run(lambda:model.predict(subject, body, account_id=account_id),
-                           settings.classification_budget_seconds)
+        return ensure_prediction_analysis(classifier(
+            sender, subject, body, account_id=account_id,
+            source_timestamp=source_timestamp,
+            collection_provider=collection_provider, validator=validator,
+            settings=settings, usage_recorder=usage_recorder,
+            usage_operation=usage_operation,
+        ))
+    attempted=Event()
+    local_query=local_retrieval_expected(model)
+    local_query_measurement=estimate_text_tokens(
+        format_email_text(subject,body))
+    try:
+        def run_local():
+            attempted.set()
+            return predict_with_token_count(
+                model, subject, body, account_id=account_id)
+        prediction,input_tokens=LOCAL_CALLS.run(
+            run_local, settings.classification_budget_seconds)
+        prediction=ensure_prediction_analysis(prediction)
+    except WorkCancelled:
+        if attempted.is_set() and usage_recorder is not None:
+            usage_recorder.record(
+                'local-manual', provider='local',
+                model_version=getattr(model, 'model_version', None)
+                or 'local-unavailable',
+                operation=usage_operation,
+                outcome=TokenOutcome.CANCELLED.value,
+                measurement=unavailable_measurement(),
+            )
+            if local_query:
+                usage_recorder.record(
+                    'local-manual-retrieval', provider='embedding',
+                    model_version=EMBEDDING_MODEL_VERSION,
+                    operation=TokenOperation.QUERY_EMBEDDING.value,
+                    outcome=TokenOutcome.CANCELLED.value,
+                    measurement=local_query_measurement,
+                )
+        raise
+    except TimeoutError:
+        if attempted.is_set() and usage_recorder is not None:
+            usage_recorder.record(
+                'local-manual', provider='local',
+                model_version=getattr(model, 'model_version', None)
+                or 'local-unavailable',
+                operation=usage_operation,
+                outcome=TokenOutcome.TIMEOUT.value,
+                measurement=unavailable_measurement(),
+            )
+            if local_query:
+                usage_recorder.record(
+                    'local-manual-retrieval', provider='embedding',
+                    model_version=EMBEDDING_MODEL_VERSION,
+                    operation=TokenOperation.QUERY_EMBEDDING.value,
+                    outcome=TokenOutcome.TIMEOUT.value,
+                    measurement=local_query_measurement,
+                )
+        raise
+    if usage_recorder is not None:
+        usage_recorder.record(
+            'local-manual', provider='local',
+            model_version=prediction.model_version or 'local-unavailable',
+            operation=usage_operation,
+            outcome=(TokenOutcome.SUCCESS.value
+                     if prediction.outcome in ('CLASSIFIED','ABSTAIN')
+                     else TokenOutcome.FAILED.value),
+            measurement=(tokenizer_usage_measurement(input_tokens)
+                         if input_tokens is not None
+                         else unavailable_measurement()),
+        )
+        if local_query:
+            usage_recorder.record(
+                'local-manual-retrieval', provider='embedding',
+                model_version=EMBEDDING_MODEL_VERSION,
+                operation=TokenOperation.QUERY_EMBEDDING.value,
+                outcome=(TokenOutcome.FAILED.value
+                         if prediction.retrieval_status == 'unavailable'
+                         else TokenOutcome.SUCCESS.value),
+                measurement=local_query_measurement,
+            )
+    return prediction
 
 def create_app(*, settings=None, model_factory=MailMindModel,
                vector_factory=vector_db.create_vector_collection, search_vector_factory=None,
@@ -200,7 +337,34 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     @application.get('/emails')
     def emails(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0, le=1000000),
                search: str = Query('', max_length=200), category: Literal['IMPORTANT','UPDATES','SPAM','NEEDS_REVIEW'] | None = None,
+               email_id: str | None = Query(None, min_length=1, max_length=256),
                context=Depends(session)):
+        if email_id is not None:
+            with application.state.accounts.guard(context) as conn:
+                exists = get_email(
+                    email_id, account_id=context.account_id, db_conn=conn)
+                index_counts = {
+                    row['indexing_state']: row['count'] for row in conn.execute(
+                        'SELECT indexing_state,COUNT(*) AS count FROM email_search_index WHERE account_id=? GROUP BY indexing_state',
+                        (context.account_id,))
+                }
+                rows = get_recent_emails(
+                    limit, account_id=context.account_id, db_conn=conn,
+                    offset=offset, ranked_ids=[email_id] if exists else [],
+                    include_analysis=application.state.settings.explanations_visible,
+                )
+            total = 1 if exists else 0
+            return {
+                'emails': rows, 'total': total, 'limit': limit,
+                'offset': offset, 'has_more': offset + limit < total,
+                'status': 'success', 'account_id': context.account_id,
+                'generation': context.generation, 'search_mode': 'text',
+                'semantic_available': False,
+                'semantic_index': {
+                    key: index_counts.get(key, 0)
+                    for key in ('pending', 'indexed', 'failed')
+                },
+            }
         query=search.strip()
         search_mode='text'
         semantic_available=False
@@ -210,9 +374,20 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 'SELECT indexing_state,COUNT(*) AS count FROM email_search_index WHERE account_id=? GROUP BY indexing_state',
                 (context.account_id,))}
         semantic=[]
+        query_attempted=Event()
+        query_measurement=(estimate_text_tokens(query)
+                           if lexical is not None else None)
+        query_recorder=TokenRecorder(
+            context.account_id,
+            usage_request_prefix(
+                'semantic-query', context.account_id, secrets.token_hex(16)),
+            db_path=application.state.settings.db_path,
+            enabled=application.state.settings.token_collection_enabled,
+        )
         if lexical is not None:
             try:
                 def run_semantic_query():
+                    query_attempted.set()
                     try:
                         return semantic_candidates(query,context.account_id,search_collection())
                     except Exception as error:
@@ -230,9 +405,28 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                                         application.state.settings.data_dir/'search_chroma_db',
                                         settings=application.state.settings)
                         return semantic_candidates(query,context.account_id,search_collection())
-                semantic=SEARCH_CALLS.run(run_semantic_query,SEARCH_QUERY_TIMEOUT_SECONDS)
+                semantic=SEARCH_CALLS.run(
+                    run_semantic_query,SEARCH_QUERY_TIMEOUT_SECONDS)
                 semantic_available=True
+                if query_attempted.is_set():
+                    query_recorder.record(
+                        'query', provider='embedding',
+                        model_version=EMBEDDING_MODEL_VERSION,
+                        operation=TokenOperation.QUERY_EMBEDDING.value,
+                        outcome=TokenOutcome.SUCCESS.value,
+                        measurement=query_measurement,
+                    )
             except Exception as error:
+                if query_attempted.is_set():
+                    query_recorder.record(
+                        'query', provider='embedding',
+                        model_version=EMBEDDING_MODEL_VERSION,
+                        operation=TokenOperation.QUERY_EMBEDDING.value,
+                        outcome=(TokenOutcome.TIMEOUT.value
+                                 if isinstance(error, TimeoutError)
+                                 else TokenOutcome.FAILED.value),
+                        measurement=query_measurement,
+                    )
                 log_event('semantic_search_fallback',error=error)
         with application.state.accounts.guard(context) as conn:
             if lexical is not None:
@@ -247,8 +441,11 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 context.account_id,conn,search=query,category=category)
             if semantic:
                 search_mode='hybrid'
-            rows=get_recent_emails(limit,account_id=context.account_id,db_conn=conn,offset=offset,
-                                   search=query,category=category,ranked_ids=ranked_ids)
+            rows=get_recent_emails(
+                limit,account_id=context.account_id,db_conn=conn,offset=offset,
+                search=query,category=category,ranked_ids=ranked_ids,
+                include_analysis=application.state.settings.explanations_visible,
+            )
         return {'emails':rows,'total':total,'limit':limit,'offset':offset,'has_more':offset+limit<total,
                 'status':'success','account_id':context.account_id,'generation':context.generation,
                 'search_mode':search_mode,'semantic_available':semantic_available,
@@ -259,9 +456,36 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         with application.state.accounts.guard(context) as conn:
             if not get_email(email_id,account_id=context.account_id,db_conn=conn):
                 raise HTTPException(404,'This email does not belong to the connected account.')
-            return {'account_id':context.account_id,'generation':context.generation,
+            response={'account_id':context.account_id,'generation':context.generation,
                     'feedback':[dict(row) for row in conn.execute('SELECT revision_id,label,indexing_state,created_at FROM feedback_history WHERE account_id=? AND email_id=? ORDER BY revision_id DESC LIMIT 50',(context.account_id,email_id))],
                     'processing':[dict(row) for row in conn.execute('SELECT stage,outcome,error_code,created_at FROM processing_attempts WHERE account_id=? AND email_id=? ORDER BY attempt_id DESC LIMIT 50',(context.account_id,email_id))]}
+            if application.state.settings.explanations_visible:
+                detail=get_recent_emails(
+                    1,account_id=context.account_id,db_conn=conn,
+                    ranked_ids=[email_id],include_analysis=True,
+                )[0]
+                response['analysis']=detail.get('analysis')
+                classifications=[]
+                for row in conn.execute(
+                        'SELECT attempt_id,category,outcome,source,model_version,metadata,created_at FROM prediction_attempts WHERE account_id=? AND email_id=? ORDER BY attempt_id DESC LIMIT 50',
+                        (context.account_id,email_id)):
+                    metadata=json.loads(row['metadata'])
+                    classifications.append({
+                        'attempt_id':row['attempt_id'],
+                        'category':row['category'],
+                        'outcome':row['outcome'],
+                        'source':row['source'],
+                        'model_version':row['model_version'],
+                        'created_at':row['created_at'],
+                        'analysis':({
+                            key:value for key,value in metadata.get('analysis',{}).items()
+                            if key != 'actions'
+                        } if isinstance(metadata,dict)
+                           and isinstance(metadata.get('analysis'),dict)
+                           else None),
+                    })
+                response['classification']=classifications
+            return response
 
     @application.get('/telemetry')
     def telemetry(context=Depends(session)):
@@ -292,14 +516,360 @@ def create_app(*, settings=None, model_factory=MailMindModel,
 
     @application.post('/predict')
     def predict(payload: EmailRequest, context=Depends(session)):
-        with application.state.accounts.external(context,connected=not application.state.settings.local_only):
+        usage_recorder=TokenRecorder(
+            context.account_id,
+            usage_request_prefix(
+                'manual-prediction', context.account_id, secrets.token_hex(16)),
+            db_path=application.state.settings.db_path,
+            enabled=application.state.settings.token_collection_enabled,
+        )
+        with application.state.accounts.external(
+                context,connected=not application.state.settings.local_only):
             try:
-                result = manual_prediction(application.state.model, payload.subject, payload.body, context.account_id,
-                                           application.state.settings, collection,
-                                           lambda metadata: current_vector(metadata, application.state.settings.db_path))
+                result = manual_prediction(
+                    application.state.model, payload.subject, payload.body,
+                    context.account_id, application.state.settings, collection,
+                    lambda metadata: current_vector(
+                        metadata, application.state.settings.db_path),
+                    usage_recorder=usage_recorder,
+                )
             except TimeoutError:
                 result = Prediction(reason='local_inference_budget_exhausted')
-            return {**result.to_dict(), 'status': 'success' if result.outcome == 'CLASSIFIED' else result.outcome.lower()}
+            result=ensure_prediction_analysis(result)
+            return {
+                **result.to_dict(
+                    include_analysis=application.state.settings.explanations_visible),
+                'status':('success' if result.outcome == 'CLASSIFIED'
+                          else result.outcome.lower()),
+            }
+
+    def require_actions():
+        if not application.state.settings.action_extraction_enabled:
+            raise HTTPException(404, 'The Action Center is disabled.')
+
+    def enforce_intelligence_rate(conn, account_id, scope, resource_id):
+        try:
+            claim_mutation_slot(
+                account_id, scope, resource_id,
+                cooldown_seconds=application.state.settings.poll_interval_seconds,
+                db_conn=conn,
+            )
+        except MutationRateLimited as error:
+            raise HTTPException(
+                429,
+                'This operation was requested recently. Please wait.',
+                headers={'Retry-After': str(error.retry_after)},
+            ) from None
+
+    def raise_action_error(error):
+        if isinstance(error, LookupError):
+            raise HTTPException(
+                404, 'This action does not belong to the connected account.')
+        if isinstance(error, (ActionRevisionConflict, ActionTransitionError)):
+            raise HTTPException(409, str(error))
+        if isinstance(error, ValueError):
+            raise HTTPException(422, str(error))
+        raise error
+
+    @application.get('/actions')
+    def actions(
+            status: Literal['open','completed','dismissed','snoozed'] | None = None,
+            due_from: str | None = Query(None, max_length=64),
+            due_to: str | None = Query(None, max_length=64),
+            email_id: str | None = Query(None, max_length=256),
+            limit: int = Query(50, ge=1, le=200),
+            offset: int = Query(0, ge=0, le=1000000),
+            context=Depends(session)):
+        require_actions()
+        try:
+            with application.state.accounts.guard(context) as conn:
+                rows=list_actions(
+                    context.account_id,status=status,due_from=due_from,
+                    due_to=due_to,email_id=email_id,limit=limit,
+                    offset=offset,db_conn=conn,
+                )
+        except (LookupError,ValueError) as error:
+            raise_action_error(error)
+        return {
+            'account_id':context.account_id,
+            'generation':context.generation,
+            'actions':rows,
+            'limit':limit,
+            'offset':offset,
+        }
+
+    @application.get('/actions/summary')
+    def actions_summary(context=Depends(session)):
+        require_actions()
+        with application.state.accounts.guard(context) as conn:
+            result=action_summary(context.account_id,db_conn=conn)
+        return {
+            'account_id':context.account_id,
+            'generation':context.generation,
+            **result,
+        }
+
+    @application.patch('/actions/{action_id}')
+    def change_action(
+            action_id: int, payload: ActionUpdateRequest,
+            context=Depends(session)):
+        require_actions()
+        try:
+            with application.state.accounts.guard(context) as conn:
+                result=update_action_status(
+                    context.account_id,action_id,status=payload.status,
+                    expected_revision=payload.expected_revision,db_conn=conn,
+                )
+        except (LookupError,ValueError,ActionRevisionConflict,
+                ActionTransitionError) as error:
+            raise_action_error(error)
+        return result
+
+    @application.post('/actions/{action_id}/snooze')
+    def snooze_action(
+            action_id: int, payload: ActionSnoozeRequest,
+            context=Depends(session)):
+        require_actions()
+        try:
+            with application.state.accounts.guard(context) as conn:
+                result=update_action_status(
+                    context.account_id,action_id,
+                    status=ActionStatus.SNOOZED.value,
+                    expected_revision=payload.expected_revision,
+                    snoozed_until=payload.snoozed_until,db_conn=conn,
+                )
+        except (LookupError,ValueError,ActionRevisionConflict,
+                ActionTransitionError) as error:
+            raise_action_error(error)
+        return result
+
+    @application.post('/actions/{action_id}/reminders')
+    def add_action_reminder(
+            action_id: int, payload: ActionReminderRequest,
+            context=Depends(session)):
+        require_actions()
+        config=application.state.settings
+        if not config.action_reminders_enabled:
+            raise HTTPException(404, 'Action reminders are disabled.')
+        if (payload.channel == ReminderChannel.TELEGRAM.value
+                and not config.telegram_action_reminders_enabled):
+            raise HTTPException(403, 'Telegram action reminders are disabled.')
+        try:
+            with application.state.accounts.guard(context) as conn:
+                action=get_action(
+                    context.account_id,action_id,db_conn=conn)
+                if action is None:
+                    raise LookupError
+                if action['revision'] != payload.expected_revision:
+                    raise ActionRevisionConflict(
+                        'Action changed; refresh and retry')
+                enforce_intelligence_rate(
+                    conn, context.account_id, 'reminder', str(action_id))
+                reminder=schedule_reminder(
+                    context.account_id,action_id,
+                    remind_at=payload.remind_at,channel=payload.channel,
+                    db_conn=conn,
+                )
+        except (LookupError,ValueError,ActionRevisionConflict,
+                ActionTransitionError) as error:
+            raise_action_error(error)
+        return reminder
+
+    @application.post('/emails/{email_id}/reanalyze')
+    def reanalyze_email(
+            email_id: str, payload: ActionReanalysisRequest,
+            context=Depends(session)):
+        require_actions()
+        config=application.state.settings
+        with application.state.accounts.guard(context) as conn:
+            stored=get_email(
+                email_id,account_id=context.account_id,db_conn=conn)
+            if stored is None:
+                raise HTTPException(
+                    404, 'This email does not belong to the connected account.')
+            current_analysis=conn.execute(
+                """SELECT updated_at FROM email_analysis
+                   WHERE account_id=? AND email_id=?""",
+                (context.account_id,email_id)).fetchone()
+            current_revision=(
+                current_analysis['updated_at']
+                if current_analysis is not None else None)
+            if current_revision != payload.expected_analysis_updated_at:
+                raise HTTPException(
+                    409, 'Analysis changed; refresh and try again.')
+            enforce_intelligence_rate(
+                conn, context.account_id, 'reanalysis', email_id)
+            latest=conn.execute(
+                """SELECT created_at FROM token_usage_events
+                   WHERE account_id=? AND email_id=?
+                     AND operation='action_reanalysis'
+                   ORDER BY usage_id DESC LIMIT 1""",
+                (context.account_id,email_id)).fetchone()
+            if latest is not None:
+                previous=datetime.fromisoformat(
+                    latest['created_at'].replace('Z','+00:00'))
+                if ((datetime.now(timezone.utc)-previous).total_seconds()
+                        < config.poll_interval_seconds):
+                    raise HTTPException(
+                        429, 'This email was re-analyzed recently. Please wait.')
+        recorder=TokenRecorder(
+            context.account_id,
+            usage_request_prefix(
+                'action-reanalysis',context.account_id,
+                email_id,secrets.token_hex(8)),
+            email_id=email_id,db_path=config.db_path,
+            enabled=config.token_collection_enabled,
+        )
+        with application.state.accounts.external(
+                context,connected=not config.local_only):
+            try:
+                result=manual_prediction(
+                    application.state.model,stored['subject'],stored['body'],
+                    context.account_id,config,collection,
+                    lambda metadata:current_vector(
+                        metadata,config.db_path),
+                    usage_recorder=recorder,
+                    usage_operation=TokenOperation.ACTION_REANALYSIS.value,
+                    sender=stored['sender'],
+                    source_timestamp=stored['created_at'],
+                )
+            except TimeoutError:
+                raise HTTPException(
+                    504, 'Re-analysis exceeded its time budget.')
+        result=ensure_prediction_analysis(result)
+        if result.outcome != 'CLASSIFIED':
+            raise HTTPException(
+                409, 'Re-analysis did not produce a reliable classification.')
+        action_result=None
+        analysis_revision=payload.expected_analysis_updated_at
+        with application.state.accounts.guard(context) as conn:
+            current_analysis=conn.execute(
+                """SELECT updated_at FROM email_analysis
+                   WHERE account_id=? AND email_id=?""",
+                (context.account_id,email_id)).fetchone()
+            current_revision=(
+                current_analysis['updated_at']
+                if current_analysis is not None else None)
+            if current_revision != payload.expected_analysis_updated_at:
+                raise HTTPException(
+                    409, 'Analysis changed; refresh and try again.')
+            log_email_to_db(
+                email_id,stored['sender'],stored['subject'],stored['body'],
+                result,Prediction(),account_id=context.account_id,db_conn=conn,
+            )
+            try:
+                saved_analysis=save_analysis_result(
+                    context.account_id,email_id,result.analysis,db_conn=conn)
+                analysis_revision=saved_analysis['updated_at']
+            except Exception as error:
+                log_event('analysis_persistence_deferred',error=error)
+                conn.execute(
+                    """INSERT INTO processing_attempts(
+                       account_id,email_id,stage,outcome,error_code,created_at)
+                       VALUES (?,?,'analysis','retry',
+                               'analysis_persistence_failed',?)""",
+                    (context.account_id,email_id,utc_timestamp()))
+            conn.execute('SAVEPOINT manual_action_reanalysis')
+            try:
+                action_result=persist_analysis_actions(
+                    context.account_id,email_id,result.analysis,
+                    source_created_at=stored['created_at'],
+                    source_text=format_email_text(
+                        stored['subject'],stored['body']),
+                    timezone_name=config.default_timezone,
+                    reminders_enabled=config.action_reminders_enabled,
+                    db_conn=conn,
+                )
+                conn.execute(
+                    """INSERT INTO processing_attempts(
+                       account_id,email_id,stage,outcome,created_at)
+                       VALUES (?,?,'actions','complete',?)""",
+                    (context.account_id,email_id,utc_timestamp()))
+                conn.execute('RELEASE SAVEPOINT manual_action_reanalysis')
+            except Exception as error:
+                conn.execute(
+                    'ROLLBACK TO SAVEPOINT manual_action_reanalysis')
+                conn.execute('RELEASE SAVEPOINT manual_action_reanalysis')
+                log_event('action_persistence_deferred',error=error)
+                conn.execute(
+                    """INSERT INTO processing_attempts(
+                       account_id,email_id,stage,outcome,error_code,created_at)
+                       VALUES (?,?,'actions','retry',
+                               'action_persistence_failed',?)""",
+                    (context.account_id,email_id,utc_timestamp()))
+        return {
+            **result.to_dict(
+                include_analysis=config.explanations_visible),
+            'actions':action_result,
+            'analysis_revision':analysis_revision,
+            'status':'success',
+        }
+
+    @application.get('/analytics/tokens')
+    def token_analytics(
+            window: Literal['day','week','month'] = Query('day'),
+            context=Depends(session)):
+        if not application.state.settings.token_analytics_visible:
+            raise HTTPException(404, 'Token analytics are disabled.')
+        with application.state.accounts.guard(context) as conn:
+            result=aggregate_token_usage(
+                context.account_id, window=window,
+                timezone_name=application.state.settings.default_timezone,
+                db_conn=conn,
+            )
+        return {
+            'account_id':context.account_id,
+            'generation':context.generation,
+            **result,
+        }
+
+    @application.get('/diagnostics/intelligence')
+    def intelligence_diagnostic_summary(context=Depends(session)):
+        with application.state.accounts.guard(context) as conn:
+            result=intelligence_diagnostics(
+                context.account_id,
+                timezone_name=application.state.settings.default_timezone,
+                db_conn=conn,
+            )
+        return {
+            'account_id':context.account_id,
+            'generation':context.generation,
+            **result,
+        }
+
+    @application.post('/intelligence/backfill', status_code=202)
+    def start_intelligence_backfill(
+            payload: IntelligenceBackfillRequest,
+            context=Depends(session)):
+        require_actions()
+        with application.state.accounts.guard(context) as conn:
+            result=queue_intelligence_backfill(
+                context.account_id,
+                limit=payload.limit,
+                max_pending_tasks=(
+                    application.state.settings.max_pending_tasks),
+                db_conn=conn,
+            )
+            if not result['admitted']:
+                if not result['eligible']:
+                    raise HTTPException(
+                        409,
+                        'No saved emails currently need intelligence backfill.')
+                raise HTTPException(
+                    409,
+                    'The worker queue is full. Wait for current work to finish.')
+        job_id=enqueue_cycle(application.state.accounts,context)
+        return {
+            'job_id':job_id,
+            'status':'queued',
+            **result,
+            'message':(
+                f"Queued {result['admitted']} saved email"
+                f"{'s' if result['admitted'] != 1 else ''} for analysis. "
+                'Backfill never sends historical alerts, marks mail read, '
+                'or creates automatic reminders.'
+            ),
+        }
 
     @application.post('/feedback')
     def feedback(payload: FeedbackRequest, context=Depends(session)):
@@ -340,6 +910,14 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     def status(context=Depends(session)):
         with application.state.accounts.guard(context, connected=False) as conn:
             state = application.state.accounts.state(conn)
+            backfill=(
+                backfill_summary(context.account_id,db_conn=conn)
+                if context.account_id else {
+                    'eligible':0,'queued':0,'running':0,'retry':0,
+                    'complete':0,'dead':0,
+                })
+            backfill['enabled'] = bool(
+                application.state.settings.action_extraction_enabled)
             ingestion = get_ingestion_state(context.account_id, conn)
             if ingestion:
                 # An opaque provider cursor is internal worker state.
@@ -392,6 +970,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                     'notification_counts':{row['status']:row['count'] for row in conn.execute('SELECT status,COUNT(*) AS count FROM notification_outbox WHERE account_id=? GROUP BY status',(context.account_id,))},
                     'feedback_index_pending':conn.execute("SELECT COUNT(*) FROM feedback_history f WHERE account_id=? AND indexing_state!='indexed' AND revision_id=(SELECT MAX(revision_id) FROM feedback_history x WHERE x.account_id=f.account_id AND x.email_id=f.email_id)", (context.account_id,)).fetchone()[0],
                     'semantic_search_index':{key:search_index_counts.get(key,0) for key in ('pending','indexed','failed')},
+                    'intelligence_backfill':backfill,
                     'poll_interval_seconds':application.state.settings.poll_interval_seconds,
                     'worker_lease_seconds':application.state.settings.worker_lease_seconds,
                     'batch_size':application.state.settings.batch_size}
@@ -425,7 +1004,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         except Exception as error:
             log_event('account_purge_failed', error=error)
             raise HTTPException(503, 'Deletion did not finish. Processing is paused. Retry deleting this account data.') from None
-        return {'message': 'This account’s saved mail, feedback, jobs, and local Google credentials were deleted. Other accounts and old unassigned data are kept.'}
+        return {'message': "This account's saved mail, feedback, jobs, and local Google credentials were deleted. Other accounts and old unassigned data are kept."}
 
     @application.delete('/legacy-data')
     def purge_legacy(payload: LegacyDeleteRequest, context=Depends(session)):
@@ -525,6 +1104,11 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 if task['stage'] == 'notify' or task['status'] not in ('retry','dead'):
                     raise HTTPException(409,'Use alert resolution for a failed notification; completed or running tasks cannot be repeated.')
                 conn.execute("UPDATE processing_tasks SET status='queued',attempt_count=0,next_retry_at=0,error_code=NULL WHERE account_id=? AND email_id=?",(context.account_id,email_id))
+                conn.execute(
+                    """UPDATE intelligence_backfill_items
+                       SET status='queued',error_code=NULL,updated_at=?
+                       WHERE account_id=? AND email_id=?""",
+                    (utc_timestamp(),context.account_id,email_id))
         return {'message':'Retry saved. Completed notification steps stay completed.'}
 
     @application.post('/authenticate',status_code=202)
@@ -574,7 +1158,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
 
     origins = (settings or Settings()).frontend_origins
     application.add_middleware(CORSMiddleware, allow_origins=list(origins), allow_credentials=True,
-                               allow_methods=['GET', 'POST', 'DELETE'], allow_headers=['Content-Type', 'X-CSRF-Token'])
+                               allow_methods=['GET', 'POST', 'PATCH', 'DELETE'], allow_headers=['Content-Type', 'X-CSRF-Token'])
     application.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost', '127.0.0.1', '[::1]'])
     return application
 

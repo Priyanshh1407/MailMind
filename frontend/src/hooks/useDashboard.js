@@ -36,7 +36,11 @@ export function useDashboard(api, query) {
   useEffect(() => {
     poller.current?.stop(); setLoading(true);
     if (!locks.current.has('account')) poller.current?.start();
-  }, [query.offset, query.search, query.category]);
+  }, [
+    query.offset, query.search, query.category, query.emailId,
+    query.actionOffset, query.actionStatus, query.actionDueFrom,
+    query.actionDueTo, query.tokenWindow,
+  ]);
   useEffect(() => {
     if (!notice) return undefined;
     const timer = window.setTimeout(() => setNotice(''), 6000);

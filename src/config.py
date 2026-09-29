@@ -3,10 +3,18 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 from .prediction import Category
+from .intelligence_contract import DEFAULT_TIMEZONE, WEEK_START
 
 ROOT = Path(__file__).resolve().parents[1]
 LEGACY_ACCOUNT = "legacy-unassigned"
 CATEGORIES = tuple(category.value for category in Category)
+
+
+def _environment_bool(name, default):
+    value = os.environ.get(name, "true" if default else "false").strip().lower()
+    if value not in ("true", "false"):
+        raise ValueError(f"{name} must be true or false")
+    return value == "true"
 
 
 @dataclass(frozen=True)
@@ -32,6 +40,14 @@ class Settings:
     max_processing_attempts: int = 3
     gemini_models: tuple = ('gemini-3.8-flash', 'gemini-3.5-flash-lite')
     groq_model: str = 'openai/gpt-oss-20b'
+    default_timezone: str = DEFAULT_TIMEZONE
+    week_start: str = WEEK_START
+    action_extraction_enabled: bool = False
+    action_reminders_enabled: bool = False
+    telegram_action_reminders_enabled: bool = False
+    token_collection_enabled: bool = True
+    token_analytics_visible: bool = False
+    explanations_visible: bool = False
 
     def __post_init__(self):
         for name, low, high in (('poll_interval_seconds',5,86400), ('batch_size',1,200),
@@ -49,6 +65,25 @@ class Settings:
             raise ValueError('resume_pending_tasks must be lower than max_pending_tasks')
         if type(self.auto_mark_read) is not bool:
             raise ValueError('auto_mark_read must be a boolean')
+        for name in ('action_extraction_enabled', 'action_reminders_enabled',
+                     'telegram_action_reminders_enabled',
+                     'token_collection_enabled', 'token_analytics_visible',
+                     'explanations_visible'):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError(f'{name} must be a boolean')
+        if self.action_reminders_enabled and not self.action_extraction_enabled:
+            raise ValueError('Action reminders require action extraction')
+        if (self.telegram_action_reminders_enabled
+                and not self.action_reminders_enabled):
+            raise ValueError('Telegram action reminders require reminders')
+        if self.telegram_action_reminders_enabled and self.local_only:
+            raise ValueError('Telegram action reminders are unavailable in local-only mode')
+        if self.token_analytics_visible and not self.token_collection_enabled:
+            raise ValueError('Token analytics visibility requires token collection')
+        if self.default_timezone != DEFAULT_TIMEZONE:
+            raise ValueError(f'Unsupported default timezone: {self.default_timezone}')
+        if self.week_start != WEEK_START:
+            raise ValueError(f'Unsupported week boundary: {self.week_start}')
         import re
         model_pattern = re.compile(r'[a-z0-9][a-z0-9./_-]{0,99}')
         if not isinstance(self.gemini_models, tuple) or not 1 <= len(self.gemini_models) <= 3 or len(set(self.gemini_models)) != len(self.gemini_models) or any(not isinstance(value,str) or not model_pattern.fullmatch(value) for value in self.gemini_models):
@@ -66,15 +101,13 @@ class Settings:
 
     @classmethod
     def from_environment(cls, *, load_file=False):
-        raw_mode=os.environ.get('MAILMIND_LOCAL_ONLY','false').lower()
-        if raw_mode not in ('true','false'): raise ValueError('MAILMIND_LOCAL_ONLY must be true or false')
-        if load_file and raw_mode != 'true':
+        local_only = _environment_bool('MAILMIND_LOCAL_ONLY', False)
+        if load_file and not local_only:
             from dotenv import load_dotenv
             load_dotenv(ROOT / ".env", override=False)
-        raw_mode=os.environ.get('MAILMIND_LOCAL_ONLY','false').lower()
-        if raw_mode not in ('true','false'): raise ValueError('MAILMIND_LOCAL_ONLY must be true or false')
+        local_only = _environment_bool('MAILMIND_LOCAL_ONLY', False)
         return cls(
-            local_only=raw_mode == 'true',
+            local_only=local_only,
             asset_manifest_path=Path(os.environ['MAILMIND_ASSET_MANIFEST']).resolve() if os.environ.get('MAILMIND_ASSET_MANIFEST') else None,
             data_dir=Path(os.environ.get("MAILMIND_DATA_DIR", ROOT / "data")).resolve(),
             model_path=Path(os.environ.get("MAILMIND_MODEL_PATH", ROOT / "models" / "MailMind-Final")).resolve(),
@@ -86,11 +119,19 @@ class Settings:
             gmail_max_pages=int(os.environ.get('MAILMIND_GMAIL_MAX_PAGES',3)),
             max_pending_tasks=int(os.environ.get('MAILMIND_MAX_PENDING_TASKS',100)),
             resume_pending_tasks=int(os.environ.get('MAILMIND_RESUME_PENDING_TASKS',50)),
-            auto_mark_read=os.environ.get('MAILMIND_AUTO_MARK_READ','false').lower() == 'true',
+            auto_mark_read=_environment_bool('MAILMIND_AUTO_MARK_READ', False),
             provider_timeout_seconds=int(os.environ.get('MAILMIND_PROVIDER_TIMEOUT_SECONDS',5)),
             classification_budget_seconds=int(os.environ.get('MAILMIND_CLASSIFICATION_BUDGET_SECONDS',20)),
             worker_lease_seconds=int(os.environ.get('MAILMIND_WORKER_LEASE_SECONDS',90)),
             max_processing_attempts=int(os.environ.get('MAILMIND_MAX_PROCESSING_ATTEMPTS',3)),
             gemini_models=tuple(value.strip() for value in os.environ.get('MAILMIND_GEMINI_MODELS','gemini-3.8-flash,gemini-3.5-flash-lite').split(',') if value.strip()),
             groq_model=os.environ.get('MAILMIND_GROQ_MODEL','openai/gpt-oss-20b').strip(),
+            default_timezone=os.environ.get('MAILMIND_DEFAULT_TIMEZONE',DEFAULT_TIMEZONE).strip(),
+            week_start=os.environ.get('MAILMIND_WEEK_START',WEEK_START).strip().lower(),
+            action_extraction_enabled=_environment_bool('MAILMIND_ACTION_EXTRACTION_ENABLED',False),
+            action_reminders_enabled=_environment_bool('MAILMIND_ACTION_REMINDERS_ENABLED',False),
+            telegram_action_reminders_enabled=_environment_bool('MAILMIND_TELEGRAM_ACTION_REMINDERS_ENABLED',False),
+            token_collection_enabled=_environment_bool('MAILMIND_TOKEN_COLLECTION_ENABLED',True),
+            token_analytics_visible=_environment_bool('MAILMIND_TOKEN_ANALYTICS_VISIBLE',False),
+            explanations_visible=_environment_bool('MAILMIND_EXPLANATIONS_VISIBLE',False),
         )

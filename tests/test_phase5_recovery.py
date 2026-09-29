@@ -15,7 +15,7 @@ import httpx
 from fastapi.testclient import TestClient
 from src import main, llm_api, notifier
 from src.config import Settings
-from src.database import connection,initialize_database,utc_timestamp,_migration_1,_migration_2,_migration_3,_migration_4,_migration_5
+from src.database import SCHEMA_VERSION,connection,initialize_database,utc_timestamp,_migration_1,_migration_2,_migration_3,_migration_4,_migration_5
 from src.account_state import AccountManager,WorkCancelled
 from src.prediction import Prediction
 from src.notifier import Delivery
@@ -401,7 +401,7 @@ class RecoveryTests(unittest.TestCase):
         initialize_database(path)
         initialize_database(path)
         with connection(path) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],SCHEMA_VERSION)
             self.assertEqual(tuple(conn.execute('SELECT body,prediction FROM email_logs').fetchone()),('original body','IMPORTANT'))
             self.assertEqual(conn.execute('SELECT label FROM feedback_history').fetchone()[0],'UPDATES')
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM processing_tasks').fetchone()[0],0)

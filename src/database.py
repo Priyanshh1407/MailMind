@@ -5,8 +5,11 @@ from pathlib import Path
 import sqlite3
 
 from .config import CATEGORIES, LEGACY_ACCOUNT, Settings
+from .intelligence_schema import (
+    migration_11, migration_12, migration_13, migration_14,
+)
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 14
 
 
 def utc_timestamp(value=None):
@@ -266,20 +269,24 @@ def initialize_database(db_path=None, *, manual_timezone=timezone(timedelta(hour
                                   (2, {'prediction_attempts','feedback_history','notification_attempts','worker_jobs'}),
                                   (3, {'runtime_state','local_sessions'}), (4, {'ingestion_state'}),
                                   (6, {'processing_tasks','processing_attempts','notification_outbox','ingestion_failures','auth_jobs','worker_health'}),
-                                  (9, {'email_search_index'})):
+                                  (9, {'email_search_index'}),
+                                  (11, {'email_analysis','token_usage_events'}),
+                                  (12, {'email_actions','action_reminders'}),
+                                  (13, {'intelligence_mutation_limits'}),
+                                  (14, {'intelligence_backfill_items'})):
             if version >= introduced:
                 expected.update(names)
         existing = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not expected.issubset(existing):
             raise ValueError('Database schema is incomplete')
-        for number, migration in ((1, _migration_1), (2, _migration_2), (3, _migration_3), (4, _migration_4), (5, _migration_5), (6, _migration_6), (7, _migration_7), (8, _migration_8), (9, _migration_9), (10, _migration_10)):
+        for number, migration in ((1, _migration_1), (2, _migration_2), (3, _migration_3), (4, _migration_4), (5, _migration_5), (6, _migration_6), (7, _migration_7), (8, _migration_8), (9, _migration_9), (10, _migration_10), (11, migration_11), (12, migration_12), (13, migration_13), (14, migration_14)):
             if version < number:
                 if number == 1:
                     migration(conn, manual_timezone)
                 else:
                     migration(conn)
                 conn.execute(f"PRAGMA user_version={number}")
-        required = {'accounts','email_logs','prediction_attempts','feedback_history','notification_attempts','worker_jobs','runtime_state','local_sessions','ingestion_state','email_search_index'}
+        required = {'accounts','email_logs','prediction_attempts','feedback_history','notification_attempts','worker_jobs','runtime_state','local_sessions','ingestion_state','email_search_index','email_analysis','token_usage_events','email_actions','action_reminders','intelligence_mutation_limits','intelligence_backfill_items'}
         actual = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not required.issubset(actual):
             raise ValueError("Database schema is incomplete")

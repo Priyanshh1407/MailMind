@@ -15,6 +15,9 @@ This directory contains the current operational and technical documentation for 
 | [Security showcase](SECURITY_FEATURES_SHOWCASE.md) | Interviewers and developers | Source-backed explanation of the security engineering |
 | [Frontend guide](../frontend/README.md) | Frontend developers | UI architecture, component responsibilities, testing, and accessibility |
 | [Test guide](../tests/README.md) | Developers | Current suites, commands, coverage, and validation limits |
+| [Controlled intelligence validation](CONTROLLED_INTELLIGENCE_VALIDATION.md) | Release operators | Privacy-safe live OAuth, Gmail, action, token, reminder, and backfill checklist |
+| [Intelligence feature contract](INTELLIGENCE_FEATURE_CONTRACT.md) | Developers and reviewers | Stable action, explanation, reminder, token, and rollout behavior |
+| [Contributing](../CONTRIBUTING.md) | Contributors | Required tests, privacy gate, documentation rules, and pull-request expectations |
 
 ## Documentation principles
 

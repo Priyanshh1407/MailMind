@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from api.app import create_app
 from src import vector_db, llm_api, main
 from src.config import Settings
-from src.database import connection, initialize_database, _migration_1, _migration_2, _migration_3, _migration_4, utc_timestamp
+from src.database import SCHEMA_VERSION, connection, initialize_database, _migration_1, _migration_2, _migration_3, _migration_4, utc_timestamp
 from src.db_utils import log_email_to_db, get_email, update_human_label, get_recent_emails
 from src.feedback import current_vector, reconcile_feedback
 from src.local_llm import MailMindModel
@@ -228,7 +228,7 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual((result.category,result.model_version),('IMPORTANT','openai/gpt-oss-20b'))
         payload=post.call_args.kwargs['json']
         self.assertEqual(payload['model'],'openai/gpt-oss-20b')
-        self.assertEqual(payload['max_completion_tokens'],512)
+        self.assertEqual(payload['max_completion_tokens'],2048)
         self.assertEqual(payload['response_format']['type'],'json_schema')
         self.assertTrue(payload['response_format']['json_schema']['strict'])
 
@@ -464,7 +464,7 @@ class FeedbackTests(unittest.TestCase):
         initialize_database(path)
         initialize_database(path)
         with connection(path) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],SCHEMA_VERSION)
             self.assertEqual(conn.execute('SELECT body FROM email_logs').fetchone()[0],'original body')
             self.assertEqual(tuple(conn.execute('SELECT label,indexing_state,attempt_count FROM feedback_history').fetchone()),('UPDATES','pending',0))
 

@@ -1,6 +1,7 @@
 from dataclasses import replace
 from time import perf_counter
 import atexit
+import inspect
 from contextlib import redirect_stdout
 import json
 import os
@@ -15,6 +16,59 @@ from .config import Settings
 from .prediction import Prediction, checkpoint_labels
 from .logging_utils import log_event
 from .email_text import format_email_text, format_model_text, normalize_subject, normalize_text, MODEL_MAX_TOKENS
+
+
+def _tokenized_input_count(inputs):
+    if not isinstance(inputs, dict) or 'input_ids' not in inputs:
+        return None
+    values = inputs['input_ids']
+    try:
+        count = int(values.numel())
+    except (AttributeError, TypeError, ValueError):
+        try:
+            if isinstance(values, (list, tuple)):
+                count = sum(len(row) if isinstance(row, (list, tuple)) else 1
+                            for row in values)
+            else:
+                return None
+        except (TypeError, ValueError):
+            return None
+    return count if 0 <= count <= 1_000_000_000 else None
+
+
+def _prediction_kwargs(method, *, sender, account_id):
+    """Preserve compatibility with injected models using the historic API."""
+    try:
+        parameters = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return {'sender': sender, 'account_id': account_id}
+    accepts_extra = any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
+    values = {'sender': sender, 'account_id': account_id}
+    return {
+        name: value for name, value in values.items()
+        if accepts_extra or name in parameters
+    }
+
+
+def predict_with_token_count(model, subject, body, *, sender='', account_id=None):
+    measured = getattr(model, 'predict_with_usage', None)
+    if callable(measured):
+        result = measured(
+            subject, body,
+            **_prediction_kwargs(measured, sender=sender, account_id=account_id),
+        )
+        if (isinstance(result, tuple) and len(result) == 2
+                and isinstance(result[0], Prediction)
+                and (result[1] is None or type(result[1]) is int)):
+            return result
+    predictor = model.predict
+    return predictor(
+        subject, body,
+        **_prediction_kwargs(predictor, sender=sender, account_id=account_id),
+    ), None
 
 
 def _settings_payload(settings, model_path):
@@ -81,11 +135,13 @@ def _model_service(payload):
             if request.get('command') == 'stop':
                 return
             with redirect_stdout(sys.stderr):
-                prediction = model.predict(request['subject'], request['body'],
-                                           sender=request.get('sender', ''),
-                                           account_id=request.get('account_id'))
+                prediction, input_tokens = model.predict_with_usage(
+                    request['subject'], request['body'],
+                    sender=request.get('sender', ''),
+                    account_id=request.get('account_id'))
             response = {'type': 'prediction', 'id': request['id'],
-                        'prediction': prediction.to_dict()}
+                        'prediction': prediction.to_dict(),
+                        'input_tokens': input_tokens}
         except BaseException as error:
             with redirect_stdout(sys.stderr):
                 log_event('local_inference_process_failed', error=error)
@@ -191,14 +247,36 @@ class DeferredMailMindModel:
             return self._load_reason
 
     def predict(self, subject, body, *, sender='', account_id=None):
+        return self.predict_with_usage(
+            subject, body, sender=sender, account_id=account_id
+        )[0]
+
+    def predict_with_usage(self, subject, body, *, sender='', account_id=None):
         model = self._current()
         if model is not None:
-            return model.predict(subject, body, sender=sender, account_id=account_id)
+            measured = getattr(model, 'predict_with_usage', None)
+            if callable(measured):
+                result = measured(
+                    subject, body, sender=sender, account_id=account_id
+                )
+                if isinstance(result, tuple) and len(result) == 2:
+                    return result
+            return model.predict(
+                subject, body, sender=sender, account_id=account_id
+            ), None
         if not self.model_loaded:
-            return Prediction(outcome='UNAVAILABLE', source='local', reason=self.load_reason)
+            return (
+                Prediction(outcome='UNAVAILABLE', source='local',
+                           reason=self.load_reason),
+                None,
+            )
         with self._lock:
             if self._closed or self._process is None or self._process.poll() is not None:
-                return Prediction(outcome='UNAVAILABLE', source='local', reason='model_process_failed')
+                return (
+                    Prediction(outcome='UNAVAILABLE', source='local',
+                               reason='model_process_failed'),
+                    None,
+                )
             self._request_id += 1
             request_id = self._request_id
             try:
@@ -212,9 +290,16 @@ class DeferredMailMindModel:
             while True:
                 message = self._responses.get(timeout=15)
                 if message.get('id') == request_id:
-                    return Prediction(**message['prediction'])
+                    tokens = message.get('input_tokens')
+                    if type(tokens) is not int or not 0 <= tokens <= 1_000_000_000:
+                        tokens = None
+                    return Prediction(**message['prediction']), tokens
         except Empty:
-            return Prediction(outcome='ERROR', source='local', reason='local_inference_timeout')
+            return (
+                Prediction(outcome='ERROR', source='local',
+                           reason='local_inference_timeout'),
+                None,
+            )
 
     def close(self):
         with self._lock:
@@ -283,6 +368,11 @@ class MailMindModel:
             log_event('model_load_failed', error=error)
 
     def predict(self, subject, body, *, sender='', account_id=None):
+        return self.predict_with_usage(
+            subject, body, sender=sender, account_id=account_id
+        )[0]
+
+    def predict_with_usage(self, subject, body, *, sender='', account_id=None):
         start = perf_counter()
         sender = normalize_text(sender, limit=1000)
         subject, body = normalize_subject(subject), normalize_text(body)
@@ -293,31 +383,71 @@ class MailMindModel:
             try:
                 result = self.vector_service.get_knn_prediction(subject, body, k=5, account_id=account_id)
                 if result is not None:
-                    return replace(result, elapsed_ms=(perf_counter()-start)*1000)
+                    return replace(
+                        result, elapsed_ms=(perf_counter()-start)*1000
+                    ), None
             except Exception as error:
                 retrieval_status = 'unavailable'
                 log_event('retrieval_failed', error=error)
         if not self.model_loaded:
-            return Prediction(outcome='ABSTAIN' if self.model_version == 'legacy-binary' else 'UNAVAILABLE',
-                              model_version=self.model_version, reason=self.load_reason,
-                              retrieval_status=retrieval_status, elapsed_ms=(perf_counter()-start)*1000)
+            return (
+                Prediction(
+                    outcome='ABSTAIN' if self.model_version == 'legacy-binary'
+                    else 'UNAVAILABLE',
+                    model_version=self.model_version, reason=self.load_reason,
+                    retrieval_status=retrieval_status,
+                    elapsed_ms=(perf_counter()-start)*1000,
+                ),
+                None,
+            )
+        input_tokens = None
         try:
             import torch
             import torch.nn.functional as F
             model_text = format_model_text(sender, subject, body) if sender else format_email_text(subject, body)
             inputs = self.tokenizer(model_text, return_tensors='pt',
                                     truncation=True, max_length=MODEL_MAX_TOKENS)
+            input_tokens = _tokenized_input_count(inputs)
             with torch.no_grad():
                 probabilities = F.softmax(self.model(**inputs).logits, dim=-1)
             index = torch.argmax(probabilities, dim=-1).item()
-            return Prediction(category=self.id2label[index], outcome='CLASSIFIED', model_version=self.model_version,
-                              score=float(probabilities[0][index].item()), score_kind='softmax',
-                              retrieval_status=retrieval_status, elapsed_ms=(perf_counter()-start)*1000,
-                              limitations=('synthetic_benchmark_only','not_production_validated') if getattr(self,"training_scope",None) else ('checkpoint_quality_not_yet_evaluated',))
+            return (
+                Prediction(
+                    category=self.id2label[index], outcome='CLASSIFIED',
+                    model_version=self.model_version,
+                    score=float(probabilities[0][index].item()),
+                    score_kind='softmax', retrieval_status=retrieval_status,
+                    elapsed_ms=(perf_counter()-start)*1000,
+                    limitations=('synthetic_benchmark_only',
+                                 'not_production_validated')
+                    if getattr(self, "training_scope", None)
+                    else ('checkpoint_quality_not_yet_evaluated',),
+                ),
+                input_tokens,
+            )
         except Exception as error:
             log_event('local_inference_failed', error=error)
-            return Prediction(outcome='ERROR', model_version=self.model_version, reason='local_inference_failed',
-                              retrieval_status=retrieval_status, elapsed_ms=(perf_counter()-start)*1000)
+            return (
+                Prediction(
+                    outcome='ERROR', model_version=self.model_version,
+                    reason='local_inference_failed',
+                    retrieval_status=retrieval_status,
+                    elapsed_ms=(perf_counter()-start)*1000,
+                ),
+                input_tokens,
+            )
+
+
+def local_retrieval_expected(model):
+    if isinstance(model, MailMindModel):
+        return getattr(model, 'training_scope', None) != (
+            'private_user_approved_inbox'
+        )
+    if isinstance(model, DeferredMailMindModel):
+        return bool(model.model_loaded and model.training_scope != (
+            'private_user_approved_inbox'
+        ))
+    return False
 
 
 if __name__ == '__main__':

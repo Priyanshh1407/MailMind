@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from api.app import create_app
 from src.account_state import AccountManager, WorkCancelled
 from src.config import Settings
-from src.database import connection, initialize_database, _migration_1, _migration_2, _migration_3, utc_timestamp
+from src.database import SCHEMA_VERSION, connection, initialize_database, _migration_1, _migration_2, _migration_3, utc_timestamp
 from src.db_utils import get_email, get_ingestion_state, log_email_to_db, save_ingestion_state
 from src.email_client import get_unread_emails, get_new_emails, FetchBatch
 from src.email_text import format_email_text, normalize_text, html_to_text, prepare_training_text, MAX_BODY_CHARS
@@ -653,6 +653,6 @@ class WorkerTests(unittest.TestCase):
         initialize_database(path)
         initialize_database(path)
         with connection(path) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],SCHEMA_VERSION)
             row=conn.execute('SELECT body,body_truncated FROM email_logs').fetchone()
             self.assertEqual(tuple(row),('original saved body',0))

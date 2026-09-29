@@ -47,8 +47,20 @@ Never commit environment files, OAuth JSON, tokens, databases, launcher logs, ex
 | <code>MAILMIND_MODEL_PATH</code> | optional | Explicit local classifier path |
 | <code>MAILMIND_SHADOW_MODEL_PATH</code> | optional | Normal-mode three-class shadow checkpoint |
 | <code>MAILMIND_ASSET_MANIFEST</code> | optional | Verified local-only asset manifest |
+| <code>MAILMIND_TOKEN_COLLECTION_ENABLED</code> | <code>true</code> | Record privacy-safe token events |
+| <code>MAILMIND_TOKEN_ANALYTICS_VISIBLE</code> | <code>false</code> | Expose usage analytics after token collection is observed |
+| <code>MAILMIND_EXPLANATIONS_VISIBLE</code> | <code>false</code> | Expose source-labelled explanations |
+| <code>MAILMIND_ACTION_EXTRACTION_ENABLED</code> | <code>false</code> | Persist action candidates and enable explicit saved-mail backfill |
+| <code>MAILMIND_ACTION_REMINDERS_ENABLED</code> | <code>false</code> | Enable dashboard action reminders |
+| <code>MAILMIND_TELEGRAM_ACTION_REMINDERS_ENABLED</code> | <code>false</code> | Separately opt in to Telegram action reminders |
 
 Provider variables are listed in <code>.env.example</code>. Never place provider keys in frontend source or documentation.
+
+### Intelligence rollout order
+
+Keep schema migrations and token collection first. Observe synthetic token events, then enable explanations, validate controlled action types with reminders off, enable Action Center controls, enable dashboard reminders, and only then opt in to Telegram action reminders. Saved-mail backfill is the final, explicit step. Restart API and worker together after flag changes.
+
+The dashboard backfill button requests 20 eligible saved messages at a time. The API hard limit is 100, and admission also obeys the global active-task cap. Backfill never performs historical Telegram notification, Gmail mark-read, or automatic-reminder side effects.
 
 ## Google OAuth
 
@@ -182,7 +194,7 @@ Integration helpers:
 .\venv\Scripts\python.exe -m scripts.check_clean_release
 ~~~
 
-At the 25 September 2026 documentation refresh, all 384 backend tests, 26 frontend unit tests, 19 browser scenarios, frontend lint, and the production build passed.
+At the 29 September 2026 Phase 8 automated verification, all 478 backend tests, 42 frontend unit tests, 24 browser scenarios, frontend lint, and the production build passed.
 
 ## Release checklist
 
@@ -196,5 +208,8 @@ At the 25 September 2026 documentation refresh, all 384 backend tests, 26 fronte
 - [ ] Confirm the launcher starts four native services and stops only its owned set.
 - [ ] Confirm semantic indexing waits for Google connection.
 - [ ] Confirm account switching cannot expose the previous account.
+- [ ] Follow the staged intelligence rollout order; keep Telegram action reminders opt-in.
+- [ ] Confirm explicit backfill remains bounded and lower priority than live/ordinary backlog work.
+- [ ] Complete the controlled live validation checklist before claiming live OAuth, Gmail, provider, or Telegram validation.
 - [ ] Keep current limitations visible in public documentation.
 - [ ] Do not claim live-provider reliability or production model accuracy without deliberate evidence.

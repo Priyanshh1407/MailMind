@@ -10,7 +10,7 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
-At the 25 September 2026 documentation refresh, all 384 discovered backend tests passed, including the release-policy checks for exact dependency declarations.
+At the 29 September 2026 Phase 8 verification, all 478 discovered backend tests passed, including seven feature-specific saved-mail intelligence backfill checks and the release-policy checks for exact dependency declarations.
 
 The backend suite covers:
 
@@ -27,6 +27,7 @@ The backend suite covers:
 - supervisor ownership and restart limits;
 - prompt-injection and retrieval-poisoning boundaries; and
 - privacy-safe failure behavior.
+- schema-14 bounded intelligence backfill, queue priority, recovery, side-effect suppression, rollout gating, CSRF, account isolation, and purge.
 
 Focused security checks:
 
@@ -50,8 +51,8 @@ Set-Location ..
 
 Current verified result:
 
-- 26 Node unit tests passed;
-- 19 Playwright browser scenarios passed;
+- 42 Node unit tests passed;
+- 24 Playwright browser scenarios passed;
 - lint passed;
 - production build passed.
 
@@ -92,9 +93,13 @@ A deliberate live validation should confirm:
 - search results for known controlled mail;
 - queue cap and historical-backlog separation; and
 - account disconnect/deletion behavior.
+- one explicit action/deadline email, one informational update, and one ambiguous request;
+- explanation source labels, action lifecycle persistence, and reminder restart recovery;
+- provider-attempt token accounting and day/week/month reconciliation; and
+- bounded saved-mail backfill with no historical alert, read-state, or automatic-reminder side effects.
 
 Do not publish live validation logs or screenshots without removing account identifiers and mail content.
 
 ## Release rule
 
-Do not describe the suite as fully passing while an unexpected failure remains. Resolve the dependency declaration mismatch, rerun the backend suite, and update public verification evidence before release.
+Do not describe automated verification as live-provider validation. Resolve every unexpected failure, rerun the affected complete gate, and record live OAuth/Gmail results separately.

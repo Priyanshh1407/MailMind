@@ -5,27 +5,14 @@ from .config import CATEGORIES, LEGACY_ACCOUNT, Settings
 from .database import connection, utc_timestamp
 from .email_text import preview_text
 from .prediction import Prediction, Category
+from .email_analysis import (
+    SYSTEM_REASON_MESSAGES as REVIEW_MESSAGES,
+    ensure_prediction_analysis,
+    get_email_analysis,
+    system_email_analysis,
+)
 
 DB_PATH = Settings().db_path
-
-REVIEW_MESSAGES = {
-    'queued': 'Waiting for classification.',
-    'running': 'Classification is currently in progress.',
-    'retry': 'Classification will retry after a temporary failure.',
-    'dead': 'Classification stopped after repeated failures.',
-    'low_confidence': 'The model was not confident enough to choose a category.',
-    'category_tie': 'The two most likely categories were too close to choose safely.',
-    'provider_timeout': 'The classification provider took too long to respond.',
-    'invalid_provider_output': 'The provider returned a result MailMind could not safely use.',
-    'cloud_not_configured_or_unavailable': 'No configured cloud classifier was available.',
-    'missing_checkpoint': 'The local model checkpoint is unavailable.',
-    'model_loading': 'The local model is still loading.',
-    'model_process_failed': 'The local model process could not start.',
-    'local_inference_failed': 'The local model could not complete this prediction.',
-    'legacy_binary_has_no_updates_coverage': 'The installed local model cannot classify all three categories.',
-    'message_parse_failed': 'MailMind could not safely read enough of this message.',
-    'classification_unavailable': 'No reliable classification was available.',
-}
 
 
 def review_reason(row, latest, task):
@@ -69,14 +56,14 @@ def log_email_to_db(email_id, sender, subject, body, prediction, local_predictio
             # Preserve the first successful categories, while allowing a later
             # success to fill rows whose earlier provider attempts had no label.
             conn.execute('UPDATE email_logs SET prediction=COALESCE(prediction,?),local_prediction=COALESCE(local_prediction,?) WHERE account_id=? AND email_id=?',(category,local_category,account_id,email_id))
-        metadata = result.to_dict()
+        metadata = result.to_dict(include_actions=True)
         if isinstance(local_prediction, Prediction):
             metadata['local'] = local_prediction.to_dict()
         conn.execute("""INSERT INTO prediction_attempts(account_id,email_id,category,local_category,outcome,source,model_version,metadata,created_at)
             VALUES (?,?,?,?,?,?,?,?,?)""", (account_id,email_id,category,local_category,outcome,result.source,result.model_version,json.dumps(metadata),timestamp))
 
 
-def get_recent_emails(limit=50, *, account_id=None, db_path=None, db_conn=None, offset=0, search='', category=None, ranked_ids=None):
+def get_recent_emails(limit=50, *, account_id=None, db_path=None, db_conn=None, offset=0, search='', category=None, ranked_ids=None, include_analysis=False):
     # None is reserved for deliberate local maintenance. HTTP/worker callers
     # always supply the authorized account.
     with (nullcontext(db_conn) if db_conn is not None else connection(db_path)) as conn:
@@ -98,12 +85,46 @@ def get_recent_emails(limit=50, *, account_id=None, db_path=None, db_conn=None, 
             feedback = conn.execute('SELECT revision_id,label,indexing_state FROM feedback_history WHERE account_id=? AND email_id=? ORDER BY revision_id DESC LIMIT 1', (row['account_id'],row['email_id'])).fetchone()
             task = conn.execute('SELECT status,stage,attempt_count,next_retry_at,error_code FROM processing_tasks WHERE account_id=? AND email_id=?',(row['account_id'],row['email_id'])).fetchone()
             delivery = conn.execute('SELECT status,attempt_count,next_retry_at,error_code,provider_message_id FROM notification_outbox WHERE account_id=? AND email_id=?',(row['account_id'],row['email_id'])).fetchone()
-            output.append({'processing':dict(task) if task else None, 'notification':dict(delivery) if delivery else None, **dict(row), 'id':row['email_id'], 'body_snippet':preview_text(row['body']),
-                           'parse_warnings':json.loads(row['parse_warnings']),
-                           'latest_prediction': {**json.loads(latest['metadata']), 'category':latest['category'], 'outcome':latest['outcome'], 'source':latest['source'], 'model_version':latest['model_version']} if latest else None,
-                           'review_reason':review_reason(row,latest,task),
-                           'effective_category':row['human_label'] or (latest['category'] if latest else row['prediction']),
-                           'feedback':dict(feedback) if feedback else None})
+            reason=review_reason(row,latest,task)
+            metadata=json.loads(latest['metadata']) if latest else None
+            public_metadata=dict(metadata) if isinstance(metadata,dict) else {}
+            public_metadata.pop('analysis',None)
+            if isinstance(public_metadata.get('local'),dict):
+                public_metadata['local']=dict(public_metadata['local'])
+                public_metadata['local'].pop('analysis',None)
+            item={'processing':dict(task) if task else None,
+                  'notification':dict(delivery) if delivery else None,
+                  **dict(row), 'id':row['email_id'],
+                  'body_snippet':preview_text(row['body']),
+                  'parse_warnings':json.loads(row['parse_warnings']),
+                  'latest_prediction': {
+                      **public_metadata,
+                      'category':latest['category'],
+                      'outcome':latest['outcome'],
+                      'source':latest['source'],
+                      'model_version':latest['model_version'],
+                  } if latest else None,
+                  'review_reason':reason,
+                  'effective_category':row['human_label'] or (
+                      latest['category'] if latest else row['prediction']),
+                  'feedback':dict(feedback) if feedback else None}
+            if include_analysis:
+                analysis=get_email_analysis(
+                    row['account_id'],row['email_id'],db_conn=conn)
+                if analysis is None and isinstance(metadata,dict):
+                    candidate=metadata.get('analysis')
+                    if isinstance(candidate,dict):
+                        analysis=candidate
+                if analysis is None and reason is not None:
+                    analysis=system_email_analysis(reason['code']).to_dict()
+                if analysis is None and latest and latest['category']:
+                    fallback=ensure_prediction_analysis(Prediction(
+                        category=latest['category'],outcome='CLASSIFIED',
+                        source=latest['source'],model_version=latest['model_version'],
+                    ))
+                    analysis=fallback.analysis.to_dict()
+                item['analysis']=analysis
+            output.append(item)
         return output
 
 

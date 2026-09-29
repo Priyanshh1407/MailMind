@@ -1,5 +1,6 @@
 """Bounded MIME reader. No attachment downloads, HTML execution, or network."""
 import base64
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from email import message_from_string
 from email.header import decode_header
@@ -193,11 +194,23 @@ def parse_gmail_message(message, message_id, *, inline_loader=None):
     payload = message['payload']
     headers = _headers(payload)
     body = parse_body(payload, inline_loader=inline_loader)
-    return {'id': message_id,
-            'sender': normalize_text(decode_mail_header(headers.get('From', 'Unknown Sender')), limit=MAX_SENDER_CHARS),
-            'subject': normalize_subject(decode_mail_header(headers.get('Subject', 'No Subject'))),
-            'body': body.text, 'body_snippet': preview_text(body.text), 'body_kind': body.kind,
-            'body_truncated': body.truncated, 'parse_warnings': body.warnings}
+    result = {'id': message_id,
+              'sender': normalize_text(decode_mail_header(headers.get('From', 'Unknown Sender')), limit=MAX_SENDER_CHARS),
+              'subject': normalize_subject(decode_mail_header(headers.get('Subject', 'No Subject'))),
+              'body': body.text, 'body_snippet': preview_text(body.text), 'body_kind': body.kind,
+              'body_truncated': body.truncated, 'parse_warnings': body.warnings}
+    internal_date = message.get('internalDate')
+    try:
+        milliseconds = int(internal_date)
+        if milliseconds <= 0:
+            raise ValueError
+        source_time = datetime.fromtimestamp(
+            milliseconds / 1000, tz=timezone.utc)
+        result['source_created_at'] = source_time.strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ")
+    except (TypeError, ValueError, OverflowError, OSError):
+        pass
+    return result
 
 
 def parse_raw_email(raw):

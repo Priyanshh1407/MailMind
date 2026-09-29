@@ -62,10 +62,12 @@ FastAPI owns:
 - paginated email reads;
 - lexical and hybrid search;
 - feedback, undo, and history;
+- Action Center reads/mutations, token analytics, and source-labelled explanations;
 - forced live sync and bounded backlog authorization; and
+- explicit bounded saved-mail intelligence backfill; and
 - explicit recovery for unfinished tasks and ambiguous notification delivery.
 
-The API opens/migrates schema version 10 and lazily initializes heavy or optional services.
+The API opens/migrates schema version 14 and lazily initializes heavy or optional services.
 
 ### Gmail/classification worker
 
@@ -74,7 +76,7 @@ The worker runs small, newest-first cycles. Each cycle:
 1. validates the active account generation;
 2. acquires an expiring lease;
 3. prioritizes live history-cursor changes;
-4. fills remaining capacity with authorized historical backlog;
+4. fills remaining capacity with ordinary historical backlog before intelligence backfill;
 5. processes a bounded number of durable tasks;
 6. records classification, notification, and mark-read stages; and
 7. updates heartbeat, success, and safe error state.
@@ -100,6 +102,7 @@ SQLite stores:
 - feedback revisions;
 - semantic-index reconciliation state;
 - worker health; and
+- source-labelled analysis, extracted actions, reminders, privacy-safe token events, mutation limits, and intelligence-backfill state; and
 - background authentication and processing jobs.
 
 Task states include `queued`, `running`, `retry`, `complete`, and `dead`. A successful category is never invented from a processing failure.
@@ -130,9 +133,23 @@ Older mail is deliberately bounded:
 - **Fetch next 100** authorizes another historical batch only when allowed; and
 - historical work cannot consume capacity reserved by the global active-task cap.
 
+### Saved-mail intelligence backfill
+
+Backfill is never automatic. A connected user must select **Analyze up to 20 saved emails**, and Action Center extraction must already be enabled. Admission is account-scoped, idempotent, limited to 100 per API request and 20 by the current UI, and constrained by the same active-task cap as ordinary work.
+
+Backfill reuses the existing processing queue and provider/local instrumentation. It can persist classification, source-labelled analysis, action candidates, and token events. It suppresses historical Telegram alerts, Gmail mark-read calls, and automatic reminder creation. Its durable states are queued, running, retry, complete, and dead; an expired worker claim returns it to retry.
+
+The private, CSRF-protected `POST /intelligence/backfill` route accepts `{"limit": 1..100}` and returns a durable job acknowledgement plus requested, admitted, eligible, and remaining-capacity counts. It returns conflict when no eligible mail or capacity remains. `GET /status` exposes rollout availability and account-scoped backfill counts. The existing task-retry route resets a failed backfill marker with the task; completed rows remain idempotently excluded.
+
 ### Priority
 
-New live mail is admitted and processed before older backlog. The default active-task cap is 100. The worker time-slices processing to keep Gmail discovery responsive.
+New live mail is admitted and processed before older backlog, and ordinary backlog is processed before intelligence backfill. The default active-task cap is 100. The worker time-slices processing to keep Gmail discovery responsive.
+
+## Intelligence data flow
+
+Validated provider output can add a bounded explanation and action candidates to the authoritative classification. Explanations remain source-labelled and do not expose hidden reasoning. Action candidates pass strict type, confidence, evidence, date, and lifecycle checks before becoming account-owned Action Center rows.
+
+Token events contain counts and operational metadata, never email text or provider responses. Provider-billed and locally processed totals stay separate. Day, week, and month aggregation uses configured local-calendar boundaries.
 
 ## Classification model
 
@@ -180,6 +197,7 @@ If embedding or Chroma query work fails, the API logs a safe event and returns l
 - Provider timeouts do not consume unrelated Gmail or Telegram capacity.
 - A poisoned message does not stop the batch.
 - An expired lease prevents a stale worker from committing.
+- An interrupted intelligence backfill is recovered through the same lease/retry path without repeating historical side effects.
 - Unknown notification delivery requires explicit recovery.
 - Historical transient runtime errors are cleared after restart or a successful worker cycle.
 

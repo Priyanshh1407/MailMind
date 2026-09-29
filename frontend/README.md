@@ -41,6 +41,11 @@ flowchart LR
 - <code>src/hooks/useDashboard.js</code> owns completion-based polling, cancellation, stale-response rejection, and serialized mutations.
 - Components render all server/email text through React. No raw-HTML rendering sink is used.
 
+The integrated intelligence snapshot loads bounded action summary/page and
+token summary reads alongside mail, status, and telemetry. Every response is
+bound to the current account and generation. Action or analytics outages remain
+section-local, while a session/account mismatch cancels the complete snapshot.
+
 ## Main components
 
 | Component | Responsibility |
@@ -50,12 +55,16 @@ flowchart LR
 | <code>AccountControls</code> | Connect, switch, disconnect, delete, and stop-processing actions |
 | <code>DashboardStats</code> | Account-wide saved, processed, feedback, and latency KPIs |
 | <code>InboxProgress</code> | Current admitted batch and durable workflow counts |
-| <code>InboxIntake</code> | Live sync and bounded historical-backlog controls |
+| <code>InboxIntake</code> | Live sync, bounded historical backlog, and explicit saved-mail intelligence backfill |
 | <code>SearchFilters</code> | Debounced hybrid query, category filter, and semantic progress |
 | <code>EmailBoard</code> | Important, Updates, Spam, and Review lanes |
 | <code>EmailCard</code> | Classification details, feedback, history, and recovery |
 | <code>Pagination</code> | Stable 20-message pages |
 | <code>AppFeedback</code> | Persistent outages and timed action notices |
+| <code>ActionSummary</code> | Open, due-soon, overdue, and tokens-today KPIs |
+| <code>ActionCenter</code> | Bounded action filters, lifecycle controls, snoozing, and source navigation |
+| <code>ClassificationExplanation</code> | Validated category rationale, signal chips, source, and model details |
+| <code>TokenUsagePanel</code> | Recharts daily trend, cloud/local split, and provider/operation breakdowns |
 
 ## Search behavior
 
@@ -118,12 +127,12 @@ The browser suite uses synthetic in-browser API fixtures. It exercises account m
 
 It does not sign in to Google, read real mail, call live cloud providers, or send Telegram messages.
 
-At the 25 September 2026 refresh:
-
-- 26 frontend unit tests passed;
-- 19 Playwright scenarios passed;
-- lint passed; and
-- the production build passed.
+At the 29 September 2026 Phase 8 verification, the frontend unit suite contains 42
+passing tests, including feature-specific validation for bounded backfill status
+and acknowledgements; the browser suite contains 24 passing scenarios. The
+Phase 8 scenario proves the control is explicit, capped at 20, observable, and
+describes its historical side-effect suppression. Lint and the production build
+also pass.
 
 ## Security and privacy
 
@@ -135,5 +144,9 @@ At the 25 September 2026 refresh:
 - A failed refresh retains the last snapshot but disables unsafe mutations.
 - Local-only mode disables unavailable external controls.
 - UI status distinguishes configured providers from observed health.
+- Action and usage tabs are only rendered after the connected Google session
+  guard succeeds; source-email navigation remains account-scoped.
+- Token charts use Recharts with a visible table fallback and never present
+  token counts as cost estimates.
 
 The frontend cannot make an untrusted workstation safe. Review the root security and privacy documentation before using real mail.

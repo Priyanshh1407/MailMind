@@ -225,11 +225,21 @@ class AccountManager:
             if search_collection is not None:
                 search_target = search_collection() if callable(search_collection) else search_collection
                 search_target.delete(where={'account_id': context.account_id})
+            conn.execute("DELETE FROM action_reminders WHERE account_id=?", (context.account_id,))
+            conn.execute("DELETE FROM email_actions WHERE account_id=?", (context.account_id,))
+            conn.execute("DELETE FROM email_analysis WHERE account_id=?", (context.account_id,))
+            conn.execute("DELETE FROM token_usage_events WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM email_logs WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM worker_jobs WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM ingestion_state WHERE account_id=?", (context.account_id,))
             conn.execute('DELETE FROM ingestion_failures WHERE account_id=?', (context.account_id,))
             conn.execute('DELETE FROM worker_health WHERE account_id=?',(context.account_id,))
+            conn.execute(
+                'DELETE FROM intelligence_mutation_limits WHERE account_id=?',
+                (context.account_id,))
+            conn.execute(
+                'DELETE FROM intelligence_backfill_items WHERE account_id=?',
+                (context.account_id,))
             self.credential_path(context.account_id).unlink(missing_ok=True)
             conn.execute("UPDATE runtime_state SET purge_pending=0")
         return context
@@ -243,10 +253,20 @@ class AccountManager:
             if search_collection is not None:
                 search_target = search_collection() if callable(search_collection) else search_collection
                 search_target.delete(where={'account_id': LEGACY_ACCOUNT})
+            conn.execute("DELETE FROM action_reminders WHERE account_id=?", (LEGACY_ACCOUNT,))
+            conn.execute("DELETE FROM email_actions WHERE account_id=?", (LEGACY_ACCOUNT,))
+            conn.execute("DELETE FROM email_analysis WHERE account_id=?", (LEGACY_ACCOUNT,))
+            conn.execute("DELETE FROM token_usage_events WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM email_logs WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM worker_jobs WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM ingestion_state WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute('DELETE FROM ingestion_failures WHERE account_id=?', (LEGACY_ACCOUNT,))
             conn.execute("DROP TABLE IF EXISTS email_logs_legacy_v0")
+            conn.execute(
+                'DELETE FROM intelligence_mutation_limits WHERE account_id=?',
+                (LEGACY_ACCOUNT,))
+            conn.execute(
+                'DELETE FROM intelligence_backfill_items WHERE account_id=?',
+                (LEGACY_ACCOUNT,))
             self.settings.legacy_token_path.unlink(missing_ok=True)
             (self.settings.data_dir / 'user_profile.json').unlink(missing_ok=True)

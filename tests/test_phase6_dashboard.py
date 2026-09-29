@@ -363,5 +363,5 @@ class DashboardTests(unittest.TestCase):
         with connection(path) as conn:
             row=conn.execute('SELECT revision_id,label,indexing_state,attempt_count FROM feedback_history').fetchone()
             self.assertEqual(tuple(row),(77,'SPAM','failed',2))
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],database.SCHEMA_VERSION)
             self.assertIsNone(conn.execute('PRAGMA foreign_key_check').fetchone())

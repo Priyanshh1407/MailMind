@@ -1,6 +1,8 @@
 '''Durable local semantic indexing and deterministic hybrid search ranking.'''
 from hashlib import sha256
 import math
+from threading import Event
+from uuid import uuid4
 
 from .database import utc_timestamp
 from .email_text import format_email_text, normalize_subject
@@ -9,6 +11,13 @@ from .vector_lock import vector_write_lock
 from .account_state import WorkCancelled, AccessDenied
 from .provider_policy import SEARCH_EMBEDDING_CALLS, SEARCH_COLLECTION_CALLS
 from .vector_db import embed_search_documents
+from .intelligence_contract import TokenOperation, TokenOutcome
+from .token_usage import (
+    EMBEDDING_MODEL_VERSION,
+    TokenRecorder,
+    estimate_text_tokens,
+    usage_request_prefix,
+)
 
 MIN_SEMANTIC_QUERY = 3
 MAX_SEMANTIC_RESULTS = 100
@@ -103,26 +112,76 @@ def reconcile_search_index(manager, context, collection_provider, limit=10, *, m
     documents = [_search_document(row['sender'], row['subject'], row['body']) for row in rows]
     timeout = SEARCH_INDEX_TIMEOUT_SECONDS
     embed = embedding_provider or (lambda values: embed_search_documents(values, settings=manager.settings))
+    usage_recorder = TokenRecorder(
+        context.account_id,
+        usage_request_prefix(
+            'search-index', context.account_id,
+            *[f"{row['email_id']}:{row['attempt_count']}" for row in rows],
+            uuid4().hex,
+        ),
+        db_path=manager.settings.db_path,
+        enabled=manager.settings.token_collection_enabled,
+    )
+    embedding_measurement = estimate_text_tokens(documents)
+    embedding_attempted = Event()
+    embedding_recorded = False
+
+    def run_embedding():
+        embedding_attempted.set()
+        return embed(documents)
 
     # Model startup/download and Chroma startup happen before the cross-process
     # write lock. A timed-out bounded call may keep warming in the background,
     # but can no longer freeze Gmail or hold the vector store lock.
     try:
         if bounded:
-            embeddings = SEARCH_EMBEDDING_CALLS.run(lambda: embed(documents), timeout)
-            collection = SEARCH_COLLECTION_CALLS.run(collection_provider, timeout)
+            embeddings = SEARCH_EMBEDDING_CALLS.run(run_embedding, timeout)
         else:
             # The dedicated indexer process owns this potentially slow native
             # work. It must not delegate ONNX/Chroma startup back into the
             # Gmail worker process.
-            embeddings = embed(documents)
-            collection = collection_provider()
+            embeddings = run_embedding()
+        if embedding_attempted.is_set():
+            usage_recorder.record(
+                'documents', provider='embedding',
+                model_version=EMBEDDING_MODEL_VERSION,
+                operation=TokenOperation.DOCUMENT_EMBEDDING.value,
+                outcome=TokenOutcome.SUCCESS.value,
+                measurement=embedding_measurement,
+            )
+            embedding_recorded = True
+        collection = (SEARCH_COLLECTION_CALLS.run(collection_provider, timeout)
+                      if bounded else collection_provider())
     except (WorkCancelled, AccessDenied):
+        if embedding_attempted.is_set() and not embedding_recorded:
+            usage_recorder.record(
+                'documents', provider='embedding',
+                model_version=EMBEDDING_MODEL_VERSION,
+                operation=TokenOperation.DOCUMENT_EMBEDDING.value,
+                outcome=TokenOutcome.CANCELLED.value,
+                measurement=embedding_measurement,
+            )
         raise
     except TimeoutError as error:
+        if embedding_attempted.is_set() and not embedding_recorded:
+            usage_recorder.record(
+                'documents', provider='embedding',
+                model_version=EMBEDDING_MODEL_VERSION,
+                operation=TokenOperation.DOCUMENT_EMBEDDING.value,
+                outcome=TokenOutcome.TIMEOUT.value,
+                measurement=embedding_measurement,
+            )
         log_event('email_search_index_deferred', error=error)
         return {'indexed': 0, 'failed': 0}
     except Exception as error:
+        if embedding_attempted.is_set() and not embedding_recorded:
+            usage_recorder.record(
+                'documents', provider='embedding',
+                model_version=EMBEDDING_MODEL_VERSION,
+                operation=TokenOperation.DOCUMENT_EMBEDDING.value,
+                outcome=TokenOutcome.FAILED.value,
+                measurement=embedding_measurement,
+            )
         log_event('email_search_index_failed', error=error)
         with manager.guard(context, connected=require_connected) as conn:
             for row in rows:

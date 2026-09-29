@@ -11,11 +11,14 @@ from .config import Settings
 from .setup_db import create_database
 from .logging_utils import log_event
 from .account_state import AccountManager, WorkCancelled
-from .local_llm import DeferredMailMindModel, MailMindModel
+from .local_llm import DeferredMailMindModel, MailMindModel, predict_with_token_count
 from .retrieval_policy import load_policy
 from .vector_db import create_vector_collection, create_search_collection, VectorService
 from .feedback import reconcile_feedback, current_vector
-from .work_queue import claim_cycle, fence, finish_cycle, ingest_email, newest_due_tasks, excluded_messages, record_ingestion_failure
+from .work_queue import (claim_cycle, fence, finish_cycle, ingest_email,
+                         newest_due_tasks, excluded_messages,
+                         record_ingestion_failure, reconcile_email_analysis,
+                         process_due_reminders)
 from .pipeline import process_task, cycle_external
 from .provider_policy import BoundedCalls
 from .database import utc_timestamp
@@ -27,8 +30,11 @@ _collection_path = None
 _FEEDBACK_RECONCILIATION_CALLS = BoundedCalls(1)
 
 
-def shadow_evaluate_email(sender, subject, body, external_prediction, *, account_id=None, model=None):
-    return model.predict(subject, body, sender=sender, account_id=account_id), None
+def shadow_evaluate_email(sender, subject, body, external_prediction, *,
+                          account_id=None, model=None):
+    return predict_with_token_count(
+        model, subject, body, sender=sender, account_id=account_id
+    )
 
 
 def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop_event=None,
@@ -54,6 +60,15 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
                 _collection=create_vector_collection(config.data_dir/'chroma_db',settings=config)
                 _collection_path=(config.data_dir,config.local_only,config.asset_manifest_path)
             return _collection
+        # Classification remains authoritative when its optional analysis write
+        # is interrupted. Retry only the bounded derived row under this lease.
+        try:
+            reconcile_email_analysis(
+                manager,context,token,limit=min(config.batch_size,20))
+        except WorkCancelled:
+            raise
+        except Exception as error:
+            log_event('analysis_reconciliation_deferred',error=error)
         # SQLite is authoritative for feedback. Keep the retryable derived vector
         # index on its own bounded worker so a stuck Chroma write cannot stop
         # Gmail ingestion or durable task processing.
@@ -229,7 +244,24 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
             if stop_event is not None and stop_event.is_set():break
             completed+=bool(process_task(task,manager,context,token,service,model,cloud_collection_provider,
                 classifier=classify_email,shadow=shadow_evaluate_email,notifier=send_telegram_alert,
-                marker=mark_as_read,logger=log_email_to_db,validator=lambda metadata:current_vector(metadata,config.db_path)))
+                marker=mark_as_read,logger=log_email_to_db,
+                validator=lambda metadata:current_vector(metadata,config.db_path),
+                job_id=job_id))
+        reminder_result=None
+        if config.action_reminders_enabled:
+            try:
+                reminder_result=process_due_reminders(
+                    manager,context,token,send_telegram_alert,
+                    limit=min(config.batch_size,20),
+                )
+            except WorkCancelled:
+                raise
+            except Exception as error:
+                log_event('reminder_processing_deferred',error=error)
+                reminder_result={
+                    'processed':0,'delivered':0,'retry':0,'dead':0,
+                    'snoozes_expired':0,
+                }
         if completed < len(tasks):
             error_code='processing_incomplete'
             with manager.guard(context) as conn:
@@ -238,7 +270,8 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
         if not config.local_only and cycle_batch.listing_error:
             error_code='gmail_listing_failed'
         return {**({'status':'local_only','network':'disabled'} if config.local_only else cycle_batch.summary()),'processed_count':completed,'attempted_count':len(tasks),'job_id':job_id,
-                'processing_status':'partial' if error_code else 'complete'}
+                'processing_status':'partial' if error_code else 'complete',
+                **({'reminders':reminder_result} if reminder_result is not None else {})}
     except WorkCancelled:
         log_event('agent_cycle_cancelled')
         return {'status':'cancelled','job_id':job_id}

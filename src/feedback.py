@@ -1,7 +1,17 @@
 """SQLite is authoritative; the vector store is a retryable derived index."""
+from threading import Event
+
 from .database import connection
 from .vector_db import add_email_to_vector_db
 from .logging_utils import log_event
+from .email_text import format_email_text
+from .intelligence_contract import TokenOperation, TokenOutcome
+from .token_usage import (
+    EMBEDDING_MODEL_VERSION,
+    TokenRecorder,
+    estimate_text_tokens,
+    usage_request_prefix,
+)
 
 def current_vector(metadata, db_path):
     with connection(db_path) as conn:
@@ -31,6 +41,18 @@ def reconcile_feedback(manager, context, collection_provider, limit=20, *, max_a
     from .account_state import WorkCancelled, AccessDenied
     for row in rows:
         state='indexed'
+        embedding_attempted=Event()
+        measurement=(estimate_text_tokens(
+            format_email_text(row['subject'],row['body']))
+            if row['label'] is not None else None)
+        usage_recorder=TokenRecorder(
+            context.account_id,
+            usage_request_prefix(
+                'feedback-index', context.account_id, row['email_id'],
+                row['revision_id'], row['attempt_count']),
+            email_id=row['email_id'], db_path=manager.settings.db_path,
+            enabled=manager.settings.token_collection_enabled,
+        )
         def index(row=row):
             # Keep the write barrier until the ACTUAL write ends, even if waiting
             # times out. Purge stays pending instead of racing a late upsert.
@@ -44,6 +66,7 @@ def reconcile_feedback(manager, context, collection_provider, limit=20, *, max_a
                     identity=sha256((context.account_id+'\0'+row['email_id']).encode()).hexdigest()
                     collection_provider().delete(ids=[identity])
                 else:
+                    embedding_attempted.set()
                     add_email_to_vector_db(row['email_id'],row['subject'],row['body'],row['label'],account_id=context.account_id,
                         collection=collection_provider(),revision_id=row['revision_id'])
                 return True
@@ -51,9 +74,35 @@ def reconcile_feedback(manager, context, collection_provider, limit=20, *, max_a
             changed=INDEX_CALLS.run(index,2)
             if not changed:
                 continue
+            if embedding_attempted.is_set():
+                usage_recorder.record(
+                    'document', provider='embedding',
+                    model_version=EMBEDDING_MODEL_VERSION,
+                    operation=TokenOperation.DOCUMENT_EMBEDDING.value,
+                    outcome=TokenOutcome.SUCCESS.value,
+                    measurement=measurement,
+                )
         except (WorkCancelled,AccessDenied):
+            if embedding_attempted.is_set():
+                usage_recorder.record(
+                    'document', provider='embedding',
+                    model_version=EMBEDDING_MODEL_VERSION,
+                    operation=TokenOperation.DOCUMENT_EMBEDDING.value,
+                    outcome=TokenOutcome.CANCELLED.value,
+                    measurement=measurement,
+                )
             raise
         except Exception as error:
+            if embedding_attempted.is_set():
+                usage_recorder.record(
+                    'document', provider='embedding',
+                    model_version=EMBEDDING_MODEL_VERSION,
+                    operation=TokenOperation.DOCUMENT_EMBEDDING.value,
+                    outcome=(TokenOutcome.TIMEOUT.value
+                             if isinstance(error, TimeoutError)
+                             else TokenOutcome.FAILED.value),
+                    measurement=measurement,
+                )
             state='failed'
             failed+=1
             log_event('feedback_index_failed',error=error)

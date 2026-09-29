@@ -3,12 +3,15 @@ import argparse,json,os,shutil,subprocess,sys,tempfile,time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 DIRECTORIES=['src','api','scripts','tests','fixtures','config','.github','notebooks']
-FILES=['requirements.txt','requirements.lock','requirements-dev.txt','Dockerfile','docker-compose.yml','.dockerignore','.gitignore','.env.example','.python-version','.nvmrc','README.md','SECURITY.md','docs/SECURITY_MAINTENANCE_REPORT.md','docs/PRIVACY_AND_LOCAL_ONLY.md','docs/SETUP_AND_RELEASE.md','docs/OPERATING_POLICIES.md','docs/LOCAL_SCALE_DECISION.md','start_all.bat','start_all.sh','end_all.bat','end_all.sh']
+FILES=['requirements.txt','requirements.lock','requirements-dev.txt','Dockerfile','docker-compose.yml','.dockerignore','.gitignore','.gitattributes','.env.example','.python-version','.nvmrc','README.md','CONTRIBUTING.md','SECURITY.md','docs/PRIVACY_AND_LOCAL_ONLY.md','docs/SETUP_AND_RELEASE.md','docs/OPERATING_POLICIES.md','docs/LOCAL_SCALE_DECISION.md','start_all.bat','start_all.sh','end_all.bat','end_all.sh']
 
 
 def snapshot(destination):
     destination=Path(destination);destination.mkdir(parents=True,exist_ok=True)
-    ignore=shutil.ignore_patterns('__pycache__','*.pyc','node_modules','dist','test-results','playwright-report')
+    ignore=shutil.ignore_patterns(
+        '__pycache__','*.pyc','node_modules','dist','test-results',
+        'playwright-report','reports','report','coverage','htmlcov',
+        '.coverage*','*.log','*.db','*.sqlite*')
     for name in DIRECTORIES:
         if (ROOT/name).exists():shutil.copytree(ROOT/name,destination/name,ignore=ignore)
     shutil.copytree(ROOT/'frontend',destination/'frontend',ignore=ignore)

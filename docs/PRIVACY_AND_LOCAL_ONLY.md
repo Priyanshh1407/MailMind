@@ -29,7 +29,9 @@ Masking is minimization, not anonymization. Names inside subjects or bodies, add
 
 ## Local retention
 
-SQLite stores account-scoped source mail, ingestion cursors, predictions, feedback, processing attempts, notification state, semantic-index reconciliation, and worker/account runtime state.
+SQLite stores account-scoped source mail, ingestion cursors, predictions, feedback, processing attempts, notification state, semantic-index reconciliation, source-labelled analysis, Action Center rows, reminders, token-usage events, intelligence-backfill state, and worker/account runtime state.
+
+Token events contain provider/operation/outcome categories and non-negative counts when available. They do not contain prompts, email text, action text, or provider responses. Provider-billed and locally processed tokens are reported separately and are not interchangeable cost figures.
 
 Embedded Chroma stores:
 
@@ -103,6 +105,12 @@ Exports omit sender, account/message identifiers, credentials, timestamps, histo
 Semantic indexing is local derived work. It starts only after Google connection, operates on the selected account, and is fenced during account, authentication, and deletion transitions.
 
 Semantic embeddings are not sent to Gemini or Groq. Search falls back to lexical SQLite matching when the derived store is unavailable.
+
+## Saved-mail intelligence backfill
+
+Backfill is explicit and bounded. It reads eligible mail already saved in the selected account's SQLite database; the backfill admission endpoint itself does not call Gmail. In normal mode, classification may send the same bounded, minimized, masked content to configured Gemini or Groq providers, so backfill is not an offline operation.
+
+Backfill does not send historical Telegram alerts, mark Gmail messages read, or schedule automatic action reminders. It can create local analysis, action, and privacy-safe token rows. Local-only mode keeps cloud providers disabled, but requires verified local assets and compatible saved work.
 
 ## Operator responsibilities
 

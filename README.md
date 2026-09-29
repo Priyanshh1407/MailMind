@@ -18,6 +18,8 @@ The React dashboard combines live Gmail intake, recoverable background processin
 - Live hybrid search across sender, subject, and body, with exact lexical matches ranked before semantic matches.
 - Separate derived Chroma collections for feedback retrieval and inbox search.
 - A responsive dark dashboard with health, intake, progress, search, review, feedback, and recovery controls.
+- Source-labelled classification explanations, an account-scoped Action Center, and Recharts token-usage trends.
+- Explicit saved-mail intelligence backfill in batches of at most 20, with live mail kept ahead of backfill work.
 - Optional Telegram alerts and opt-in automatic Gmail mark-as-read behavior.
 - Local-only mode with verified pre-provisioned assets and no cloud/Gmail/Telegram routing.
 
@@ -87,6 +89,7 @@ MailMind deliberately separates three kinds of work:
 | --- | --- | --- |
 | Live sync | Discover messages arriving after the saved Gmail history cursor | **Sync new messages** forces a rate-limited live check |
 | Historical backlog | Admit older inbox mail in bounded batches | **Fetch next 100** becomes available after the current older batch finishes |
+| Intelligence backfill | Add explanations/actions to already saved eligible mail | **Analyze up to 20 saved emails** is explicit and available only after Action Center extraction is enabled |
 | Semantic indexing | Build local derived search embeddings for saved mail | Runs automatically after Google is connected |
 
 Key rules:
@@ -97,6 +100,7 @@ Key rules:
 - **Sync new messages** never authorizes another historical page.
 - **Fetch next 100** controls only older backlog.
 - The Gmail worker processes small, newest-first slices to preserve responsiveness.
+- Intelligence backfill reuses the durable queue, is capacity-limited, and never sends historical alerts, marks messages read, or creates automatic reminders.
 - Semantic documents are capped at 6,000 characters; the stored source email is not shortened by that search-specific limit.
 
 ## Classification and feedback
@@ -156,6 +160,9 @@ The dashboard provides:
 - Live sender/subject/body/meaning search and category filters
 - Classification details, confirmation, correction, undo, and history
 - Explicit retry/recovery controls for unfinished processing and ambiguous notifications
+- Inbox, Action Center, and Usage tabs with source-labelled explanations and bounded action lifecycle controls
+- Day, week, and month token charts that separate provider-billed from locally processed usage
+- An explicit, observable saved-mail intelligence backfill control
 - Responsive keyboard-accessible layouts and reduced-motion behavior
 
 See [User guide](docs/USER_GUIDE.md) and [Frontend guide](frontend/README.md).
@@ -241,11 +248,11 @@ npm run build
 npm run test:browser
 ```
 
-At the documentation refresh on 25 September 2026:
+At the Phase 8 automated verification on 29 September 2026:
 
-- Backend discovery: 384 tests passed.
-- Frontend unit suite: 26 passed.
-- Playwright browser suite: 19 passed.
+- Backend discovery: 478 tests passed.
+- Frontend unit suite: 42 passed.
+- Playwright browser suite: 24 passed.
 - Frontend lint and production build passed.
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
@@ -263,6 +270,7 @@ See [Test guide](tests/README.md).
 - The Compose demo does not yet run the semantic indexer.
 - Provider quotas, retention, and service policies remain external.
 - The supported product is one trusted local user, not a hosted multi-tenant service.
+- Automated tests use synthetic or temporary data; the controlled live OAuth/Gmail checklist must be run deliberately before claiming live-provider validation.
 
 ## Documentation
 
@@ -275,6 +283,7 @@ See [Test guide](tests/README.md).
 - [Security design showcase](docs/SECURITY_FEATURES_SHOWCASE.md)
 - [Frontend guide](frontend/README.md)
 - [Test guide](tests/README.md)
+- [Contributing and privacy checks](CONTRIBUTING.md)
 
 ## License and data note
 

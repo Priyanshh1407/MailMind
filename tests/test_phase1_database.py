@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from src.config import LEGACY_ACCOUNT
-from src.database import connection, initialize_database, normalize_legacy_timestamp, utc_timestamp, _migration_1, _migration_2
+from src.database import SCHEMA_VERSION, connection, initialize_database, normalize_legacy_timestamp, utc_timestamp, _migration_1, _migration_2
 from src.db_utils import get_recent_emails, log_email_to_db, update_human_label, clear_all_emails
 from src.prediction import Prediction
 from scripts.add_manual_email import insert_new_email
@@ -29,7 +29,7 @@ class DatabaseTests(unittest.TestCase):
     def test_fresh_schema_and_pragmas(self):
         initialize_database(self.path)
         with connection(self.path) as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 10)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
             self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0], "wal")
             self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
             self.assertEqual(conn.execute("PRAGMA busy_timeout").fetchone()[0], 5000)
@@ -81,7 +81,7 @@ class DatabaseTests(unittest.TestCase):
         initialize_database(self.path)
         initialize_database(self.path)
         with connection(self.path) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],SCHEMA_VERSION)
             self.assertEqual(conn.execute('SELECT account_id FROM email_logs').fetchone()[0],'a@example.test')
             self.assertEqual(conn.execute('SELECT connected FROM runtime_state').fetchone()[0],0)
 

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 async function setup(page) {
-  const state = { paired: true, connected: true, generation: 1, revision: 0, feedbackCalls: 0, feedbackError: 0, feedbackDelay: 0, emailsDelay: 0, emailsStarted: false, telemetryError: 0, syncCalls: 0, fetchCalls: 0 };
+  const state = { paired: true, connected: true, generation: 1, revision: 0, feedbackCalls: 0, feedbackError: 0, feedbackDelay: 0, emailsDelay: 0, emailsStarted: false, telemetryError: 0, actionError: 0, tokenError: 0, syncCalls: 0, fetchCalls: 0 };
   const stamp = '2026-09-18T12:00:00Z';
   state.rows = Array.from({length:24},(_,index)=>({ id:'synthetic-'+index, account_id:'interview@example.test', sender:'Synthetic Sender <sender@example.test>', subject:'Synthetic email '+index,
     created_at:stamp, body_snippet:'Only synthetic email text is used.', prediction:index===3?null:['IMPORTANT','UPDATES','SPAM'][index%3], local_prediction:'SPAM',
@@ -9,7 +9,9 @@ async function setup(page) {
     review_reason:index===3?{code:'provider_timeout',message:'The classification provider took too long to respond.'}:null,
     latest_prediction:{category:index===3?null:['IMPORTANT','UPDATES','SPAM'][index%3],outcome:index===3?'UNAVAILABLE':'CLASSIFIED',source:'synthetic',local:{outcome:'ABSTAIN',category:null,model_version:'legacy-binary'}},
     processing:{status:index===3?'retry':'complete',stage:index===3?'classify':'complete',attempt_count:1,next_retry_at:1789750000,error_code:index===3?'provider_transient':null},notification:index===0?{status:'sent'}:null,
+    analysis:{analysis_version:'analysis-v1',predicted_category:index===3?null:['IMPORTANT','UPDATES','SPAM'][index%3],explanation_summary:index===3?'The provider timed out, so this message needs review.':'The message contains a direct request with a deadline.',signals:index===3?[]:[{signal:'direct_request',evidence:'Please review the synthetic request.'},{signal:'deadline'}],source:index===3?'system':'local_heuristic',model_version:index===3?null:'synthetic-local-v1',retrieval_used:false},
   }));
+  state.actions=[{action_id:7,account_id:'interview@example.test',email_id:'synthetic-0',fingerprint:'a'.repeat(64),action_type:'reply_required',title:'Reply to synthetic sender',description:'Send the requested confirmation.',evidence:'Please review the synthetic request.',due_at:'2026-10-02T11:30:00.000000Z',due_precision:'exact_time',confidence:'high',extraction_source:'local_heuristic',status:'open',snoozed_until:null,revision:0,created_at:stamp,updated_at:stamp,completed_at:null,analysis_revision:stamp,next_reminder_at:null,delivered_reminder_count:0}];
   await page.route('**/*',async route=>{
     const url=new URL(route.request().url());
     if(url.origin==='http://127.0.0.1:18106')return route.continue();
@@ -20,17 +22,39 @@ async function setup(page) {
     if(path==='/session' && method==='POST'){state.paired=true;data={csrf_token:'synthetic-csrf'};}
     else if(!state.paired){status=401;data={detail:'Sign in to this local app first.'};}
     else if(path==='/session')data={email:identity.account_id,csrf_token:'synthetic-csrf',connected:state.connected,purge_pending:false,generation:state.generation};
-    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},poll_interval_seconds:60,worker_lease_seconds:90,worker:null,ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
+    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},intelligence_backfill:{enabled:true,eligible:2,queued:0,running:0,retry:0,complete:0,dead:0},poll_interval_seconds:60,worker_lease_seconds:90,worker:null,ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
     else if(path==='/telemetry'){
       status=state.telemetryError||200;
       data=status!==200?{detail:'Synthetic telemetry outage.'}:{...identity,totals:{saved:24,completed:23,labelled:state.rows.filter(row=>row.human_label).length,corrected:state.rows.filter(row=>row.human_label&&row.human_label!==row.prediction).length,confirmed:state.rows.filter(row=>row.human_label&&row.human_label===row.prediction).length,feedback_events:state.revision,prediction_attempts:24},classification_timing:{mean_ms:95,sample_count:24},local_model:{ready:state.localReady||false,version:'legacy-binary',evaluation_scope:state.evaluationScope||null},mode:{local_only:state.localOnly||false},providers:{gemini:state.localOnly?'disabled_local_only':'configured_unverified',groq:state.localOnly?'disabled_local_only':'unconfigured'}};
     } else if(path==='/emails'){
       state.emailsStarted=true;
-      const search=url.searchParams.get('search')||'',category=url.searchParams.get('category');
-      const rows=state.rows.filter(row=>(row.subject+' '+row.sender+' '+row.body_snippet).toLowerCase().includes(search.toLowerCase())&&(!category||(row.effective_category||'NEEDS_REVIEW')===category));
+      const search=url.searchParams.get('search')||'',category=url.searchParams.get('category'),emailId=url.searchParams.get('email_id');
+      const rows=state.rows.filter(row=>(!emailId||row.id===emailId)&&(row.subject+' '+row.sender+' '+row.body_snippet).toLowerCase().includes(search.toLowerCase())&&(!category||(row.effective_category||'NEEDS_REVIEW')===category));
       const offset=Number(url.searchParams.get('offset')||0),limit=Number(url.searchParams.get('limit')||20);
       data={...identity,emails:JSON.parse(JSON.stringify(rows.slice(offset,offset+limit))),total:rows.length,limit,offset,has_more:offset+limit<rows.length,search_mode:search.length>=3?'hybrid':'text',semantic_available:true,semantic_index:{pending:0,indexed:rows.length,failed:0}};
       if(state.emailsDelay)await new Promise(resolve=>setTimeout(resolve,state.emailsDelay));
+    } else if(path==='/actions/summary'){
+      status=state.actionError||200;
+      const counts={open:0,completed:0,dismissed:0,snoozed:0};
+      state.actions.forEach(action=>counts[action.status]++);
+      data=status!==200?{detail:'Synthetic Action Center outage.'}:{...identity,total:state.actions.length,overdue:0,due_soon:counts.open,status_counts:counts,reminder_counts:{scheduled:0,claimed:0,delivered:0,dismissed:0,retry:0,dead:0}};
+    } else if(path==='/actions'){
+      status=state.actionError||200;
+      const actionStatus=url.searchParams.get('status');
+      const actions=state.actions.filter(action=>!actionStatus||action.status===actionStatus);
+      data=status!==200?{detail:'Synthetic Action Center outage.'}:{...identity,actions:JSON.parse(JSON.stringify(actions)),limit:Number(url.searchParams.get('limit')||50),offset:Number(url.searchParams.get('offset')||0)};
+    } else if(path.startsWith('/actions/')&&(method==='PATCH'||path.endsWith('/snooze'))){
+      const actionId=Number(path.split('/')[2]),action=state.actions.find(item=>item.action_id===actionId),body=route.request().postDataJSON();
+      action.status=path.endsWith('/snooze')?'snoozed':body.status;
+      action.snoozed_until=path.endsWith('/snooze')?body.snoozed_until:null;
+      action.completed_at=action.status==='completed'?'2026-09-28T10:00:00.000000Z':null;
+      action.updated_at='2026-09-28T10:00:00.000000Z';
+      action.revision++;
+      data=JSON.parse(JSON.stringify(action));
+    } else if(path==='/analytics/tokens'){
+      status=state.tokenError||200;
+      const window=url.searchParams.get('window')||'day';
+      data=status!==200?{detail:'Synthetic token analytics outage.'}:{...identity,window,timezone:'Asia/Kolkata',start_at:'2026-09-27T18:30:00.000000Z',end_at:'2026-09-28T18:30:00.000000Z',totals:{event_count:2,input_tokens:120,output_tokens:30,total_tokens:150,unknown_events:0},provider_billed_tokens:130,local_processed_tokens:20,providers:[{key:'gemini',event_count:1,input_tokens:100,output_tokens:30,total_tokens:130,unknown_events:0},{key:'local',event_count:1,input_tokens:20,output_tokens:0,total_tokens:20,unknown_events:0}],operations:[{key:'classification_analysis',event_count:2,input_tokens:120,output_tokens:30,total_tokens:150,unknown_events:0}],count_methods:[{key:'provider_reported',event_count:2,input_tokens:120,output_tokens:30,total_tokens:150,unknown_events:0}],outcomes:[{key:'success',event_count:2,input_tokens:120,output_tokens:30,total_tokens:150,unknown_events:0}],daily:[{date:'2026-09-28',start_at:'2026-09-27T18:30:00.000000Z',end_at:'2026-09-28T18:30:00.000000Z',event_count:2,input_tokens:120,output_tokens:30,total_tokens:150,unknown_events:0,provider_billed_tokens:130,local_processed_tokens:20}]};
     } else if(path==='/feedback'){
       state.feedbackCalls++;
       if(state.feedbackDelay)await new Promise(resolve=>setTimeout(resolve,state.feedbackDelay));
@@ -42,6 +66,7 @@ async function setup(page) {
     else if(path==='/logout'){state.paired=false;state.connected=false;state.generation++;data={message:'Signed out. Saved mail is kept.'};}
     else if(path==='/inbox/sync'){state.syncCalls++;status=202;data={job_id:43,status:'queued',message:'Checking Gmail for new messages.'};}
     else if(path==='/ingestion/fetch-next'){state.fetchCalls++;status=202;data={job_id:44,status:'queued',message:'The next 100 older messages are authorized.'};}
+    else if(path==='/intelligence/backfill'){state.backfillCalls=(state.backfillCalls||0)+1;status=202;data={job_id:45,status:'queued',requested:20,admitted:2,eligible:2,capacity:99,message:'Queued 2 saved emails for analysis.'};}
     else {status=404;data={detail:'Synthetic route not found.'};}
     try{await route.fulfill({status,contentType:'application/json',headers:{'Access-Control-Allow-Origin':'http://127.0.0.1:18106','Access-Control-Allow-Credentials':'true'},body:JSON.stringify(data)});}catch{ /* cancelled route during logout or teardown */ }
   });
@@ -70,6 +95,62 @@ test('all four lanes show their correct styles and names',async({page})=>{
   await expect(page.getByRole('article',{name:'Synthetic email 3',exact:true})).toContainText('Needs review: The classification provider took too long to respond.');
   await expect(page.getByText('BLOCKED',{exact:true})).toHaveCount(0);
 });
+test('Phase 6 tabs, KPIs, action lifecycle and source navigation work together',async({page})=>{
+  await setup(page);
+  const summary=page.getByRole('region',{name:'Intelligence summary'});
+  await expect(summary).toContainText('Open1');
+  await expect(summary).toContainText('Due soon1');
+  await expect(summary).toContainText('Tokens today150');
+  const inbox=page.getByRole('tab',{name:'Inbox'});
+  await inbox.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('tab',{name:'Action Center'})).toBeFocused();
+  await expect(page.getByRole('heading',{name:'Reply to synthetic sender'})).toBeVisible();
+  await page.getByRole('button',{name:'Complete',exact:true}).click();
+  await page.getByRole('button',{name:'Completed'}).click();
+  await expect(page.getByRole('heading',{name:'Reply to synthetic sender'})).toBeVisible();
+  await page.getByRole('button',{name:'Open source'}).click();
+  await expect(page.getByRole('tab',{name:'Inbox'})).toHaveAttribute('aria-selected','true');
+  await expect(page.getByText('Showing the email that produced the selected action.')).toBeVisible();
+  await expect(page.getByRole('article',{name:'Synthetic email 0',exact:true})).toBeVisible();
+  await expect(page.getByRole('article',{name:'Synthetic email 1',exact:true})).toHaveCount(0);
+});
+test('Phase 6 explanations keep model rationale separate from correction controls',async({page})=>{
+  await setup(page);
+  const explanation=page.locator('.email-card-stack').first().getByText('Why this category?');
+  await explanation.click();
+  const panel=page.locator('.classification-explanation').first();
+  await expect(panel).toContainText('The message contains a direct request with a deadline.');
+  await expect(panel).toContainText('Direct Request');
+  await expect(panel).toContainText('Source: Local model - synthetic-local-v1');
+  await expect(page.getByRole('article',{name:'Synthetic email 0',exact:true}).getByRole('button',{name:'Set label'})).toBeVisible();
+});
+test('Phase 6 usage renders Recharts, window controls, breakdowns and accessible values',async({page})=>{
+  await setup(page);
+  await page.getByRole('tab',{name:'Usage'}).click();
+  await expect(page.locator('.recharts-responsive-container')).toBeVisible();
+  await expect(page.locator('.usage-metric').filter({hasText:'Cloud billed'})).toBeVisible();
+  await expect(page.locator('.usage-metric').filter({hasText:'Local processed'})).toBeVisible();
+  await expect(page.getByText('Token counts are operational usage, not a cost estimate.')).toBeVisible();
+  await page.getByRole('button',{name:'Month'}).click();
+  await expect(page.getByRole('button',{name:'Month'})).toHaveAttribute('aria-pressed','true');
+  await page.getByText('View daily token values').click();
+  await expect(page.getByRole('columnheader',{name:'Cloud billed'})).toBeVisible();
+  await expect(page.getByRole('cell',{name:'130'})).toBeVisible();
+});
+test('Phase 6 section failures stay local and preserve the inbox',async({page})=>{
+  const state=await setup(page);
+  state.actionError=503;
+  await page.getByRole('tab',{name:'Action Center'}).click();
+  await page.getByRole('button',{name:'Due soon'}).click();
+  await expect(page.getByRole('alert')).toContainText('Actions could not be loaded.');
+  await page.getByRole('tab',{name:'Inbox'}).click();
+  await expect(page.getByRole('article',{name:'Synthetic email 0',exact:true})).toBeVisible();
+  state.tokenError=503;
+  await page.getByRole('tab',{name:'Usage'}).click();
+  await page.getByRole('button',{name:'Week'}).click();
+  await expect(page.getByRole('alert')).toContainText('Token analytics could not be loaded.');
+});
 test('inbox progress is visible and the header reflects durable work',async({page})=>{
   await setup(page);
   const progress=page.getByRole('region',{name:'Inbox work progress'});
@@ -78,6 +159,14 @@ test('inbox progress is visible and the header reflects durable work',async({pag
   await expect(progress).toContainText('23Completed');
   await expect(progress).toContainText('Workflow finished 23 of 24');
   await expect(page.locator('.connection-state')).toHaveText('Processing inbox');
+});
+test('Phase 8 saved-mail intelligence backfill is explicit, bounded and side-effect safe',async({page})=>{
+  const state=await setup(page);
+  await expect(page.getByText('Intelligence backfill: 2 eligible / 0 active / 0 complete.')).toBeVisible();
+  await expect(page.getByText('It never sends historical alerts, marks mail read, or creates automatic reminders.')).toBeVisible();
+  await page.getByRole('button',{name:'Analyze up to 20 saved emails'}).click();
+  await expect.poll(()=>state.backfillCalls||0).toBe(1);
+  await expect(page.getByText('Queued 2 saved emails for analysis.')).toBeVisible();
 });
 test('account menu and feedback editor work with keyboard and Escape',async({page})=>{
   await setup(page);const trigger=page.getByRole('button',{name:'Account options'});
@@ -130,8 +219,10 @@ test('search and action feedback do not move the viewport or remove the current 
   await expect(page.getByText('No emails match these filters.',{exact:false})).toBeVisible();
   await page.getByRole('button',{name:'Clear search'}).click();
   await expect(page.getByRole('article',{name:'Synthetic email 0',exact:true})).toBeVisible();
+  const syncButton=page.getByRole('button',{name:'Sync new messages'});
+  await syncButton.scrollIntoViewIfNeeded();
   const beforeAction=await position();
-  await page.getByRole('button',{name:'Sync new messages'}).click();
+  await syncButton.click();
   await expect(page.getByText('Checking Gmail for new messages.')).toBeVisible();
   const afterAction=await position();
   expect(Math.abs(afterAction.scrollY-beforeAction.scrollY)).toBeLessThanOrEqual(1);
@@ -153,6 +244,10 @@ test('history includes timestamps and delivery steps',async({page})=>{
 test('narrow screen has no horizontal overflow even with long email text',async({page})=>{
   await page.setViewportSize({width:375,height:812});const state=await setup(page);state.rows[0].sender='LongSender'.repeat(50);state.rows[0].subject='LongSubject'.repeat(40);
   await page.getByRole('button',{name:'Sync new messages'}).click();await expect(page.getByText('Checking Gmail for new messages.')).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.getByRole('tab',{name:'Action Center'}).click();
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.getByRole('tab',{name:'Usage'}).click();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'../docs/phase6-mobile.png',fullPage:false});
 });

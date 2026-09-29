@@ -1,48 +1,101 @@
-# Environments
-venv/
-env/
+# Python environments and caches
+/venv/
+/.venv/
+/env/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
 
-# Environment Variables, Secrets & Private Databases
+# JavaScript dependencies and build output
+node_modules/
+dist/
+dist-ssr/
+
+# Secrets, credentials, and local configuration
 .env
 .env.*
 !.env.example
 credentials.json
+credentials.*.json
+client_secret*.json
 token.json
-*.db
-*.sqlite
-*.sqlite3
-*.sqlite-*
+token.*.json
 *.pem
 *.key
 *.p12
 *.pfx
-exports/
 
-# 🛑 CRITICAL: Ignore all local databases and user profiles!
-data/
-# Huge Model Weights (Optional: If your model is > 100MB, keep this here so Git doesn't crash)
-models/
+# Private databases, mail, datasets, exports, and model artifacts
+/data/
+/models/
+/exports/
+/datasets/
+/downloads/
+/artifacts/
+/output/
+/tmp/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.parquet
+*.feather
+*.pickle
+*.pkl
+*.joblib
+*.safetensors
+*.onnx
+*.pt
+*.pth
 
-# Interview Prep Files
-Self_Healing_Architecture.md
-MailMind_Interview_Prep_Guide.md
-# Synthetic browser-test output (source tests are retained).
-frontend/test-results/
-frontend/playwright-report/
+# Test, coverage, audit, and generated report output
+test-results/
+playwright-report/
+reports/
+report/
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+lcov.info
+junit*.xml
+*.sarif
 
-# Owned launcher state/logs and clean-release environments
-.run/
-.venv/
-wheelhouse/
+# Runtime state, logs, and temporary files
+/.run/
+/wheelhouse/
+*.log
+*.pid
+*.tmp
+*.temp
+*.bak
 
-# Local review and generated evidence (not part of the public source release)
-docs/PHASE_*_REVIEW.md
-docs/PHASE_0_BASELINE.md
-docs/FINAL_SAFETY_REVIEW.md
-docs/evaluation/
-docs/phase*.png
-PROJECT_*.md
-MAILMIND_INTERVIEW_REPORT.md
-MAILMIND_COMPLETE_GUIDE.md
+# Local planning, interview material, and generated evidence
+/Self_Healing_Architecture.md
+/MailMind_Interview_Prep_Guide.md
+/PROJECT_*.md
+/MAILMIND_INTERVIEW_REPORT.md
+/MAILMIND_COMPLETE_GUIDE.md
+/docs/*_REPORT.md
+/docs/PHASE_*_REVIEW.md
+/docs/PHASE_*_BASELINE.md
+/docs/INTELLIGENCE_PHASE_*_BASELINE.md
+/docs/FINAL_SAFETY_REVIEW.md
+/docs/evaluation/
+/docs/phase*.png
+
+# Editor and operating-system metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
