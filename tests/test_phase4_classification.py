@@ -213,7 +213,29 @@ class ClassificationTests(unittest.TestCase):
             result=llm_api.classify_email('s','s','b')
         self.assertEqual((result.category,result.model_version),('UPDATES','gemini-3.5-flash-lite'))
         config=client.models.generate_content.call_args.kwargs['config']
-        self.assertEqual(config['thinking_config'],{'thinking_level':'low'})
+        self.assertIs(config['response_json_schema'],llm_api.OUTPUT_SCHEMA)
+        self.assertEqual(config['max_output_tokens'],2048)
+        self.assertNotIn('thinking_config',config)
+
+    def test_output_schema_satisfies_strict_structured_output_rules(self):
+        # Groq strict json_schema mode rejects any object that does not list
+        # every property as required or that allows additional properties.
+        # Optional values must be expressed as nullable types instead.
+        def objects(node,path='$'):
+            if isinstance(node,dict):
+                if node.get('type') == 'object':
+                    yield path,node
+                for key,value in node.items():
+                    yield from objects(value,f'{path}.{key}')
+            elif isinstance(node,list):
+                for index,value in enumerate(node):
+                    yield from objects(value,f'{path}[{index}]')
+        found=list(objects(llm_api.OUTPUT_SCHEMA))
+        self.assertGreaterEqual(len(found),4)
+        for path,node in found:
+            with self.subTest(path=path):
+                self.assertIs(node.get('additionalProperties'),False)
+                self.assertEqual(set(node['required']),set(node['properties']))
 
     def test_groq_fallback_uses_current_configured_model(self):
         quota=RuntimeError('quota')

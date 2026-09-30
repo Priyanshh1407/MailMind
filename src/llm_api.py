@@ -92,11 +92,11 @@ OUTPUT_SCHEMA = {
                         'properties': {
                             'signal': {'type': 'string', 'enum': _SIGNAL_VALUES},
                             'evidence': {
-                                'type': 'string',
+                                'type': ['string', 'null'],
                                 'maxLength': MAX_SIGNAL_EVIDENCE_CHARS,
                             },
                         },
-                        'required': ['signal'],
+                        'required': ['signal', 'evidence'],
                         'additionalProperties': False,
                     },
                 },
@@ -459,7 +459,7 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
         log_event('cloud_client_unavailable', error=error)
         return result(outcome='UNAVAILABLE', reason='cloud_not_configured_or_unavailable')
     config = {'system_instruction': SYSTEM_INSTRUCTION, 'response_mime_type': 'application/json',
-              'response_json_schema': OUTPUT_SCHEMA, 'thinking_config': {'thinking_level':'low'},
+              'response_json_schema': OUTPUT_SCHEMA,
               'max_output_tokens': 2048}
     # At most one request to each provider/model. No SDK retry loop or sleep.
     last_failure=None
