@@ -194,7 +194,7 @@ Integration helpers:
 .\venv\Scripts\python.exe -m scripts.check_clean_release
 ~~~
 
-At the 30 September 2026 automated verification, all 526 backend tests, 48 frontend unit tests, 27 browser scenarios, frontend lint, and the production build passed.
+At the 30 September 2026 automated verification, all 526 backend tests, 48 frontend unit tests, 29 browser scenarios, frontend lint, and the production build passed.
 
 ## Release checklist
 

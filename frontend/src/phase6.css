@@ -747,3 +747,86 @@ html {
     width: 100%;
   }
 }
+
+/* ── Power-on sequence ─────────────────────────────────────────
+   Played once when a connected dashboard comes up (.booting, see boot.js).
+   The logo flares and a power line sweeps the header, then each block rises
+   into place with a brief glow, top to bottom, in the order of --boot-i. */
+.booting .brand-mark {
+  animation: boot-flare .9s ease-out;
+}
+
+/* The header is only positioned (sticky) above phone width. */
+@media (min-width: 681px) {
+  .booting .dashboard-header::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary), #9aa4ff, transparent);
+    transform-origin: left center;
+    animation: boot-powerline 1.1s cubic-bezier(.16, 1, .3, 1) both;
+    pointer-events: none;
+  }
+}
+
+.booting :is(.intelligence-kpi, .dashboard-tabs, .stat, .work-grid > *, .ingestion-stack, .filters, .lane, .header-actions > *) {
+  animation: boot-rise .8s cubic-bezier(.16, 1, .3, 1) backwards, boot-glow 1.2s ease-out backwards;
+  animation-delay: calc(200ms + var(--boot-i, 0) * 70ms);
+}
+
+.booting .intelligence-kpi:nth-child(2) { --boot-i: 1; }
+.booting .intelligence-kpi:nth-child(3) { --boot-i: 2; }
+.booting .intelligence-kpi:nth-child(4) { --boot-i: 3; }
+.booting .dashboard-tabs { --boot-i: 4; }
+.booting .stat:nth-child(1) { --boot-i: 5; }
+.booting .stat:nth-child(2) { --boot-i: 6; }
+.booting .stat:nth-child(3) { --boot-i: 7; }
+.booting .stat:nth-child(4) { --boot-i: 8; }
+.booting .work-grid > :nth-child(1) { --boot-i: 9; }
+.booting .work-grid > :nth-child(2) { --boot-i: 10; }
+.booting .ingestion-stack { --boot-i: 11; }
+.booting .filters { --boot-i: 12; }
+.booting .lane:nth-child(1) { --boot-i: 13; }
+.booting .lane:nth-child(2) { --boot-i: 14; }
+.booting .lane:nth-child(3) { --boot-i: 15; }
+.booting .lane:nth-child(4) { --boot-i: 16; }
+/* Header status lights up last: all systems go. */
+.booting .header-actions > * { --boot-i: 18; }
+
+/* The progress bar charges once its panel is up. */
+.booting .progress-track span {
+  transform-origin: left center;
+  animation: boot-charge 1.2s cubic-bezier(.65, 0, .35, 1) 1s backwards, bar-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes boot-flare {
+  0% { opacity: .2; filter: brightness(.4); }
+  35% { opacity: 1; filter: brightness(1.8); box-shadow: 0 0 36px rgba(104, 117, 237, .75); }
+  100% { filter: none; box-shadow: none; }
+}
+
+@keyframes boot-powerline {
+  0% { opacity: 1; transform: scaleX(0); }
+  70% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1); }
+}
+
+/* Rise, overshoot a touch, and flicker bright like a lamp striking. */
+@keyframes boot-rise {
+  0% { opacity: 0; transform: translateY(26px) scale(.97); filter: brightness(.4); }
+  55% { opacity: 1; transform: translateY(-2px) scale(1); filter: brightness(1.35); }
+  75% { filter: brightness(.95); }
+  100% { transform: none; filter: none; }
+}
+
+@keyframes boot-glow {
+  0%, 30% { border-color: var(--primary); box-shadow: 0 0 0 1px rgba(104, 117, 237, .5), 0 0 26px rgba(104, 117, 237, .35); }
+  100% { box-shadow: none; }
+}
+
+@keyframes boot-charge {
+  from { transform: scaleX(0); }
+}

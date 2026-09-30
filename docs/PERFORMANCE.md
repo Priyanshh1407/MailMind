@@ -53,4 +53,4 @@ Adding Framer Motion with ordinary imports put 409 kB (130 kB gzip) in the initi
 | Framer Motion, direct imports | 408.9 kB | 129.6 kB | chart 372.9 kB |
 | Framer Motion, `LazyMotion` (shipped) | 315.5 kB | 100.4 kB | chart 372.9 kB, motion 85.6 kB |
 
-The Playwright browser suite passes 27/27, including tests that the animations settle on exact values and that reduced motion shows final values at once.
+The CSS power-on sequence added later costs 0.6 kB. The Playwright browser suite passes 29/29, including tests that the animations settle on exact values, that the power-on sequence plays once and ends, and that reduced motion skips it and shows final values at once.

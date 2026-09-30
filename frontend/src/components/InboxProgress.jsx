@@ -1,6 +1,7 @@
 import { Activity, MailCheck } from 'lucide-react';
-import { formatEmailTime, formatCount } from '../dashboard';
+import { formatEmailTime } from '../dashboard';
 import { SectionTitle, Surface } from './ui/Surface';
+import { AnimatedCount } from './ui/AnimatedCount';
 
 export function InboxProgress({ snapshot }) {
   const status = snapshot.status;
@@ -25,11 +26,11 @@ export function InboxProgress({ snapshot }) {
   return <Surface className="progress-panel" aria-label="Inbox work progress" aria-live="polite">
     <SectionTitle icon={<Activity size={16} />} eyebrow="Live work" title="Inbox work progress" aside={<span className="inline-status success"><span className="status-dot success" />{activity}</span>} />
     <div className="progress-value-row">
-      <div><strong>{admitted} <span>of {target || 100} admitted</span></strong><p>Workflow finished {status.workflow_finished_tasks} of {status.workflow_total_tasks}</p></div>
-      <span>{percent}%</span>
+      <div><strong><AnimatedCount value={admitted} /> <span>of {target || 100} admitted</span></strong><p>Workflow finished {status.workflow_finished_tasks} of {status.workflow_total_tasks}</p></div>
+      <span><AnimatedCount value={percent} />%</span>
     </div>
     <div className="progress-track" role="progressbar" aria-label="Current older-mail batch" aria-valuemin="0" aria-valuemax={target || 100} aria-valuenow={admitted}><span style={{ width: percent + '%' }} /></div>
-    <div className="progress-counts">{stats.map(([label, value]) => <div key={label}><strong>{formatCount(value)}</strong><span>{label}</span></div>)}</div>
+    <div className="progress-counts">{stats.map(([label, value]) => <div key={label}><strong><AnimatedCount value={value} /></strong><span>{label}</span></div>)}</div>
     {ingestion && <div className="progress-footer">
       <span><MailCheck size={14} /> Latest check{['error', 'partial', 'deferred'].includes(ingestion.status) ? ' (' + ingestion.status + ')' : ''} fetched {ingestion.fetched_count} {ingestion.fetched_count === 1 ? 'message' : 'messages'} · {formatEmailTime(ingestion.last_checked_at)}</span>
       {ingestion.has_more && <span>More historical pages remain</span>}

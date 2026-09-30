@@ -221,6 +221,7 @@ test('pagination, search empty results and clearing filters work',async({page})=
 });
 test('search and action feedback do not move the viewport or remove the current board',async({page})=>{
   const state=await setup(page);
+  await expect(page.locator('.dashboard.booting')).toHaveCount(0); // measure layout after the power-on roll-up
   await page.locator('.filters').scrollIntoViewIfNeeded();
   const position=()=>page.evaluate(()=>({scrollY:window.scrollY,filterTop:document.querySelector('.filters').getBoundingClientRect().top}));
   const before=await position();
@@ -277,6 +278,18 @@ test('animations settle on exact values: counters, share bars, tab pill and pane
   await expect(bar).toHaveCSS('transform','none');
   await expect(page.getByRole('tab',{name:'Usage'}).locator('.tab-indicator')).toHaveCount(1);
   await expect(page.locator('.tab-indicator')).toHaveCount(1);
+});
+test('power-on sequence plays once when the dashboard comes up, then ends',async({page})=>{
+  await setup(page);
+  await expect(page.locator('.dashboard.booting')).toHaveCount(1);
+  await expect(page.locator('.dashboard.booting')).toHaveCount(0,{timeout:5000});
+  await expect(page.locator('.stat').filter({hasText:'Saved emails'}).locator('strong')).toHaveText('24');
+});
+test('reduced motion skips the power-on sequence',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await setup(page);
+  await expect(page.locator('.dashboard')).toBeVisible();
+  await expect(page.locator('.dashboard.booting')).toHaveCount(0);
+  await expect(page.locator('.stat').filter({hasText:'Saved emails'}).locator('strong')).toHaveText('24',{timeout:500});
 });
 test('reduced motion shows final numbers and bars immediately',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'});await setup(page);

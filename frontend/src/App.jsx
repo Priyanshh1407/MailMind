@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { m } from 'motion/react';
+import { m, useReducedMotion } from 'motion/react';
 import { createApi } from './api';
 import { useDashboard } from './hooks/useDashboard';
 import { ActionCenter } from './components/ActionCenter';
@@ -16,6 +16,7 @@ import { Pagination } from './components/Pagination';
 import { SearchFilters } from './components/SearchFilters';
 import { TokenUsagePanel } from './components/TokenUsagePanel';
 import { EASE_OUT, spring } from './motion';
+import { BootContext, useBootSequence } from './boot';
 
 const api = createApi('http://' + window.location.hostname + ':8000');
 const INITIAL_QUERY = {
@@ -98,8 +99,11 @@ function App() {
   const page = snapshot?.page;
   const connected = Boolean(snapshot?.session.connected);
   const disabled = Boolean(pending.account) || Boolean(error);
+  // Power-on sequence each time a connected account's dashboard comes up.
+  const reduceMotion = useReducedMotion();
+  const booting = useBootSequence(connected ? snapshot.session.generation : null, !reduceMotion);
 
-  return <div className='dashboard'>
+  return <BootContext.Provider value={booting}><div className={booting ? 'dashboard booting' : 'dashboard'}>
     <AppHeader snapshot={snapshot} pending={pending} mutate={accountMutate} loading={loading} error={error} />
     <AppFeedback error={error} actionError={actionError} notice={notice} snapshot={snapshot} pending={pending} refresh={refresh} dismissActionError={dismissActionError} dismissNotice={dismissNotice} />
     <main className='dashboard-main'>
@@ -134,7 +138,7 @@ function App() {
       </>}
       <AppFooter autoMarkRead={snapshot?.status.auto_mark_read} />
     </main>
-  </div>;
+  </div></BootContext.Provider>;
 }
 
 export default App;

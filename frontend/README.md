@@ -27,6 +27,7 @@ Animations use [Framer Motion](https://motion.dev) (the `motion` package). They 
 
 | Where | What moves | Why |
 | --- | --- | --- |
+| Power-on (once per sign-in or page load) | The logo flares and a power line sweeps the header; then every block rises into place with a brief glow, top to bottom; numbers spool up and the progress bar charges; the header status lights up last | The system visibly comes alive |
 | Section tabs | The selected-tab pill slides to the new tab; the panel fades up | Shows which section you moved to |
 | Email lanes | Cards fade up in a short stagger; a relabelled email glides to its new lane | Makes a correction visibly land where it went |
 | Action Center | Items fade in; completed, snoozed or dismissed items shrink out and the rest close the gap | Confirms the item left this view |
@@ -41,7 +42,7 @@ Rules the code keeps:
 - Motion sits on wrapper elements, so the cards keep their own CSS hover effects.
 - `<MotionConfig reducedMotion='user'>` turns movement off when the operating system asks for reduced motion. Numbers then show their final value at once, and the CSS reduced-motion rules still apply.
 - `<LazyMotion>` loads the animation engine as a separate chunk after first paint, and the count-up uses a plain `requestAnimationFrame` loop. First-load JavaScript therefore grows by only about 18 kB gzip.
-- Shared timings live in `src/motion.js`.
+- Shared timings live in `src/motion.js`. The power-on order is in the `.booting` rules at the end of `src/phase6.css`, and `src/boot.js` only decides when it plays.
 
 ## Data flow
 
