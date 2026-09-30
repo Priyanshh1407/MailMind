@@ -128,7 +128,10 @@ class RagSecurityTests(unittest.TestCase):
             def get_or_create_collection(self, **kwargs):
                 return Mock(configuration={'hnsw':{'space':'cosine'}})
         chroma = Mock(PersistentClient=Mock(return_value=Client()))
-        with patch.dict('sys.modules', {'chromadb':chroma, 'chromadb.config':Mock(Settings=Mock())}):
+        # The embedding function is cached process-wide; stub it so this test
+        # does not depend on whether an earlier test already filled the cache.
+        with patch.dict('sys.modules', {'chromadb':chroma, 'chromadb.config':Mock(Settings=Mock())}), \
+             patch.object(vector_db,'_search_embedding_function',return_value=Mock()):
             with tempfile.TemporaryDirectory() as directory:
                 path=Path(directory)/'chroma_db'
                 settings=Settings(data_dir=Path(directory))
