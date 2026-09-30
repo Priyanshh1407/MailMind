@@ -37,11 +37,13 @@ async function setup(page) {
       status=state.actionError||200;
       const counts={open:0,completed:0,dismissed:0,snoozed:0};
       state.actions.forEach(action=>counts[action.status]++);
-      data=status!==200?{detail:'Synthetic Action Center outage.'}:{...identity,total:state.actions.length,overdue:0,due_soon:counts.open,status_counts:counts,reminder_counts:{scheduled:0,claimed:0,delivered:0,dismissed:0,retry:0,dead:0}};
+      const typeCounts={};state.actions.forEach(action=>typeCounts[action.action_type]=(typeCounts[action.action_type]||0)+1);
+      data=status!==200?{detail:'Synthetic Action Center outage.'}:{...identity,total:state.actions.length,overdue:0,due_soon:counts.open,status_counts:counts,type_counts:typeCounts,reminder_counts:{scheduled:0,claimed:0,delivered:0,dismissed:0,retry:0,dead:0}};
     } else if(path==='/actions'){
       status=state.actionError||200;
       const actionStatus=url.searchParams.get('status');
-      const actions=state.actions.filter(action=>!actionStatus||action.status===actionStatus);
+      const actionType=url.searchParams.get('action_type');
+      const actions=state.actions.filter(action=>(!actionStatus||action.status===actionStatus)&&(!actionType||action.action_type===actionType));
       data=status!==200?{detail:'Synthetic Action Center outage.'}:{...identity,actions:JSON.parse(JSON.stringify(actions)),limit:Number(url.searchParams.get('limit')||50),offset:Number(url.searchParams.get('offset')||0)};
     } else if(path.startsWith('/actions/')&&(method==='PATCH'||path.endsWith('/snooze'))){
       const actionId=Number(path.split('/')[2]),action=state.actions.find(item=>item.action_id===actionId),body=route.request().postDataJSON();
@@ -114,6 +116,18 @@ test('Phase 6 tabs, KPIs, action lifecycle and source navigation work together',
   await expect(page.getByText('Showing the email that produced the selected action.')).toBeVisible();
   await expect(page.getByRole('article',{name:'Synthetic email 0',exact:true})).toBeVisible();
   await expect(page.getByRole('article',{name:'Synthetic email 1',exact:true})).toHaveCount(0);
+});
+test('Action Center type filter offers only existing types and narrows the list',async({page})=>{
+  const state=await setup(page);
+  state.actions.push({...state.actions[0],action_id:8,email_id:'synthetic-1',action_type:'payment_required',title:'Pay the venue invoice'});
+  await page.getByRole('tab',{name:'Action Center'}).click();
+  const typeFilter=page.getByLabel('Filter actions by type');
+  await expect(typeFilter.locator('option')).toHaveText(['All types · 2','Reply · 1','Payment · 1']);
+  await typeFilter.selectOption('payment_required');
+  await expect(page.getByRole('heading',{name:'Pay the venue invoice'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Reply to synthetic sender'})).toHaveCount(0);
+  await typeFilter.selectOption('');
+  await expect(page.getByRole('heading',{name:'Reply to synthetic sender'})).toBeVisible();
 });
 test('Phase 6 explanations keep model rationale separate from correction controls',async({page})=>{
   await setup(page);

@@ -45,7 +45,7 @@ const timestamp = value => typeof value === 'string' && value.length <= 64 && /(
 const nullableTimestamp = value => value === null || timestamp(value);
 const keysAreIntegers = (value, keys) => record(value) && keys.every(key => integer(value[key]));
 const ACTION_STATUSES = ['open', 'completed', 'dismissed', 'snoozed'];
-const ACTION_TYPES = ['reply_required', 'approval_required', 'payment_required', 'document_required', 'meeting', 'review_required', 'follow_up_required', 'general_task'];
+export const ACTION_TYPES = ['reply_required', 'approval_required', 'payment_required', 'document_required', 'meeting', 'review_required', 'follow_up_required', 'general_task'];
 const REMINDER_STATUSES = ['scheduled', 'claimed', 'delivered', 'dismissed', 'retry', 'dead'];
 const TOKEN_PROVIDERS = ['gemini', 'groq', 'local', 'embedding'];
 const TOKEN_OPERATIONS = ['classification_analysis', 'local_shadow', 'document_embedding', 'query_embedding', 'manual_prediction', 'action_reanalysis'];
@@ -131,6 +131,8 @@ export function validateResponse(path, method, data) {
   if (valid && method === 'GET' && route === '/telemetry') valid = ['gemini','groq'].every(key => ['unconfigured','configured_unverified','disabled_local_only'].includes(data.providers[key]));
   if (valid && method === 'GET' && route === '/actions') valid = identity(data) && Array.isArray(data.actions) && data.actions.every(validAction) && integer(data.limit) && data.limit >= 1 && data.limit <= 200 && integer(data.offset) && data.offset <= 1000000;
   if (valid && method === 'GET' && route === '/actions/summary') valid = identity(data) && integer(data.total) && integer(data.overdue) && integer(data.due_soon) && keysAreIntegers(data.status_counts, ACTION_STATUSES) && keysAreIntegers(data.reminder_counts, REMINDER_STATUSES) && data.total === ACTION_STATUSES.reduce((sum, key) => sum + data.status_counts[key], 0);
+  // Only action types the account has; each a known type with an integer count.
+  if (valid && method === 'GET' && route === '/actions/summary' && data.type_counts !== undefined) valid = record(data.type_counts) && Object.entries(data.type_counts).every(([key, value]) => ACTION_TYPES.includes(key) && integer(value));
   if (valid && method === 'GET' && route === '/analytics/tokens') valid = identity(data) && ['day', 'week', 'month'].includes(data.window) && typeof data.timezone === 'string' && timestamp(data.start_at) && timestamp(data.end_at) && Date.parse(data.start_at) < Date.parse(data.end_at) && keysAreIntegers(data.totals, ['event_count', 'input_tokens', 'output_tokens', 'total_tokens', 'unknown_events']) && integer(data.provider_billed_tokens) && integer(data.local_processed_tokens) && validTokenBreakdown(data.providers, TOKEN_PROVIDERS) && validTokenBreakdown(data.operations, TOKEN_OPERATIONS) && validTokenBreakdown(data.count_methods, TOKEN_COUNT_METHODS) && validTokenBreakdown(data.outcomes, TOKEN_OUTCOMES) && validDailyTrend(data.daily);
   if (valid && method === 'GET' && route === '/status') valid = [data.processing_counts,data.notification_counts].every(counts => Object.values(counts).every(integer)) && data.ingestion_failures.every(row => record(row) && typeof row.email_id === 'string' && typeof row.error_code === 'string' && integer(row.attempt_count) && ['retry','dead'].includes(row.status));
   if (valid && method === 'GET' && route === '/status') valid = record(data.semantic_search_index) && ['pending','indexed','failed'].every(key => integer(data.semantic_search_index[key]));

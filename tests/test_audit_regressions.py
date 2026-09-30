@@ -485,6 +485,46 @@ class TelegramDeliveryTimeoutTests(Phase4Base):
         notifier.assert_not_called()
 
 
+class ActionTypeFilterTests(Phase4Base):
+    """FEAT-01: filter the Action Center by action type; options come from the
+    types the account actually has."""
+
+    def setUp(self):
+        super().setUp()
+        self.seed_email()
+        for index, action_type in enumerate(('payment_required', 'payment_required', 'meeting')):
+            self.create_action(action_type=action_type, title=f'Task {index}',
+                               evidence=f'approve the launch checklist {index}')
+        model = Mock(model_loaded=False, load_reason='missing_checkpoint')
+        self.app = create_app(settings=self.settings, model_factory=Mock(return_value=model),
+                              vector_factory=Mock(return_value=EmptyCollection()))
+        self.client = TestClient(self.app, base_url='http://localhost')
+        self.client.__enter__()
+        self.addCleanup(self.client.__exit__, None, None, None)
+        self.client.headers['Origin'] = ORIGIN
+        self.client.headers['X-CSRF-Token'] = self.client.post('/session').json()['csrf_token']
+        context, _ = self.app.state.accounts.session(self.client.cookies.get('mailmind_session'))
+        self.app.state.accounts.finish_auth(self.app.state.accounts.begin_auth(context), (A, '{}'))
+
+    def test_actions_can_be_filtered_by_type(self):
+        payments = self.client.get('/actions?action_type=payment_required').json()['actions']
+        self.assertEqual({a['action_type'] for a in payments}, {'payment_required'})
+        self.assertEqual(len(payments), 2)
+
+    def test_summary_counts_only_the_types_that_exist(self):
+        summary = self.client.get('/actions/summary').json()
+        self.assertEqual(summary['type_counts'], {'payment_required': 2, 'meeting': 1})
+
+    def test_an_unknown_type_is_rejected(self):
+        self.assertEqual(self.client.get('/actions?action_type=urgent').status_code, 422)
+
+    def test_the_api_accepts_exactly_the_contract_action_types(self):
+        from typing import get_args
+        from api.app import ACTION_TYPE_VALUES
+        from src.intelligence_contract import ActionType
+        self.assertEqual(set(get_args(ACTION_TYPE_VALUES)), {item.value for item in ActionType})
+
+
 class AccountDeletionErrorTests(Phase4Base):
     """ERR-02: found by the Git Bash guide's sandbox run. A vector-store failure
     after the purge transition was reported as 'There is no account to delete.'"""

@@ -589,3 +589,59 @@ html {
   flex: none;
   margin-top: 2px;
 }
+
+.search-hint-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.search-hint-row .search-hint {
+  margin-top: 0;
+}
+
+.source-clear {
+  min-height: 0;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+/* The label's bottom margin lifted the dropdown 8px above the search box and
+   button in the bottom-aligned row; space the label text from the select instead. */
+.filter-actions .category-filter {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+/* Action Center: status chips on the left, type filter on the right. */
+.action-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.action-type-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.action-type-filter select {
+  min-height: 36px;
+  min-width: 190px;
+  font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .action-type-filter,
+  .action-type-filter select {
+    width: 100%;
+  }
+}

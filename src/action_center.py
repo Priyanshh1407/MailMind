@@ -146,7 +146,7 @@ def get_action(account_id, action_id, *, db_path=None, db_conn=None):
 
 
 def list_actions(account_id, *, status=None, due_from=None, due_to=None,
-                 email_id=None, limit=50, offset=0, db_path=None,
+                 email_id=None, action_type=None, limit=50, offset=0, db_path=None,
                  db_conn=None):
     if type(limit) is not int or not 1 <= limit <= MAX_ACTION_PAGE:
         raise ValueError("Invalid action limit")
@@ -159,6 +159,9 @@ def list_actions(account_id, *, status=None, due_from=None, due_to=None,
     if email_id is not None:
         clauses.append("a.email_id=?")
         parameters.append(_text(email_id, "email_id", 256))
+    if action_type is not None:
+        clauses.append("a.action_type=?")
+        parameters.append(ActionType(action_type).value)
     start = _timestamp(due_from, "due_from")
     end = _timestamp(due_to, "due_to")
     if start is not None:
@@ -467,6 +470,14 @@ def action_summary(account_id, *, now=None, db_path=None, db_conn=None):
                 """SELECT status,COUNT(*) AS count FROM action_reminders
                    WHERE account_id=? GROUP BY status""", (account_id,))
         }
+        # Only types the account actually has, so filters never offer empty options.
+        type_counts = {
+            row["action_type"]: row["count"]
+            for row in conn.execute(
+                """SELECT action_type,COUNT(*) AS count FROM email_actions
+                   WHERE account_id=? GROUP BY action_type
+                   ORDER BY count DESC, action_type""", (account_id,))
+        }
         total = sum(statuses.values())
         overdue = conn.execute(
             """SELECT COUNT(*) FROM email_actions
@@ -486,6 +497,7 @@ def action_summary(account_id, *, now=None, db_path=None, db_conn=None):
             for status in ActionStatus
         },
         "overdue": overdue,
+        "type_counts": type_counts,
         "reminder_counts": {
             status.value: reminders.get(status.value, 0)
             for status in ReminderStatus

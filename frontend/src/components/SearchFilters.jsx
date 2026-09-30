@@ -43,10 +43,14 @@ export function SearchFilters({ search, setSearch, query, setQuery, loading, pag
         </select>
       </label>
       <button type='submit' className='button primary search-submit' disabled={loading || search.trim() === query.search}><Search size={16} />Search now</button>
-      {query.emailId && <button type='button' className='button secondary' onClick={clear}><X size={15} />Clear source email</button>}
     </div>
     <div className='search-footer'>
-      <p className='search-hint' role='status'>{hint}</p>
+      {/* Clearing the source email sits beside the message it undoes, so the
+          search row keeps the same layout in both modes. */}
+      <div className='search-hint-row'>
+        <p className='search-hint' role='status'>{hint}</p>
+        {query.emailId && <button type='button' className='button ghost compact source-clear' onClick={clear}><X size={13} />Clear source email</button>}
+      </div>
       <span className='semantic-status'><Sparkles size={13} />{index ? 'Semantic index ' + percent + '% complete' : 'Semantic status loading'}</span>
     </div>
   </Surface>;

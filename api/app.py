@@ -69,6 +69,10 @@ from src.intelligence_backfill import (
 )
 
 COOKIE = 'mailmind_session'
+# Must equal intelligence_contract.ActionType (enforced by a test).
+ACTION_TYPE_VALUES = Literal['reply_required', 'approval_required', 'payment_required',
+                             'document_required', 'meeting', 'review_required',
+                             'follow_up_required', 'general_task']
 
 
 class EmailRequest(BaseModel):
@@ -487,6 +491,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             due_from: str | None = Query(None, max_length=64),
             due_to: str | None = Query(None, max_length=64),
             email_id: str | None = Query(None, max_length=256),
+            action_type: ACTION_TYPE_VALUES | None = None,
             limit: int = Query(50, ge=1, le=200),
             offset: int = Query(0, ge=0, le=1000000),
             context=Depends(session)):
@@ -495,7 +500,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             with application.state.accounts.guard(context) as conn:
                 rows=list_actions(
                     context.account_id,status=status,due_from=due_from,
-                    due_to=due_to,email_id=email_id,limit=limit,
+                    due_to=due_to,email_id=email_id,action_type=action_type,limit=limit,
                     offset=offset,db_conn=conn,
                 )
         except (LookupError,ValueError) as error:

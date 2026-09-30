@@ -1,3 +1,4 @@
+import { ACTION_TYPES } from './api.js';
 export const CATEGORIES = ['IMPORTANT', 'UPDATES', 'SPAM', 'NEEDS_REVIEW'];
 export const ACTION_PAGE_LIMIT = 50;
 export const EMAIL_PAGE_LIMIT = 20;
@@ -32,6 +33,8 @@ export function dashboardQueries(query = {}) {
   const actionOffset = pageOffset(query.actionOffset, 'Action offset');
   const actionStatus = query.actionStatus === undefined ? 'open' : query.actionStatus;
   if (actionStatus !== null && !ACTION_STATUSES.includes(actionStatus)) throw new TypeError('Unsupported action status.');
+  const actionType = query.actionType || null;
+  if (actionType !== null && !ACTION_TYPES.includes(actionType)) throw new TypeError('Unsupported action type.');
   const tokenWindow = query.tokenWindow ?? 'day';
   if (!TOKEN_WINDOWS.includes(tokenWindow)) throw new TypeError('Unsupported token window.');
   const dueFrom = explicitTimestamp(query.actionDueFrom, 'Action range start');
@@ -45,6 +48,7 @@ export function dashboardQueries(query = {}) {
   if (query.emailId) email.set('email_id', query.emailId);
   const actions = new URLSearchParams({ limit: String(ACTION_PAGE_LIMIT), offset: String(actionOffset) });
   if (actionStatus) actions.set('status', actionStatus);
+  if (actionType) actions.set('action_type', actionType);
   if (dueFrom) {
     actions.set('due_from', dueFrom);
     actions.set('due_to', dueTo);
@@ -57,6 +61,7 @@ function emptyActionSummary(session) {
     account_id: session.email, generation: session.generation, total: 0,
     overdue: 0, due_soon: 0,
     status_counts: { open: 0, completed: 0, dismissed: 0, snoozed: 0 },
+    type_counts: {},
     reminder_counts: { scheduled: 0, claimed: 0, delivered: 0, dismissed: 0, retry: 0, dead: 0 },
   };
 }

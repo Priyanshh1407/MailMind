@@ -18,7 +18,7 @@ import { TokenUsagePanel } from './components/TokenUsagePanel';
 const api = createApi('http://' + window.location.hostname + ':8000');
 const INITIAL_QUERY = {
   offset: 0, search: '', category: '', emailId: '',
-  actionOffset: 0, actionStatus: 'open', actionFilter: 'open',
+  actionOffset: 0, actionStatus: 'open', actionFilter: 'open', actionType: '',
   actionDueFrom: '', actionDueTo: '', tokenWindow: 'day',
 };
 const TABS = [

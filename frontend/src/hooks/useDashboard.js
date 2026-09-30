@@ -38,7 +38,7 @@ export function useDashboard(api, query) {
     if (!locks.current.has('account')) poller.current?.start();
   }, [
     query.offset, query.search, query.category, query.emailId,
-    query.actionOffset, query.actionStatus, query.actionDueFrom,
+    query.actionOffset, query.actionStatus, query.actionType, query.actionDueFrom,
     query.actionDueTo, query.tokenWindow,
   ]);
   useEffect(() => {
