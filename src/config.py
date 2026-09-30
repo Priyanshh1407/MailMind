@@ -20,7 +20,9 @@ def _environment_bool(name, default):
 @dataclass(frozen=True)
 class Settings:
     data_dir: Path = ROOT / "data"
-    model_path: Path = ROOT / "models" / "MailMind-Final"
+    # Local-only decides with the same three-category checkpoint normal mode
+    # runs as its shadow. The legacy binary checkpoint cannot label UPDATES.
+    model_path: Path = ROOT / "models" / "inbox-approved-v2"
     shadow_model_path: Path = ROOT / "models" / "inbox-approved-v2"
     retrieval_policy_path: Path | None = None
     local_only: bool = False
@@ -110,7 +112,7 @@ class Settings:
             local_only=local_only,
             asset_manifest_path=Path(os.environ['MAILMIND_ASSET_MANIFEST']).resolve() if os.environ.get('MAILMIND_ASSET_MANIFEST') else None,
             data_dir=Path(os.environ.get("MAILMIND_DATA_DIR", ROOT / "data")).resolve(),
-            model_path=Path(os.environ.get("MAILMIND_MODEL_PATH", ROOT / "models" / "MailMind-Final")).resolve(),
+            model_path=Path(os.environ.get("MAILMIND_MODEL_PATH", ROOT / "models" / "inbox-approved-v2")).resolve(),
             shadow_model_path=Path(os.environ.get("MAILMIND_SHADOW_MODEL_PATH", ROOT / "models" / "inbox-approved-v2")).resolve(),
             retrieval_policy_path=Path(os.environ["MAILMIND_RETRIEVAL_POLICY_PATH"]).resolve() if os.environ.get("MAILMIND_RETRIEVAL_POLICY_PATH") else None,
             poll_interval_seconds=int(os.environ.get('MAILMIND_POLL_INTERVAL_SECONDS',5)),

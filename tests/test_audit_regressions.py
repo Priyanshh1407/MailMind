@@ -286,5 +286,21 @@ class RedactedEvidenceRegressionTests(Phase4Base):
                              'Please pay Rs 5,000 via https://pay.example.test by Friday.'))
 
 
+class LocalOnlyDefaultModelTests(unittest.TestCase):
+    """ML-02: local-only mode must default to a three-category checkpoint."""
+
+    def test_default_local_model_is_the_three_category_checkpoint(self):
+        self.assertEqual(Settings().model_path, Settings().shadow_model_path)
+        with patch.dict(llm_api.os.environ, {}, clear=True):
+            configured = Settings.from_environment()
+        self.assertEqual(configured.model_path.name, 'inbox-approved-v2')
+
+    def test_explicit_model_path_still_overrides_the_default(self):
+        with patch.dict(llm_api.os.environ,
+                        {'MAILMIND_MODEL_PATH': 'custom-checkpoint'}, clear=True):
+            configured = Settings.from_environment()
+        self.assertEqual(configured.model_path.name, 'custom-checkpoint')
+
+
 if __name__ == '__main__':
     unittest.main()
