@@ -111,7 +111,18 @@ Normal mode uses cloud classification as the authoritative decision. Provider at
 2. Configured Gemini fallback model
 3. Configured Groq model
 
-Retryable failures can advance to the next provider. Permanent failures and invalid structured output do not silently become Spam. The local model remains a three-category shadow evaluator in normal mode and may be unavailable while loading.
+A failed route never ends the chain by itself. Each failure is classified by what it proves:
+
+| Failure | Meaning | What happens |
+| --- | --- | --- |
+| Timeout, 429, 5xx | Temporary | Cool the model down; try the next route |
+| 400, 404, unknown error | This model is broken (e.g. retired) | Cool it down; try the next route |
+| 401 / 403 | The shared Gemini key is broken | Skip other Gemini models; go to Groq |
+| Non-JSON or out-of-schema answer | This answer is bad | Try the next route, no cooldown |
+
+An email fails only after every route has been tried. It is retried later if any route failed temporarily; otherwise it goes to Needs Review. Invalid output never silently becomes Spam. All 18 fault × scope combinations are tested and rendered in [the resilience matrix](docs/RESILIENCE.md).
+
+The local model is a three-category **shadow**: in normal mode it runs beside the cloud decision for comparison, is metered separately, and never decides — including on manual re-analysis. In local-only mode it is the authoritative classifier and receives the same sender-aware input it was trained on.
 
 Feedback is committed to SQLite first. The dashboard immediately uses the corrected label, while the derived feedback vector is reconciled asynchronously. A vector-store delay cannot block the user’s correction. Original predictions and revision history remain available for audit and undo.
 
@@ -248,21 +259,50 @@ npm run build
 npm run test:browser
 ```
 
-At the Phase 8 automated verification on 29 September 2026:
+Latest local verification (30 September 2026):
 
-- Backend discovery: 478 tests passed.
-- Frontend unit suite: 42 passed.
-- Playwright browser suite: 24 passed.
-- Frontend lint and production build passed.
+- Backend discovery: 506 tests passed, and each of the 25 test modules also passes when run alone (no test-order dependence).
+- Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
+- Frontend unit suite: 42 passed. Playwright browser suite: 24 passed.
+- Frontend lint and production build passed; initial JavaScript is 264 kB (83 kB gzip).
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
 
 See [Test guide](tests/README.md).
 
+## Evaluation
+
+Every route is evaluated on a 180-email CC0 synthetic benchmark with production-identical requests. The raw answers are recorded, so `python -m scripts.evaluate_cloud --replay` reproduces the [full report](docs/EVALUATION.md) offline, byte for byte.
+
+| Route | Accuracy | Macro-F1 (95% CI) | Urgent misses | Latency p50 |
+| --- | ---: | --- | ---: | ---: |
+| Gemini `gemini-3.5-flash-lite` | 100% | 1.000 | 0 | 1.3 s |
+| Groq `openai/gpt-oss-20b` | 95.6% | 0.974 (0.955–0.990) | 4 | 1.3 s |
+| Local DistilBERT shadow | 47.8% | 0.400 (0.304–0.493) | 0 | local |
+
+The perfect Gemini score is a ceiling effect: the benchmark is deliberately unambiguous and cannot rank strong models. The local shadow was trained on a private mailbox and is out of distribution here. `gemini-3.8-flash` (primary) could not be measured because the provider returned 503 "high demand" throughout. These are controlled route comparisons, not real-inbox accuracy.
+
+## What I found in my own audit
+
+A deliberate audit of this codebase found and fixed these defects. Each one was first reproduced as a failing test through the real code path:
+
+| Defect | Impact | Fix |
+| --- | --- | --- |
+| Failover only on transient errors | A retired model (404) or rejected parameter (400) sent every email to review without trying the fallbacks | Failures are classified by what they prove; see [resilience matrix](docs/RESILIENCE.md) |
+| Re-analyze used the shadow model | After startup, the local shadow's label replaced the cloud decision and no actions were extracted | One explicit authoritative route in `src/classification_service.py` |
+| Grounding vs privacy mismatch | Actions quoting a redacted span (`[AMOUNT]`) passed validation, then were silently dropped at persistence, including on a retry path | One definition of "the text the provider saw" |
+| Training-serving skew | Local-only re-analysis called the model without the sender field it was trained with | The sender is passed on every authoritative local path |
+| No label provenance | Retraining could learn from the local model's own outputs; 87% of labels were cloud decisions | Provenance tracked; local self-labels excluded |
+| Deadline contract mismatch (found by the evaluation) | The parser rejected plain calendar dates and unresolved deadlines, silently discarding 58% of Gemini's proposed actions | Date-only deadlines anchored to the local day; unresolved ones kept as "unknown": 25/60 → 60/60 on the same recordings |
+
+Live evaluation also found that the previously configured fallback model (`gemini-1.5-flash`) is retired (HTTP 404), which is exactly the case the first fix handles.
+
 ## Current limitations
 
 - The approved personal dataset is too limited to claim production classifier quality.
-- The local shadow model is useful for evaluation and demonstration, not an accuracy guarantee.
+- The local shadow model is effectively a distillation of the cloud classifier: 87% of its training labels are cloud decisions (308 of 356), so its private test score measures agreement with Gemini, not accuracy.
+- Cloud accuracy is measured only on a 180-email synthetic benchmark (see [evaluation](docs/EVALUATION.md)), not on real inboxes.
+- There is no CI; the test suites are run locally.
 - Regex masking is minimization, not anonymization.
 - Local storage is not encrypted by MailMind.
 - Local-only mode is an application routing boundary, not an operating-system firewall.
@@ -281,6 +321,9 @@ See [Test guide](tests/README.md).
 - [Security policy](SECURITY.md)
 - [Privacy and local-only](docs/PRIVACY_AND_LOCAL_ONLY.md)
 - [Security design showcase](docs/SECURITY_FEATURES_SHOWCASE.md)
+- [Classifier evaluation](docs/EVALUATION.md)
+- [Provider resilience matrix](docs/RESILIENCE.md)
+- [Performance measurements](docs/PERFORMANCE.md)
 - [Frontend guide](frontend/README.md)
 - [Test guide](tests/README.md)
 - [Contributing and privacy checks](CONTRIBUTING.md)

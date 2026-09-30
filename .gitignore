@@ -105,3 +105,11 @@ Thumbs.db
 # Local audit and upgrade working notes (kept private).
 /UPGRADE_PLAN.md
 /FIX_LOG.md
+
+# Personal interview preparation, test plans and audit notes: private, never publish.
+/INTERVIEW_PROGRESS.md
+*[Ii]nterview*.md
+*INTERVIEW*.md
+/docs/DEMO_SCRIPT.md
+/docs/MANUAL_TEST_PLAN.md
+/frontend/.visual/
