@@ -22,7 +22,8 @@ from .prediction import (
     Category,
 )
 from .logging_utils import log_event
-from .email_text import format_email_text, normalize_subject, normalize_text, MAX_SENDER_CHARS
+from .email_text import (format_email_text, normalize_subject, normalize_text, quote_in_source,
+                         MAX_SENDER_CHARS)
 from .intelligence_contract import (
     ActionType,
     AnalysisSource,
@@ -287,10 +288,8 @@ def _safe_derived_text(value, limit, *, evidence_source=None):
                 '100% certain', 'guaranteed classification',
             ))):
         raise ValueError('Unsafe enriched response text')
-    if evidence_source is not None:
-        source = normalize_text(evidence_source).casefold()
-        if lowered not in source:
-            raise ValueError('Evidence is not present in the source email')
+    if evidence_source is not None and not quote_in_source(text, evidence_source):
+        raise ValueError('Evidence is not present in the source email')
     return text
 
 
@@ -309,13 +308,15 @@ def _parse_signals(value, source_text):
         if signal in seen:
             raise ValueError('Duplicate explanation signal')
         seen.add(signal)
-        safe_evidence = (
-            _safe_derived_text(
-                evidence, MAX_SIGNAL_EVIDENCE_CHARS,
-                evidence_source=source_text,
-            )
-            if evidence is not None else None
-        )
+        safe_evidence = None
+        if evidence is not None:
+            try:
+                safe_evidence = _safe_derived_text(
+                    evidence, MAX_SIGNAL_EVIDENCE_CHARS, evidence_source=source_text)
+            except ValueError:
+                # An unverifiable or unsafe quote is dropped on its own; the
+                # signal and the rest of the explanation are still valid.
+                safe_evidence = None
         signals.append(AnalysisSignal(signal, safe_evidence))
     return tuple(signals)
 

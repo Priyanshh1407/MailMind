@@ -20,6 +20,25 @@ def normalize_text(value, *, limit=MAX_BODY_CHARS):
     return value[:limit].rstrip()
 
 
+_TYPOGRAPHIC = str.maketrans({
+    '‘': "'", '’': "'", '‚': "'", '‛': "'", '′': "'",
+    '“': '"', '”': '"', '„': '"', '″': '"',
+    '–': '-', '—': '-', '−': '-', ' ': ' ', '…': '...',
+})
+
+
+def grounding_key(value):
+    """Text for 'is this quote in the email?': folds case, whitespace and
+    typographic punctuation (curly quotes, dashes, ellipsis). Words must match."""
+    return re.sub(r'\s+', ' ', normalize_text(value).translate(_TYPOGRAPHIC).casefold())
+
+
+def quote_in_source(quote, source):
+    """The single grounding rule shared by explanations and actions."""
+    key = grounding_key(quote).strip(' \'".')
+    return bool(key) and key in grounding_key(source)
+
+
 def normalize_subject(value):
     return ' '.join(normalize_text(value, limit=MAX_SUBJECT_CHARS).split())
 

@@ -156,6 +156,26 @@ def provider_fallback_analysis(prediction):
     )
 
 
+def unrecorded_email_analysis(prediction):
+    """For saved mail that has a category but no stored explanation at all.
+
+    Such mail was classified before explanations were recorded. Say so, rather
+    than implying that a provider's explanation was rejected.
+    """
+    if prediction.source not in (AnalysisSource.GEMINI.value, AnalysisSource.GROQ.value):
+        return local_email_analysis(prediction)
+    return EmailAnalysis(
+        predicted_category=prediction.category,
+        explanation_summary=(
+            'No explanation was recorded for this email: it was classified before '
+            'explanations were enabled. Use "Analyze up to 20 saved emails" to add one.'
+        ),
+        signals=(),
+        source=prediction.source,
+        model_version=prediction.model_version or f'{prediction.source}-unversioned',
+    )
+
+
 def ensure_prediction_analysis(prediction):
     if not isinstance(prediction, Prediction):
         raise ValueError('A Prediction is required')

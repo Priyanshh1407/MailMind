@@ -7,7 +7,7 @@ from .email_text import preview_text
 from .prediction import Prediction, Category
 from .email_analysis import (
     SYSTEM_REASON_MESSAGES as REVIEW_MESSAGES,
-    ensure_prediction_analysis,
+    unrecorded_email_analysis,
     get_email_analysis,
     system_email_analysis,
 )
@@ -118,11 +118,12 @@ def get_recent_emails(limit=50, *, account_id=None, db_path=None, db_conn=None, 
                 if analysis is None and reason is not None:
                     analysis=system_email_analysis(reason['code']).to_dict()
                 if analysis is None and latest and latest['category']:
-                    fallback=ensure_prediction_analysis(Prediction(
+                    # Classified before explanations were recorded: say that
+                    # plainly instead of implying an explanation was rejected.
+                    analysis=unrecorded_email_analysis(Prediction(
                         category=latest['category'],outcome='CLASSIFIED',
                         source=latest['source'],model_version=latest['model_version'],
-                    ))
-                    analysis=fallback.analysis.to_dict()
+                    )).to_dict()
                 item['analysis']=analysis
             output.append(item)
         return output

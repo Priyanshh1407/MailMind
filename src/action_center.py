@@ -6,7 +6,7 @@ import json
 from zoneinfo import ZoneInfo
 
 from .database import connection, utc_timestamp
-from .email_text import normalize_text
+from .email_text import normalize_text, quote_in_source
 from .intelligence_contract import (
     ACTION_STATUS_TRANSITIONS,
     MAX_ACTION_DESCRIPTION_CHARS,
@@ -403,7 +403,6 @@ def persist_analysis_actions(account_id, email_id, analysis, *,
         raise ValueError("Invalid email analysis")
     if len(analysis.actions) > MAX_ACTIONS_PER_EMAIL:
         raise ValueError("Too many action candidates")
-    normalized_source = normalize_text(source_text).casefold()
     result = {
         "candidate_count": len(analysis.actions),
         "accepted_count": 0,
@@ -422,7 +421,7 @@ def persist_analysis_actions(account_id, email_id, analysis, *,
                     candidate, source_created_at=source_created_at,
                     timezone_name=timezone_name,
                 )
-                if normalize_text(values["evidence"]).casefold() not in normalized_source:
+                if not quote_in_source(values["evidence"], source_text):
                     raise ValueError("Action evidence is not present in the source email")
                 action = create_action(
                     account_id, email_id, db_conn=conn,

@@ -19,7 +19,7 @@ from src.action_center import list_actions, persist_analysis_actions
 from src.prediction import EmailAnalysis
 from src.config import Settings
 from src.database import connection
-from src.db_utils import log_email_to_db
+from src.db_utils import get_recent_emails, log_email_to_db
 from src.notifier import Delivery
 from src.pipeline import process_task
 from src.prediction import Prediction
@@ -369,6 +369,68 @@ class DeadlineContractTests(Phase4Base):
     def test_a_time_without_an_offset_is_still_rejected(self):
         self.assertEqual(self.parse('2026-10-02T17:00:00', 'exact_time'), ())
         self.assertEqual(self.parse('2026-10-02', 'exact_time'), ())
+
+
+class ExplanationHonestyTests(Phase4Base):
+    """LLM-05: 368 of 412 real emails showed 'no additional validated explanation',
+    although none had ever been generated; and one imperfect quote discarded a
+    whole valid explanation."""
+
+    SOURCE = 'Subject: Contract | Body: Please sign the "revised" contract before 5 pm - today.'
+
+    def explanation(self, signals):
+        _category, analysis = llm_api.parse_provider_analysis(
+            json.dumps({'category': 'IMPORTANT',
+                        'explanation': {'summary': 'The sender asks for a signature today.',
+                                        'signals': signals},
+                        'actions': []}),
+            source='gemini', model_version='synthetic', source_text=self.SOURCE)
+        return analysis
+
+    def test_email_without_a_recorded_explanation_says_so_honestly(self):
+        with connection(self.settings.db_path) as conn:
+            log_email_to_db('old-mail', 'Sender <s@example.test>', 'Old', 'Saved before explanations.',
+                            Prediction(category='IMPORTANT', outcome='CLASSIFIED', source='gemini',
+                                       model_version='synthetic'),
+                            Prediction(), account_id=A, db_conn=conn)
+            summary = get_recent_emails(1, account_id=A, db_conn=conn, ranked_ids=['old-mail'],
+                                        include_analysis=True)[0]['analysis']['explanation_summary']
+        self.assertIn('No explanation was recorded', summary)
+        self.assertNotIn('no additional validated explanation', summary)
+
+    def test_one_unverifiable_quote_does_not_discard_the_explanation(self):
+        analysis = self.explanation([
+            {'signal': 'direct_request', 'evidence': 'Please sign the "revised" contract'},
+            {'signal': 'deadline', 'evidence': 'by end of day'},   # not in the email
+        ])
+        self.assertEqual(analysis.explanation_summary, 'The sender asks for a signature today.')
+        self.assertEqual([(s.signal, s.evidence) for s in analysis.signals],
+                         [('direct_request', 'Please sign the "revised" contract'), ('deadline', None)])
+
+    def test_typographic_punctuation_still_counts_as_the_same_quote(self):
+        analysis = self.explanation([
+            {'signal': 'direct_request', 'evidence': 'sign the “revised” contract'},
+            {'signal': 'deadline', 'evidence': 'before 5 pm — today…'},
+        ])
+        # Both signals must survive with their quotes (not a vacuous empty list).
+        self.assertEqual([signal.signal for signal in analysis.signals], ['direct_request', 'deadline'])
+        self.assertTrue(all(signal.evidence for signal in analysis.signals))
+
+    def test_actions_use_the_same_quote_matching(self):
+        # Grounding must mean the same thing when parsing and when persisting.
+        self.seed_email(subject='Contract', body='Please sign the "revised" contract before 5 pm - today.')
+        _category, analysis = llm_api.parse_provider_analysis(
+            json.dumps(enriched_output('IMPORTANT', [
+                action_output('approval_required', 'sign the “revised” contract')])),
+            source='gemini', model_version='synthetic', source_text=self.SOURCE)
+        self.assertEqual(len(analysis.actions), 1)
+        with connection(self.settings.db_path) as conn:
+            result = persist_analysis_actions(
+                A, 'mail-1', analysis, source_created_at=SOURCE_TIME,
+                source_text=provider_email_text(
+                    'Contract', 'Please sign the "revised" contract before 5 pm - today.'),
+                db_conn=conn)
+        self.assertEqual(result['created_count'], 1)
 
 
 class AccountDeletionErrorTests(Phase4Base):
