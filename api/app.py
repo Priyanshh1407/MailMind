@@ -1061,7 +1061,6 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 'message':'Checking Gmail for new messages. New mail will receive live priority.'}
 
     @application.post('/ingestion/fetch-next',status_code=202)
-    @application.post('/ingestion/resume',status_code=202)
     def fetch_next_backlog(context=Depends(session)):
         settings=application.state.settings
         if settings.local_only:

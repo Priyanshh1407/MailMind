@@ -101,3 +101,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Local audit and upgrade working notes (kept private).
+/UPGRADE_PLAN.md
+/FIX_LOG.md
