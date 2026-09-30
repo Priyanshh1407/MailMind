@@ -18,10 +18,30 @@ function UsageMetric({ icon: Icon, label, value }) {
   return <div className='usage-metric'><Icon size={16} aria-hidden='true' /><span>{label}</span><strong>{formatCount(value)}</strong></div>;
 }
 
+// Ranked share bars: one series, so one hue; values stay in text colours.
 function Breakdown({ title, rows, label }) {
+  const ranked = [...rows].sort((a, b) => b.total_tokens - a.total_tokens);
+  const total = ranked.reduce((sum, row) => sum + row.total_tokens, 0);
+  const largest = ranked[0]?.total_tokens || 0;
   return <section className='usage-breakdown'>
     <h3>{title}</h3>
-    {rows.length ? <ul>{rows.map(row => <li key={row.key}><span>{label(row.key)}</span><strong>{formatCount(row.total_tokens)}</strong><small>{countLabel(row.event_count, 'event')}</small></li>)}</ul> : <p>No token events in this window.</p>}
+    {ranked.length ? <ul>{ranked.map(row => {
+      // Events whose tokens were never counted are not "0 tokens".
+      const unmeasured = row.total_tokens === 0 && row.unknown_events > 0;
+      const share = total ? row.total_tokens / total : 0;
+      const detail = unmeasured ? countLabel(row.event_count, 'event') + ' · token count not reported'
+        : Math.round(share * 100) + '% of tokens · ' + countLabel(row.event_count, 'event');
+      return <li key={row.key} title={label(row.key) + ': ' + (unmeasured ? 'not measured' : formatCount(row.total_tokens) + ' tokens') + ' · ' + countLabel(row.event_count, 'event')}>
+        <div className='breakdown-line'>
+          <span className='breakdown-name'>{label(row.key)}</span>
+          <strong className={unmeasured ? 'breakdown-value unmeasured' : 'breakdown-value'}>{unmeasured ? 'Not measured' : formatCount(row.total_tokens)}</strong>
+        </div>
+        <div className='breakdown-track' aria-hidden='true'>
+          <span className='breakdown-bar' style={{ width: largest && !unmeasured ? Math.max(2, row.total_tokens / largest * 100) + '%' : '0%' }} />
+        </div>
+        <small>{detail}</small>
+      </li>;
+    })}</ul> : <p className='breakdown-empty'>No token events in this window.</p>}
   </section>;
 }
 

@@ -18,11 +18,12 @@ export function TokenUsageChart({ daily }) {
         <BarChart data={data} accessibilityLayer barGap={4} margin={{ top: 12, right: 8, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray='3 3' stroke='#354156' vertical={false} />
           <XAxis dataKey='label' stroke='#919bad' tickLine={false} axisLine={false} />
-          <YAxis stroke='#919bad' tickLine={false} axisLine={false} width={48} />
+          {/* Thousands-comma'd ticks with room for 7 digits; a narrow axis clipped '80000' to '30000'. */}
+          <YAxis stroke='#919bad' tickLine={false} axisLine={false} width={72} tickFormatter={value => formatCount(value)} />
           <Tooltip cursor={{ fill: 'rgba(139, 92, 246, 0.08)' }} contentStyle={{ background: '#111722', border: '1px solid #354156', borderRadius: 10 }} formatter={value => formatCount(value)} />
-          <Legend iconType='circle' wrapperStyle={{ paddingTop: 8 }} />
+          <Legend iconType='circle' wrapperStyle={{ paddingTop: 8 }} formatter={value => <span className='chart-legend-text'>{value}</span>} />
           <Bar dataKey='input_tokens' name='Input tokens' fill='#8b5cf6' radius={[6, 6, 0, 0]} maxBarSize={44} />
-          <Bar dataKey='output_tokens' name='Output tokens' fill='#47bfff' radius={[6, 6, 0, 0]} maxBarSize={44} />
+          <Bar dataKey='output_tokens' name='Output tokens' fill='#2a93d8' radius={[6, 6, 0, 0]} maxBarSize={44} />
         </BarChart>
       </ResponsiveContainer>
     </div>
