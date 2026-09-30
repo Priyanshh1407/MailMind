@@ -459,7 +459,63 @@
   }
 }
 
+.technical-content {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.technical-content > p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.technical-details summary {
+  font-size: 11px;
+}
+
 @media (max-width: 560px) {
+  /* Item 1: action buttons fit one row; snooze is label, then input + button. */
+  .action-controls {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .action-controls .button.compact svg {
+    flex: none;
+  }
+
+  .action-controls .button.compact {
+    justify-content: center;
+    padding-inline: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .snooze-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 8px;
+  }
+
+  .snooze-control label {
+    grid-column: 1 / -1;
+  }
+
+  .snooze-control input {
+    max-width: none;
+    min-width: 0;
+  }
+
   .intelligence-summary,
   .usage-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));

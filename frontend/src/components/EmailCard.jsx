@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, CircleAlert, Clock3, History, Tag, Undo2 } from 'lucide-react';
 import { CATEGORIES, categoryName, formatTime, formatEmailTime, senderName } from '../dashboard';
 import { ClassificationExplanation } from './ClassificationExplanation';
+import { countLabel } from '../intelligence';
 
 export function EmailCard({ email, style, pending, disabled, mutate, api, generation }) {
   const [editing, setEditing] = useState(false);
@@ -90,7 +91,7 @@ export function EmailCard({ email, style, pending, disabled, mutate, api, genera
         <p>Original primary: {original} · Original local: {email.local_prediction || 'No category'}</p>
         {Boolean(email.body_truncated) && <p>The saved body was shortened to its text limit.</p>}
         {email.parse_warnings?.length > 0 && <p>Some message parts required fallback decoding.</p>}
-        {email.processing && <p>Workflow: {email.processing.status} · {email.processing.stage} · {email.processing.attempt_count} attempts</p>}
+        {email.processing && <p>Workflow: {email.processing.status} · {email.processing.stage} · {countLabel(email.processing.attempt_count, 'attempt')}</p>}
         {email.notification && <p>Alert: {email.notification.status}</p>}
         {email.human_label && <p>Your feedback: {email.human_label} · {email.feedback?.indexing_state === 'indexed' ? 'indexed' : 'index update pending'}</p>}
         {email.feedback?.label === null && email.feedback.indexing_state !== 'indexed' && <p>Feedback withdrawn; index cleanup is pending.</p>}
