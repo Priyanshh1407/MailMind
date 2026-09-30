@@ -18,6 +18,13 @@ from .work_queue import fence, attempt, task_retry
 from .classification_service import run_local
 
 
+# Every route has already been tried when one of these is returned (see
+# llm_api.classify_email); retrying the same email later cannot help.
+PERMANENT_CLASSIFICATION_FAILURES = frozenset({
+    'invalid_provider_output', 'provider_auth', 'provider_invalid_request',
+})
+
+
 @contextmanager
 def cycle_external(manager, context, token):
     with manager.guard(context) as conn:
@@ -143,7 +150,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
                         )
                 if decision.outcome != 'CLASSIFIED':
                     code=decision.reason or 'classification_unavailable'
-                    retryable=code not in ('invalid_provider_output','provider_auth','provider_invalid_request')
+                    retryable=code not in PERMANENT_CLASSIFICATION_FAILURES
                     task_retry(conn,context,task,'classify',code,retryable=retryable,max_attempts=config.max_processing_attempts)
                     return False
                 if intelligence_backfill:
