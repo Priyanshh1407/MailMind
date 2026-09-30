@@ -42,6 +42,7 @@ from .email_analysis import provider_fallback_analysis
 from .token_usage import (
     EMBEDDING_MODEL_VERSION,
     estimate_text_tokens,
+    failure_outcome,
     gemini_usage_measurement,
     groq_usage_measurement,
     unavailable_measurement,
@@ -407,38 +408,23 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
             target=collection_provider()
         retrieval_attempted.set()
         return vector_db.search_similar_emails(subject,body,k=3,account_id=account_id,collection=target,validator=validator)
+    def record_retrieval(outcome):
+        if retrieval_attempted.is_set() and usage_recorder is not None:
+            usage_recorder.record(
+                'classification-retrieval', provider='embedding',
+                model_version=EMBEDDING_MODEL_VERSION,
+                operation=TokenOperation.QUERY_EMBEDDING.value,
+                outcome=outcome, measurement=retrieval_measurement,
+            )
     try:
         with guard():
             examples=RETRIEVAL_CALLS.run(retrieve,budget.timeout(2))
-        if retrieval_attempted.is_set() and usage_recorder is not None:
-            usage_recorder.record(
-                'classification-retrieval', provider='embedding',
-                model_version=EMBEDDING_MODEL_VERSION,
-                operation=TokenOperation.QUERY_EMBEDDING.value,
-                outcome=TokenOutcome.SUCCESS.value,
-                measurement=retrieval_measurement,
-            )
+        record_retrieval(TokenOutcome.SUCCESS.value)
         examples=examples if len({item.get('email_id') for item in examples}) >= 3 else []
-    except WorkCancelled:
-        if retrieval_attempted.is_set() and usage_recorder is not None:
-            usage_recorder.record(
-                'classification-retrieval', provider='embedding',
-                model_version=EMBEDDING_MODEL_VERSION,
-                operation=TokenOperation.QUERY_EMBEDDING.value,
-                outcome=TokenOutcome.CANCELLED.value,
-                measurement=retrieval_measurement,
-            )
-        raise
     except Exception as error:
-        if retrieval_attempted.is_set() and usage_recorder is not None:
-            usage_recorder.record(
-                'classification-retrieval', provider='embedding',
-                model_version=EMBEDDING_MODEL_VERSION,
-                operation=TokenOperation.QUERY_EMBEDDING.value,
-                outcome=(TokenOutcome.TIMEOUT.value if isinstance(error, TimeoutError)
-                         else TokenOutcome.FAILED.value),
-                measurement=retrieval_measurement,
-            )
+        record_retrieval(failure_outcome(error))
+        if isinstance(error, WorkCancelled):
+            raise
         examples,retrieval=[],'unavailable'
         log_event('cloud_retrieval_failed',error=error)
     contents, precedent_count = build_classification_payload(
@@ -468,6 +454,12 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
     # about the next one. The email is failed only after every route is tried.
     failures=[]
     gemini_key_rejected=False
+    def record_route(key, provider, model_version, outcome, measurement):
+        if usage_recorder is not None:
+            usage_recorder.record(
+                key, provider=provider, model_version=model_version,
+                operation=usage_operation, outcome=outcome, measurement=measurement,
+            )
     def routes_failed():
         # Any temporary failure keeps the email retryable; otherwise report the
         # last permanent reason so the task can stop instead of looping.
@@ -495,48 +487,24 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
                     retrieval_used=bool(precedent_count),
                     source_text=evidence_source,
                 )
-                if usage_recorder is not None:
-                    usage_recorder.record(
-                        f'gemini:{index}', provider='gemini',
-                        model_version=version, operation=usage_operation,
-                        outcome=TokenOutcome.SUCCESS.value,
-                        measurement=measurement,
-                    )
+                record_route(f'gemini:{index}', 'gemini', version,
+                             TokenOutcome.SUCCESS.value, measurement)
                 _model_succeeded(version)
                 return result(category, analysis=analysis)
             except (ValueError,TypeError,AttributeError):
-                if usage_recorder is not None:
-                    usage_recorder.record(
-                        f'gemini:{index}', provider='gemini',
-                        model_version=version, operation=usage_operation,
-                        outcome=TokenOutcome.FAILED.value,
-                        measurement=measurement,
-                    )
+                record_route(f'gemini:{index}', 'gemini', version,
+                             TokenOutcome.FAILED.value, measurement)
                 # A malformed answer is specific to this request, not proof
                 # that the model is broken, so the model is not cooled down.
                 log_event('cloud_provider_invalid_output')
                 failures.append(Failure('invalid_provider_output',False))
-        except WorkCancelled:
-            if attempted.is_set() and usage_recorder is not None:
-                usage_recorder.record(
-                    f'gemini:{index}', provider='gemini',
-                    model_version=version, operation=usage_operation,
-                    outcome=TokenOutcome.CANCELLED.value,
-                    measurement=(gemini_usage_measurement(captured[0])
-                                 if captured else unavailable_measurement()),
-                )
-            raise
         except Exception as error:
-            if attempted.is_set() and usage_recorder is not None:
-                usage_recorder.record(
-                    f'gemini:{index}', provider='gemini',
-                    model_version=version, operation=usage_operation,
-                    outcome=(TokenOutcome.TIMEOUT.value
-                             if isinstance(error, TimeoutError)
-                             else TokenOutcome.FAILED.value),
-                    measurement=(gemini_usage_measurement(captured[0])
-                                 if captured else unavailable_measurement()),
-                )
+            if attempted.is_set():
+                record_route(f'gemini:{index}', 'gemini', version, failure_outcome(error),
+                             gemini_usage_measurement(captured[0]) if captured
+                             else unavailable_measurement())
+            if isinstance(error, WorkCancelled):
+                raise
             failure=provider_failure(error)
             failures.append(failure)
             log_event('cloud_provider_failed',error=error)
@@ -580,42 +548,20 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
                 retrieval_used=bool(precedent_count),
                 source_text=evidence_source,
             )
-            if usage_recorder is not None:
-                usage_recorder.record(
-                    'groq', provider='groq', model_version=version,
-                    operation=usage_operation, outcome=TokenOutcome.SUCCESS.value,
-                    measurement=measurement,
-                )
+            record_route('groq', 'groq', version, TokenOutcome.SUCCESS.value, measurement)
             return result(category, analysis=analysis)
         except (KeyError,IndexError,ValueError,TypeError):
-            if usage_recorder is not None:
-                usage_recorder.record(
-                    'groq', provider='groq', model_version=version,
-                    operation=usage_operation, outcome=TokenOutcome.FAILED.value,
-                    measurement=measurement,
-                )
+            record_route('groq', 'groq', version, TokenOutcome.FAILED.value, measurement)
             log_event('groq_invalid_output')
             failures.append(Failure('invalid_provider_output',False))
             return routes_failed()
-    except WorkCancelled:
-        if attempted.is_set() and usage_recorder is not None:
-            usage_recorder.record(
-                'groq', provider='groq', model_version=version,
-                operation=usage_operation, outcome=TokenOutcome.CANCELLED.value,
-                measurement=(groq_usage_measurement(captured[0])
-                             if captured else unavailable_measurement()),
-            )
-        raise
     except Exception as error:
-        if attempted.is_set() and usage_recorder is not None:
-            usage_recorder.record(
-                'groq', provider='groq', model_version=version,
-                operation=usage_operation,
-                outcome=(TokenOutcome.TIMEOUT.value if isinstance(error, TimeoutError)
-                         else TokenOutcome.FAILED.value),
-                measurement=(groq_usage_measurement(captured[0])
-                             if captured else unavailable_measurement()),
-            )
+        if attempted.is_set():
+            record_route('groq', 'groq', version, failure_outcome(error),
+                         groq_usage_measurement(captured[0]) if captured
+                         else unavailable_measurement())
+        if isinstance(error, WorkCancelled):
+            raise
         log_event('groq_failed',error=error)
         if budget.remaining() < 0.05:
             return result(outcome='ERROR',reason='provider_budget_exhausted')

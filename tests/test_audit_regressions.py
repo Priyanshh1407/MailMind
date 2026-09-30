@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
-from api.app import authoritative_prediction, create_app
+from api.app import authoritative_prediction, create_app, manual_prediction
 from src import llm_api
 from src.action_center import list_actions
 from src.config import Settings
@@ -67,7 +67,11 @@ class LoadedShadowModel:
     model_version = 'synthetic-shadow-v1'
     training_scope = 'synthetic_benchmark_only'
 
+    def __init__(self):
+        self.senders = []
+
     def predict_with_usage(self, subject, body, *, sender='', account_id=None):
+        self.senders.append(sender)
         return Prediction(category='SPAM', outcome='CLASSIFIED', source='local',
                           model_version=self.model_version), 7
 
@@ -200,6 +204,38 @@ class ReanalyzeAuthorityRegressionTests(Phase4Base):
             Settings(local_only=True), Mock(), Mock(), classifier=cloud)
         self.assertEqual((result.source, result.category), ('local', 'SPAM'))
         cloud.assert_not_called()
+
+    def test_local_only_decision_uses_the_sender_like_training_and_the_worker(self):
+        # BUG-03: the checkpoint is trained with the sender in its input
+        # (mailmind_uses_sender) and the worker passes it; re-analysis did not.
+        model = LoadedShadowModel()
+        authoritative_prediction(
+            model, 'Approval needed', self.body, A, Settings(local_only=True),
+            Mock(), Mock(), sender='Sender <sender@example.test>')
+        self.assertEqual(model.senders, ['Sender <sender@example.test>'])
+
+    def test_manual_sandbox_has_no_sender_placeholder_in_model_input(self):
+        model = LoadedShadowModel()
+        manual_prediction(model, 'Subject', 'Body', A, Settings(local_only=True),
+                          Mock(), Mock())
+        self.assertEqual(model.senders, [''])
+
+    def test_reanalyze_records_the_shadow_beside_the_cloud_decision(self):
+        client = Mock()
+        client.models.generate_content.return_value = gemini_response(
+            enriched_output('IMPORTANT'))
+        with patch.object(llm_api, 'get_client', return_value=client), \
+             patch.object(llm_api.vector_db, 'search_similar_emails', return_value=[]):
+            self.assertEqual(
+                self.client.post('/emails/mail-1/reanalyze', json={}).status_code, 200)
+        latest = self.client.get('/emails').json()['emails'][0]['latest_prediction']
+        self.assertEqual((latest['source'], latest['category']), ('gemini', 'IMPORTANT'))
+        self.assertEqual((latest['local']['source'], latest['local']['category']),
+                         ('local', 'SPAM'))
+        with connection(self.settings.db_path) as conn:
+            operations = {row[0] for row in conn.execute(
+                'SELECT operation FROM token_usage_events')}
+        self.assertIn('local_shadow', operations)
 
     def test_reanalyze_keeps_cloud_authority_and_extracts_actions(self):
         client = Mock()

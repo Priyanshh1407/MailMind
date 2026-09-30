@@ -190,7 +190,7 @@ class StartupFallbackTests(unittest.TestCase):
         loading = Mock(load_reason='model_loading')
         loading.predict.return_value = Prediction(outcome='UNAVAILABLE', source='local', reason='model_loading')
         cloud = Mock()
-        with patch('api.app.LOCAL_CALLS.run', side_effect=lambda function, timeout: function()):
+        with patch('src.classification_service.LOCAL_CALLS.run', side_effect=lambda function, timeout: function()):
             result = manual_prediction(loading, 'subject', 'body', ACCOUNT, Settings(local_only=True),
                                        Mock(), Mock(), classifier=cloud)
         self.assertEqual((result.source, result.reason), ('local', 'model_loading'))

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from src.background_jobs import BackgroundJobs
 from src.database import utc_timestamp
 from src.work_queue import enqueue_cycle
-from src.provider_policy import LOCAL_CALLS, SEARCH_CALLS
+from src.provider_policy import SEARCH_CALLS
 from typing import Literal
 from fastapi import FastAPI, Request, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,11 +26,10 @@ from src.db_utils import (get_recent_emails, get_email, log_email_to_db, update_
                           get_ingestion_state, ensure_ingestion_state, count_emails,
                           dashboard_totals, withdraw_human_label, lexical_search_ids,
                           filter_ranked_ids)
-from src.local_llm import (DeferredMailMindModel, MailMindModel,
-                           local_retrieval_expected, predict_with_token_count)
-from src.llm_api import classify_email
+from src.local_llm import DeferredMailMindModel, MailMindModel
+from src.classification_service import (authoritative_prediction, manual_prediction,
+                                        shadow_prediction)
 from src.logging_utils import log_event
-from src.email_text import format_email_text
 from src.privacy import provider_email_text
 from src import vector_db
 from src.prediction import Category, Prediction
@@ -46,8 +45,6 @@ from src.token_usage import (
     TokenRecorder,
     aggregate_token_usage,
     estimate_text_tokens,
-    tokenizer_usage_measurement,
-    unavailable_measurement,
     usage_request_prefix,
 )
 from src.action_center import (
@@ -125,120 +122,6 @@ class IntelligenceBackfillRequest(BaseModel):
 class LegacyDeleteRequest(BaseModel):
     confirmation: Literal['DELETE_UNASSIGNED_DATA']
 
-
-def manual_prediction(model, subject, body, account_id, settings,
-                      collection_provider, validator, classifier=classify_email,
-                      usage_recorder=None,
-                      usage_operation=TokenOperation.MANUAL_PREDICTION.value,
-                      sender='[MANUAL]', source_timestamp=None):
-    """Use cloud temporarily in normal mode while the local API model loads."""
-    if not settings.local_only and getattr(model, 'load_reason', None) == 'model_loading':
-        return ensure_prediction_analysis(classifier(
-            sender, subject, body, account_id=account_id,
-            source_timestamp=source_timestamp,
-            collection_provider=collection_provider, validator=validator,
-            settings=settings, usage_recorder=usage_recorder,
-            usage_operation=usage_operation,
-        ))
-    attempted=Event()
-    local_query=local_retrieval_expected(model)
-    local_query_measurement=estimate_text_tokens(
-        format_email_text(subject,body))
-    try:
-        def run_local():
-            attempted.set()
-            return predict_with_token_count(
-                model, subject, body, account_id=account_id)
-        prediction,input_tokens=LOCAL_CALLS.run(
-            run_local, settings.classification_budget_seconds)
-        prediction=ensure_prediction_analysis(prediction)
-    except WorkCancelled:
-        if attempted.is_set() and usage_recorder is not None:
-            usage_recorder.record(
-                'local-manual', provider='local',
-                model_version=getattr(model, 'model_version', None)
-                or 'local-unavailable',
-                operation=usage_operation,
-                outcome=TokenOutcome.CANCELLED.value,
-                measurement=unavailable_measurement(),
-            )
-            if local_query:
-                usage_recorder.record(
-                    'local-manual-retrieval', provider='embedding',
-                    model_version=EMBEDDING_MODEL_VERSION,
-                    operation=TokenOperation.QUERY_EMBEDDING.value,
-                    outcome=TokenOutcome.CANCELLED.value,
-                    measurement=local_query_measurement,
-                )
-        raise
-    except TimeoutError:
-        if attempted.is_set() and usage_recorder is not None:
-            usage_recorder.record(
-                'local-manual', provider='local',
-                model_version=getattr(model, 'model_version', None)
-                or 'local-unavailable',
-                operation=usage_operation,
-                outcome=TokenOutcome.TIMEOUT.value,
-                measurement=unavailable_measurement(),
-            )
-            if local_query:
-                usage_recorder.record(
-                    'local-manual-retrieval', provider='embedding',
-                    model_version=EMBEDDING_MODEL_VERSION,
-                    operation=TokenOperation.QUERY_EMBEDDING.value,
-                    outcome=TokenOutcome.TIMEOUT.value,
-                    measurement=local_query_measurement,
-                )
-        raise
-    if usage_recorder is not None:
-        usage_recorder.record(
-            'local-manual', provider='local',
-            model_version=prediction.model_version or 'local-unavailable',
-            operation=usage_operation,
-            outcome=(TokenOutcome.SUCCESS.value
-                     if prediction.outcome in ('CLASSIFIED','ABSTAIN')
-                     else TokenOutcome.FAILED.value),
-            measurement=(tokenizer_usage_measurement(input_tokens)
-                         if input_tokens is not None
-                         else unavailable_measurement()),
-        )
-        if local_query:
-            usage_recorder.record(
-                'local-manual-retrieval', provider='embedding',
-                model_version=EMBEDDING_MODEL_VERSION,
-                operation=TokenOperation.QUERY_EMBEDDING.value,
-                outcome=(TokenOutcome.FAILED.value
-                         if prediction.retrieval_status == 'unavailable'
-                         else TokenOutcome.SUCCESS.value),
-                measurement=local_query_measurement,
-            )
-    return prediction
-
-
-def authoritative_prediction(model, subject, body, account_id, settings,
-                             collection_provider, validator, classifier=classify_email,
-                             usage_recorder=None,
-                             usage_operation=TokenOperation.MANUAL_PREDICTION.value,
-                             sender='[MANUAL]', source_timestamp=None):
-    """Decide with the same route the worker trusts for saved mail.
-
-    Normal mode: cloud only. The API's local model is a shadow evaluator and
-    must never replace a saved decision, whether or not it has loaded.
-    Local-only mode: the local model is the authoritative route.
-    """
-    if settings.local_only:
-        return manual_prediction(
-            model, subject, body, account_id, settings, collection_provider,
-            validator, usage_recorder=usage_recorder,
-            usage_operation=usage_operation, sender=sender,
-            source_timestamp=source_timestamp)
-    return ensure_prediction_analysis(classifier(
-        sender, subject, body, account_id=account_id,
-        source_timestamp=source_timestamp,
-        collection_provider=collection_provider, validator=validator,
-        settings=settings, usage_recorder=usage_recorder,
-        usage_operation=usage_operation,
-    ))
 
 def create_app(*, settings=None, model_factory=MailMindModel,
                vector_factory=vector_db.create_vector_collection, search_vector_factory=None,
@@ -767,6 +650,15 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         if result.outcome != 'CLASSIFIED':
             raise HTTPException(
                 409, 'Re-analysis did not produce a reliable classification.')
+        # Like the worker, keep a shadow comparison beside the cloud decision.
+        # The shadow is bounded and cannot fail or change the saved result.
+        shadow=Prediction()
+        if not config.local_only:
+            with application.state.accounts.external(context):
+                shadow=shadow_prediction(
+                    application.state.model,stored['subject'],stored['body'],
+                    context.account_id,sender=stored['sender'],
+                    usage_recorder=recorder)
         action_result=None
         analysis_revision=payload.expected_analysis_updated_at
         with application.state.accounts.guard(context) as conn:
@@ -782,7 +674,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                     409, 'Analysis changed; refresh and try again.')
             log_email_to_db(
                 email_id,stored['sender'],stored['subject'],stored['body'],
-                result,Prediction(),account_id=context.account_id,db_conn=conn,
+                result,shadow,account_id=context.account_id,db_conn=conn,
             )
             try:
                 saved_analysis=save_analysis_result(

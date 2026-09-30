@@ -1,28 +1,21 @@
 """Resume each saved message at its first unfinished step."""
 from contextlib import contextmanager
-from threading import Event
 import time
 from .account_state import WorkCancelled
 from .database import utc_timestamp
 from .prediction import Prediction
-from .provider_policy import provider_failure, retry_delay, TELEGRAM_CALLS, LOCAL_CALLS
+from .provider_policy import provider_failure, retry_delay, TELEGRAM_CALLS
 from .notifier import Delivery
 from .logging_utils import log_event
-from .email_text import format_email_text, preview_text
+from .email_text import preview_text
 from .privacy import provider_email_text
 from .email_analysis import ensure_prediction_analysis, save_analysis_result
 from .action_center import persist_analysis_actions
-from .intelligence_contract import TokenOperation, TokenOutcome
-from .local_llm import local_retrieval_expected, predict_with_token_count
-from .token_usage import (
-    EMBEDDING_MODEL_VERSION,
-    TokenRecorder,
-    estimate_text_tokens,
-    tokenizer_usage_measurement,
-    unavailable_measurement,
-    usage_request_prefix,
-)
+from .intelligence_contract import TokenOperation
+from .local_llm import predict_with_token_count
+from .token_usage import TokenRecorder, usage_request_prefix
 from .work_queue import fence, attempt, task_retry
+from .classification_service import run_local
 
 
 @contextmanager
@@ -32,45 +25,6 @@ def cycle_external(manager, context, token):
     yield
     with manager.guard(context) as conn:
         fence(manager,context,token,conn)
-
-
-def _local_outcome(prediction):
-    if prediction.outcome in ('CLASSIFIED', 'ABSTAIN'):
-        return TokenOutcome.SUCCESS.value
-    if prediction.reason in (
-        'local_inference_timeout', 'local_inference_budget_exhausted'
-    ):
-        return TokenOutcome.TIMEOUT.value
-    return TokenOutcome.FAILED.value
-
-
-def _record_local(recorder, attempt_key, prediction, input_tokens, operation):
-    recorder.record(
-        attempt_key,
-        provider='local',
-        model_version=prediction.model_version or 'local-unavailable',
-        operation=operation,
-        outcome=_local_outcome(prediction),
-        measurement=(tokenizer_usage_measurement(input_tokens)
-                     if input_tokens is not None
-                     else unavailable_measurement()),
-    )
-
-
-def _record_local_retrieval(recorder, attempt_key, prediction,
-                            measurement, outcome=None):
-    recorder.record(
-        attempt_key,
-        provider='embedding',
-        model_version=EMBEDDING_MODEL_VERSION,
-        operation=TokenOperation.QUERY_EMBEDDING.value,
-        outcome=(outcome or (
-            TokenOutcome.FAILED.value
-            if prediction.retrieval_status == 'unavailable'
-            else TokenOutcome.SUCCESS.value
-        )),
-        measurement=measurement,
-    )
 
 
 def process_task(task, manager, context, token, service, model, collection_provider,
@@ -101,67 +55,17 @@ def process_task(task, manager, context, token, service, model, collection_provi
     )
     if stage == 'classify':
         try:
+            guard=lambda:cycle_external(manager,context,token)
             if config.local_only:
-                local_attempted=Event()
-                local_query=local_retrieval_expected(model)
-                local_query_measurement=estimate_text_tokens(
-                    format_email_text(task['subject'],task['body']))
-                try:
-                    with cycle_external(manager,context,token):
-                        def run_local():
-                            local_attempted.set()
-                            return predict_with_token_count(
-                                model, task['subject'], task['body'],
-                                sender=task['sender'],
-                                account_id=context.account_id,
-                            )
-                        decision,input_tokens=LOCAL_CALLS.run(
-                            run_local, config.classification_budget_seconds)
-                    decision=ensure_prediction_analysis(decision)
-                    _record_local(
-                        usage_recorder, 'local-primary', decision, input_tokens,
-                        TokenOperation.CLASSIFICATION_ANALYSIS.value,
-                    )
-                    if local_query:
-                        _record_local_retrieval(
-                            usage_recorder, 'local-primary-retrieval',
-                            decision, local_query_measurement,
-                        )
-                    local=decision
-                except WorkCancelled:
-                    if local_attempted.is_set():
-                        usage_recorder.record(
-                            'local-primary', provider='local',
-                            model_version=getattr(model, 'model_version', None)
-                            or 'local-unavailable',
-                            operation=TokenOperation.CLASSIFICATION_ANALYSIS.value,
-                            outcome=TokenOutcome.CANCELLED.value,
-                            measurement=unavailable_measurement(),
-                        )
-                        if local_query:
-                            _record_local_retrieval(
-                                usage_recorder, 'local-primary-retrieval',
-                                Prediction(), local_query_measurement,
-                                TokenOutcome.CANCELLED.value,
-                            )
-                    raise
-                except TimeoutError:
-                    if local_attempted.is_set():
-                        usage_recorder.record(
-                            'local-primary', provider='local',
-                            model_version=getattr(model, 'model_version', None)
-                            or 'local-unavailable',
-                            operation=TokenOperation.CLASSIFICATION_ANALYSIS.value,
-                            outcome=TokenOutcome.TIMEOUT.value,
-                            measurement=unavailable_measurement(),
-                        )
-                        if local_query:
-                            _record_local_retrieval(
-                                usage_recorder, 'local-primary-retrieval',
-                                Prediction(), local_query_measurement,
-                                TokenOutcome.TIMEOUT.value,
-                            )
-                    raise
+                decision=local=run_local(
+                    lambda:predict_with_token_count(
+                        model, task['subject'], task['body'],
+                        sender=task['sender'], account_id=context.account_id),
+                    model=model,subject=task['subject'],body=task['body'],
+                    timeout=config.classification_budget_seconds,
+                    recorder=usage_recorder,key='local-primary',
+                    operation=TokenOperation.CLASSIFICATION_ANALYSIS.value,
+                    guard=guard)
             else:
                 with cycle_external(manager,context,token):
                     decision=classifier(
@@ -170,69 +74,23 @@ def process_task(task, manager, context, token, service, model, collection_provi
                         collection_provider=collection_provider,
                         validator=validator,settings=config,
                         source_timestamp=task['email_created_at'],
-                        before_request=lambda:cycle_external(manager,context,token),
+                        before_request=guard,
                         usage_recorder=usage_recorder,
                     )
                 decision=ensure_prediction_analysis(decision)
-                shadow_attempted=Event()
-                shadow_query=local_retrieval_expected(model)
-                shadow_query_measurement=estimate_text_tokens(
-                    format_email_text(task['subject'],task['body']))
                 try:
-                    with cycle_external(manager,context,token):
-                        def run_shadow():
-                            shadow_attempted.set()
-                            return shadow(
-                                task['sender'],task['subject'],task['body'],
-                                decision,account_id=context.account_id,model=model)
-                        local,input_tokens=LOCAL_CALLS.run(run_shadow,20)
-                    local=ensure_prediction_analysis(local)
-                    _record_local(
-                        usage_recorder, 'local-shadow', local, input_tokens,
-                        TokenOperation.LOCAL_SHADOW.value,
-                    )
-                    if shadow_query:
-                        _record_local_retrieval(
-                            usage_recorder, 'local-shadow-retrieval',
-                            local, shadow_query_measurement,
-                        )
+                    local=run_local(
+                        lambda:shadow(
+                            task['sender'],task['subject'],task['body'],
+                            decision,account_id=context.account_id,model=model),
+                        model=model,subject=task['subject'],body=task['body'],
+                        timeout=20,recorder=usage_recorder,key='local-shadow',
+                        operation=TokenOperation.LOCAL_SHADOW.value,
+                        guard=guard)
                 except WorkCancelled:
-                    if shadow_attempted.is_set():
-                        usage_recorder.record(
-                            'local-shadow', provider='local',
-                            model_version=getattr(model, 'model_version', None)
-                            or 'local-unavailable',
-                            operation=TokenOperation.LOCAL_SHADOW.value,
-                            outcome=TokenOutcome.CANCELLED.value,
-                            measurement=unavailable_measurement(),
-                        )
-                        if shadow_query:
-                            _record_local_retrieval(
-                                usage_recorder, 'local-shadow-retrieval',
-                                Prediction(), shadow_query_measurement,
-                                TokenOutcome.CANCELLED.value,
-                            )
                     raise
-                except Exception as error:
-                    if shadow_attempted.is_set():
-                        usage_recorder.record(
-                            'local-shadow', provider='local',
-                            model_version=getattr(model, 'model_version', None)
-                            or 'local-unavailable',
-                            operation=TokenOperation.LOCAL_SHADOW.value,
-                            outcome=(TokenOutcome.TIMEOUT.value
-                                     if isinstance(error, TimeoutError)
-                                     else TokenOutcome.FAILED.value),
-                            measurement=unavailable_measurement(),
-                        )
-                        if shadow_query:
-                            _record_local_retrieval(
-                                usage_recorder, 'local-shadow-retrieval',
-                                Prediction(), shadow_query_measurement,
-                                (TokenOutcome.TIMEOUT.value
-                                 if isinstance(error, TimeoutError)
-                                 else TokenOutcome.FAILED.value),
-                            )
+                except Exception:
+                    # The shadow is evaluation only; it can never fail the task.
                     local=ensure_prediction_analysis(Prediction(
                         outcome='ERROR',reason='shadow_inference_failed'))
             with manager.guard(context) as conn:

@@ -38,6 +38,16 @@ class TokenMeasurement:
     metadata: dict | None = None
 
 
+def failure_outcome(error):
+    """Map an interrupted model call to the token-event outcome it represents."""
+    from .account_state import WorkCancelled
+    if isinstance(error, WorkCancelled):
+        return TokenOutcome.CANCELLED.value
+    if isinstance(error, TimeoutError):
+        return TokenOutcome.TIMEOUT.value
+    return TokenOutcome.FAILED.value
+
+
 def unavailable_measurement():
     return TokenMeasurement()
 

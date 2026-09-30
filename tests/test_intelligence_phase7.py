@@ -302,8 +302,12 @@ class Phase7ApiTests(Phase7Base):
         self.assertEqual(repeated.status_code, 429)
         self.assertEqual(call.call_count, 1)
         with connection(self.settings.db_path) as conn:
+            # The prediction is mocked, so no re-analysis token event exists;
+            # the 429 must come from the mutation limit. (The shadow model's
+            # run is metered separately as a local_shadow event.)
             self.assertEqual(conn.execute(
-                "SELECT COUNT(*) FROM token_usage_events").fetchone()[0], 0)
+                """SELECT COUNT(*) FROM token_usage_events
+                   WHERE operation='action_reanalysis'""").fetchone()[0], 0)
             self.assertEqual(conn.execute(
                 """SELECT COUNT(*) FROM intelligence_mutation_limits
                    WHERE scope='reanalysis'""").fetchone()[0], 1)
