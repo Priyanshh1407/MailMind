@@ -1,0 +1,200 @@
+"""Audit #1 regressions (2026-09-30): each test reproduces a confirmed defect.
+
+A test marked expectedFailure documents a bug that is still open. The phase
+that fixes the bug removes the decorator, so the same test proves the fix.
+Only synthetic mail and mocked providers are used.
+"""
+import json
+import unittest
+from unittest.mock import Mock, patch
+
+from fastapi.testclient import TestClient
+
+from api.app import create_app
+from src import llm_api
+from src.action_center import list_actions
+from src.config import Settings
+from src.database import connection
+from src.db_utils import log_email_to_db
+from src.notifier import Delivery
+from src.pipeline import process_task
+from src.prediction import Prediction
+from src.work_queue import claim_cycle, finish_cycle, newest_due_tasks
+from tests.test_intelligence_phase4 import (
+    A, ORIGIN, SOURCE_TIME, EmptyCollection, Phase4Base,
+)
+
+
+class ProviderError(Exception):
+    def __init__(self, status_code):
+        super().__init__(f'synthetic provider status {status_code}')
+        self.status_code = status_code
+
+
+def gemini_response(payload):
+    response = Mock()
+    response.text = payload if isinstance(payload, str) else json.dumps(payload)
+    response.usage_metadata = None
+    return response
+
+
+def enriched_output(category, actions=()):
+    return {
+        'category': category,
+        'explanation': {'summary': 'The sender makes a direct request.',
+                        'signals': []},
+        'actions': list(actions),
+    }
+
+
+def action_output(action_type, evidence):
+    return {
+        'type': action_type, 'title': 'Handle the request',
+        'description': 'Complete the request in the email.',
+        'due_at': None, 'due_precision': 'unknown',
+        'evidence': evidence, 'confidence': 'high',
+    }
+
+
+class LoadedShadowModel:
+    """A ready local shadow model that disagrees with the cloud decision."""
+    model_loaded = True
+    load_reason = 'ready'
+    model_version = 'synthetic-shadow-v1'
+    training_scope = 'synthetic_benchmark_only'
+
+    def predict_with_usage(self, subject, body, *, sender='', account_id=None):
+        return Prediction(category='SPAM', outcome='CLASSIFIED', source='local',
+                          model_version=self.model_version), 7
+
+
+class ProviderFailoverRegressionTests(unittest.TestCase):
+    """LLM-01: a broken primary route must not end the failover chain."""
+
+    def setUp(self):
+        self.settings = Settings(gemini_models=('audit-primary', 'audit-fallback'))
+        llm_api._model_cooldowns.clear()
+        self.addCleanup(llm_api._model_cooldowns.clear)
+
+    def classify(self, primary_failure):
+        called = []
+
+        def generate_content(model, contents, config):
+            called.append(model)
+            if model == 'audit-primary':
+                return primary_failure()
+            return gemini_response(enriched_output('UPDATES'))
+
+        client = Mock()
+        client.models.generate_content.side_effect = generate_content
+        with patch.object(llm_api, 'get_client', return_value=client), \
+             patch.object(llm_api.vector_db, 'search_similar_emails', return_value=[]), \
+             patch.dict(llm_api.os.environ, {'GROQ_API_KEY': ''}, clear=False):
+            result = llm_api.classify_email(
+                'sender@example.test', 'Weekly digest', 'Your weekly summary.',
+                settings=self.settings)
+        return result, called
+
+    @unittest.expectedFailure
+    def test_retired_primary_model_fails_over_to_next_gemini_model(self):
+        def not_found():
+            raise ProviderError(404)
+        result, called = self.classify(not_found)
+        self.assertEqual(called, ['audit-primary', 'audit-fallback'])
+        self.assertEqual((result.outcome, result.category, result.model_version),
+                         ('CLASSIFIED', 'UPDATES', 'audit-fallback'))
+
+    @unittest.expectedFailure
+    def test_invalid_primary_output_fails_over_to_next_gemini_model(self):
+        result, called = self.classify(lambda: gemini_response('not json'))
+        self.assertEqual(called, ['audit-primary', 'audit-fallback'])
+        self.assertEqual((result.outcome, result.category), ('CLASSIFIED', 'UPDATES'))
+
+
+class ReanalyzeAuthorityRegressionTests(Phase4Base):
+    """BUG-01: Re-analyze must use the authoritative cloud route in normal mode."""
+
+    def setUp(self):
+        super().setUp()
+        self.app = create_app(
+            settings=self.settings,
+            model_factory=Mock(return_value=LoadedShadowModel()),
+            vector_factory=Mock(return_value=EmptyCollection()))
+        self.client = TestClient(self.app, base_url='http://localhost')
+        self.client.__enter__()
+        self.addCleanup(self.client.__exit__, None, None, None)
+        self.client.headers['Origin'] = ORIGIN
+        self.client.headers['X-CSRF-Token'] = self.client.post('/session').json()['csrf_token']
+        context, _ = self.app.state.accounts.session(
+            self.client.cookies.get('mailmind_session'))
+        self.app.state.accounts.finish_auth(
+            self.app.state.accounts.begin_auth(context), (A, '{}'))
+        self.client.headers['X-CSRF-Token'] = self.client.get('/session').json()['csrf_token']
+        self.body = 'Please approve the launch checklist. Reply before the deadline.'
+        with connection(self.settings.db_path) as conn:
+            log_email_to_db(
+                'mail-1', 'Sender <sender@example.test>', 'Approval needed', self.body,
+                Prediction(category='IMPORTANT', outcome='CLASSIFIED', source='gemini',
+                           model_version='synthetic-gemini'),
+                Prediction(category='SPAM', outcome='CLASSIFIED', source='local'),
+                account_id=A, db_conn=conn)
+
+    @unittest.expectedFailure
+    def test_reanalyze_keeps_cloud_authority_and_extracts_actions(self):
+        client = Mock()
+        client.models.generate_content.return_value = gemini_response(enriched_output(
+            'IMPORTANT',
+            [action_output('approval_required', 'approve the launch checklist')]))
+        with patch.object(llm_api, 'get_client', return_value=client), \
+             patch.object(llm_api.vector_db, 'search_similar_emails', return_value=[]):
+            response = self.client.post('/emails/mail-1/reanalyze', json={})
+        self.assertEqual(response.status_code, 200)
+        email = self.client.get('/emails').json()['emails'][0]
+        self.assertEqual(email['latest_prediction']['source'], 'gemini')
+        self.assertEqual(email['effective_category'], 'IMPORTANT')
+        self.assertEqual(response.json()['actions']['created_count'], 1)
+
+
+class RedactedEvidenceRegressionTests(Phase4Base):
+    """BUG-02: actions grounded in the redacted provider text must persist."""
+
+    def setUp(self):
+        super().setUp()
+        self.seed_email(subject='Invoice due',
+                        body='Please pay Rs 5,000 for the venue by Friday.')
+        self.manager, _token = self.connected_manager()
+        self.context = self.manager.worker_context()
+        with connection(self.settings.db_path) as conn:
+            conn.execute(
+                """INSERT INTO processing_tasks(
+                   account_id,email_id,status,stage,created_at,updated_at)
+                   VALUES (?,?,'queued','classify',?,?)""",
+                (A, 'mail-1', SOURCE_TIME, SOURCE_TIME))
+
+    @unittest.expectedFailure
+    def test_payment_action_quoting_a_redacted_amount_is_persisted(self):
+        client = Mock()
+        client.models.generate_content.return_value = gemini_response(enriched_output(
+            'IMPORTANT',
+            [action_output('payment_required', 'pay [AMOUNT] for the venue')]))
+        shadow = Mock(return_value=(Prediction(
+            category='IMPORTANT', outcome='CLASSIFIED', source='local',
+            model_version='synthetic-local'), 5))
+        token, job = claim_cycle(self.manager, self.context)
+        self.addCleanup(finish_cycle, self.manager, self.context, token, job)
+        task = newest_due_tasks(self.manager, self.context, token, 1)[0]
+        with patch.object(llm_api, 'get_client', return_value=client), \
+             patch.object(llm_api.vector_db, 'search_similar_emails', return_value=[]):
+            completed = process_task(
+                task, self.manager, self.context, token, Mock(), Mock(), Mock(),
+                classifier=llm_api.classify_email, shadow=shadow,
+                notifier=Mock(return_value=Delivery('sent', message_id='1')),
+                marker=Mock(), logger=log_email_to_db, validator=Mock(), job_id=job)
+        self.assertTrue(completed)
+        actions = list_actions(A, db_path=self.settings.db_path)
+        self.assertEqual([action['action_type'] for action in actions],
+                         ['payment_required'])
+
+
+if __name__ == '__main__':
+    unittest.main()
