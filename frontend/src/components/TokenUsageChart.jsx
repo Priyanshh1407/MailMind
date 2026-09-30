@@ -1,5 +1,5 @@
 import {
-  Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip,
+  Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip,
   XAxis, YAxis,
 } from 'recharts';
 import { formatCount } from '../dashboard';
@@ -14,25 +14,16 @@ export function TokenUsageChart({ daily }) {
   return <div className='token-chart-block'>
     <div className='token-chart' role='img' aria-label='Daily input and output token trend'>
       <ResponsiveContainer width='100%' height={280}>
-        <AreaChart data={data} accessibilityLayer margin={{ top: 12, right: 8, left: 0, bottom: 4 }}>
-          <defs>
-            <linearGradient id='inputTokenFill' x1='0' y1='0' x2='0' y2='1'>
-              <stop offset='5%' stopColor='#8b5cf6' stopOpacity={0.42} />
-              <stop offset='95%' stopColor='#8b5cf6' stopOpacity={0.04} />
-            </linearGradient>
-            <linearGradient id='outputTokenFill' x1='0' y1='0' x2='0' y2='1'>
-              <stop offset='5%' stopColor='#47bfff' stopOpacity={0.4} />
-              <stop offset='95%' stopColor='#47bfff' stopOpacity={0.04} />
-            </linearGradient>
-          </defs>
+        {/* Bars read correctly for one day or many; an area chart of one day is two dots. */}
+        <BarChart data={data} accessibilityLayer barGap={4} margin={{ top: 12, right: 8, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray='3 3' stroke='#354156' vertical={false} />
           <XAxis dataKey='label' stroke='#919bad' tickLine={false} axisLine={false} />
           <YAxis stroke='#919bad' tickLine={false} axisLine={false} width={48} />
-          <Tooltip contentStyle={{ background: '#111722', border: '1px solid #354156', borderRadius: 10 }} formatter={value => formatCount(value)} />
-          <Legend />
-          <Area type='monotone' dataKey='input_tokens' name='Input tokens' stroke='#8b5cf6' fill='url(#inputTokenFill)' strokeWidth={2} />
-          <Area type='monotone' dataKey='output_tokens' name='Output tokens' stroke='#47bfff' fill='url(#outputTokenFill)' strokeWidth={2} />
-        </AreaChart>
+          <Tooltip cursor={{ fill: 'rgba(139, 92, 246, 0.08)' }} contentStyle={{ background: '#111722', border: '1px solid #354156', borderRadius: 10 }} formatter={value => formatCount(value)} />
+          <Legend iconType='circle' wrapperStyle={{ paddingTop: 8 }} />
+          <Bar dataKey='input_tokens' name='Input tokens' fill='#8b5cf6' radius={[6, 6, 0, 0]} maxBarSize={44} />
+          <Bar dataKey='output_tokens' name='Output tokens' fill='#47bfff' radius={[6, 6, 0, 0]} maxBarSize={44} />
+        </BarChart>
       </ResponsiveContainer>
     </div>
     <details className='chart-table'>

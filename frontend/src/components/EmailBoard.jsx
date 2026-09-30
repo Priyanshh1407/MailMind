@@ -1,5 +1,4 @@
 import { CATEGORIES, categoryName, effectiveCategory } from '../dashboard';
-import { ClassificationExplanation } from './ClassificationExplanation';
 import { EmailCard } from './EmailCard';
 
 const LANE_STYLES = {
@@ -20,10 +19,7 @@ export function EmailBoard({ page, pending, disabled, mutate, api, generation })
         <span>{rows.length} on this page</span>
       </div>
       <div className='lane-cards'>
-        {rows.map(email => <div className='email-card-stack' key={generation + ':' + email.id}>
-          <EmailCard email={email} style={style} pending={Boolean(pending[email.id])} disabled={disabled} mutate={mutate} api={api} generation={generation} />
-          <ClassificationExplanation analysis={email.analysis} />
-        </div>)}
+        {rows.map(email => <EmailCard key={generation + ':' + email.id} email={email} style={style} pending={Boolean(pending[email.id])} disabled={disabled} mutate={mutate} api={api} generation={generation} />)}
         {!rows.length && <p className='lane-empty'>{style.empty}</p>}
       </div>
     </section>;

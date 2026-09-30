@@ -1,7 +1,6 @@
 import { Check, ExternalLink, RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { actionTypeLabel, sourceLabel } from '../intelligence';
-import { formatTime } from '../dashboard';
+import { actionTypeLabel, formatDeadline, sourceLabel } from '../intelligence';
 
 function defaultSnoozeTime() {
   const date = new Date(Date.now() + 86400000);
@@ -44,14 +43,14 @@ export function ActionCard({ action, busy, disabled, mutate, openSource }) {
       </div>
       <span className={'action-status status-' + action.status}>{action.status}</span>
     </div>
-    <p>{action.description}</p>
-    <blockquote>{action.evidence}</blockquote>
+    {action.description && <p className='action-description'>{action.description}</p>}
+    <blockquote className='action-evidence' aria-label='Evidence from the email'>{action.evidence}</blockquote>
     <dl className='action-metadata'>
-      <div><dt>Deadline</dt><dd>{action.due_at ? formatTime(action.due_at) : 'No deadline detected'}</dd></div>
-      <div><dt>Confidence</dt><dd>{action.confidence}</dd></div>
+      <div><dt>Deadline</dt><dd>{formatDeadline(action.due_at, action.due_precision)}</dd></div>
+      <div><dt>Confidence</dt><dd className='capitalize'>{action.confidence}</dd></div>
       <div><dt>Source</dt><dd>{sourceLabel(action.extraction_source)}</dd></div>
     </dl>
-    {action.status === 'snoozed' && <p className='action-snoozed'>Snoozed until {formatTime(action.snoozed_until)}</p>}
+    {action.status === 'snoozed' && <p className='action-snoozed'>Snoozed until {formatDeadline(action.snoozed_until, 'exact_time')}</p>}
     <div className='action-controls'>
       {['open', 'snoozed'].includes(action.status) && <>
         <button className='button primary compact' disabled={busy || disabled} onClick={() => changeStatus('completed')}><Check size={14} />Complete</button>

@@ -69,6 +69,22 @@ export function operationLabel(value) {
   ).join(' ');
 }
 
+export function countLabel(value, noun) {
+  return Number(value).toLocaleString() + ' ' + noun + (Number(value) === 1 ? '' : 's');
+}
+
+// A date-only deadline is stored at the local reminder hour; show only the day
+// the email named, never that internal time.
+export function formatDeadline(value, precision, { locale, timeZone } = {}) {
+  const date = new Date(value);
+  if (!value || !Number.isFinite(date.getTime())) return 'No deadline detected';
+  const day = { weekday: 'short', day: 'numeric', month: 'short', timeZone };
+  if (precision === 'date_only') return date.toLocaleDateString(locale, day).replace(',', '');
+  const dayText = date.toLocaleDateString(locale, day).replace(',', '');
+  const timeText = date.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', timeZone });
+  return dayText + ', ' + timeText;
+}
+
 export function hasEstimatedUsage(summary) {
   return summary.count_methods.some(
     item => ['estimated', 'unavailable'].includes(item.key)

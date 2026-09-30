@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BarChart3, Cloud, Cpu, Info, MoveDown, MoveUp } from 'lucide-react';
 import { formatCount } from '../dashboard';
-import { hasEstimatedUsage, operationLabel, sourceLabel } from '../intelligence';
+import { countLabel, hasEstimatedUsage, operationLabel, sourceLabel } from '../intelligence';
 import { Surface, SectionTitle } from './ui/Surface';
 
 // Recharts is the largest dependency and only this tab uses it: load it on demand.
@@ -21,7 +21,7 @@ function UsageMetric({ icon: Icon, label, value }) {
 function Breakdown({ title, rows, label }) {
   return <section className='usage-breakdown'>
     <h3>{title}</h3>
-    {rows.length ? <ul>{rows.map(row => <li key={row.key}><span>{label(row.key)}</span><strong>{formatCount(row.total_tokens)}</strong><small>{formatCount(row.event_count)} events</small></li>)}</ul> : <p>No token events in this window.</p>}
+    {rows.length ? <ul>{rows.map(row => <li key={row.key}><span>{label(row.key)}</span><strong>{formatCount(row.total_tokens)}</strong><small>{countLabel(row.event_count, 'event')}</small></li>)}</ul> : <p>No token events in this window.</p>}
   </section>;
 }
 

@@ -117,9 +117,10 @@ test('Phase 6 tabs, KPIs, action lifecycle and source navigation work together',
 });
 test('Phase 6 explanations keep model rationale separate from correction controls',async({page})=>{
   await setup(page);
-  const explanation=page.locator('.email-card-stack').first().getByText('Why this category?');
-  await explanation.click();
-  const panel=page.locator('.classification-explanation').first();
+  const card=page.getByRole('article',{name:'Synthetic email 0',exact:true});
+  await card.getByText('Why this category?').click();
+  const panel=card.locator('.classification-explanation');
+  await expect(panel.getByRole('button')).toHaveCount(0);
   await expect(panel).toContainText('The message contains a direct request with a deadline.');
   await expect(panel).toContainText('Direct Request');
   await expect(panel).toContainText('Source: Local model - synthetic-local-v1');

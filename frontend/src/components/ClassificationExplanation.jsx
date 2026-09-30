@@ -6,11 +6,11 @@ export function ClassificationExplanation({ analysis }) {
   return <details className='classification-explanation'>
     <summary><Sparkles size={14} aria-hidden='true' />Why this category?<ChevronDown size={14} aria-hidden='true' /></summary>
     <div className='explanation-content'>
-      <p>{analysis.explanation_summary}</p>
+      <p className='explanation-summary'>{analysis.explanation_summary}</p>
       {analysis.signals.length > 0 && <ul className='signal-list' aria-label='Classification signals'>
         {analysis.signals.map(item => <li key={item.signal}>
-          <span>{signalLabel(item.signal)}</span>
-          {item.evidence && <small>{item.evidence}</small>}
+          <span className='signal-chip'>{signalLabel(item.signal)}</span>
+          {item.evidence && <q className='signal-evidence'>{item.evidence}</q>}
         </li>)}
       </ul>}
       <p className='explanation-source'>

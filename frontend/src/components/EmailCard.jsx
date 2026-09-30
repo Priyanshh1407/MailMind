@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, CircleAlert, Clock3, History, Tag, Undo2 } from 'lucide-react';
 import { CATEGORIES, categoryName, formatTime, formatEmailTime, senderName } from '../dashboard';
+import { ClassificationExplanation } from './ClassificationExplanation';
 
 export function EmailCard({ email, style, pending, disabled, mutate, api, generation }) {
   const [editing, setEditing] = useState(false);
@@ -80,6 +81,8 @@ export function EmailCard({ email, style, pending, disabled, mutate, api, genera
       {email.notification.status === 'unknown' && <button className="button secondary compact" disabled={blocked} onClick={() => recover('confirmed_sent')}>Confirm alert arrived</button>}
     </div>}
     {['retry', 'dead'].includes(email.processing?.status) && email.processing.stage !== 'notify' && <div className="recovery-actions"><button className="button secondary compact" disabled={blocked} onClick={() => recover('task')}>Retry unfinished step</button></div>}
+    {/* The model's reason for the category, kept apart from the correction controls. */}
+    <ClassificationExplanation analysis={email.analysis} />
     <details className="technical-details">
       <summary>Classification details <ChevronDown size={13} /></summary>
       <div className="technical-content">
