@@ -336,4 +336,6 @@ Live evaluation also found that the previously configured fallback model (`gemin
 
 ## License and data note
 
-The tracked synthetic priority benchmark is CC0 as documented with its fixture provenance. No repository-wide software license is currently declared. Add one before external distribution, and review model, dataset, Gmail, Gemini, Groq, Telegram, and dependency terms independently.
+Copyright © 2026 Priyansh Waghela. All rights reserved. The source is published for viewing and evaluation; no license to use, copy, modify, or distribute it is granted.
+
+The synthetic priority benchmark in `fixtures/priority_benchmark/` is CC0, as documented in its provenance file. Model, dataset, Gmail, Gemini, Groq, Telegram, and dependency terms apply independently.
