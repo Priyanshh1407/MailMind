@@ -9,6 +9,7 @@ from .provider_policy import provider_failure, retry_delay, TELEGRAM_CALLS, LOCA
 from .notifier import Delivery
 from .logging_utils import log_event
 from .email_text import format_email_text, preview_text
+from .privacy import provider_email_text
 from .email_analysis import ensure_prediction_analysis, save_analysis_result
 from .action_center import persist_analysis_actions
 from .intelligence_contract import TokenOperation, TokenOutcome
@@ -260,7 +261,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
                         persist_analysis_actions(
                             context.account_id,identity,decision.analysis,
                             source_created_at=task['email_created_at'],
-                            source_text=format_email_text(
+                            source_text=provider_email_text(
                                 task['subject'],task['body']),
                             timezone_name=config.default_timezone,
                             reminders_enabled=(

@@ -31,6 +31,7 @@ from src.local_llm import (DeferredMailMindModel, MailMindModel,
 from src.llm_api import classify_email
 from src.logging_utils import log_event
 from src.email_text import format_email_text
+from src.privacy import provider_email_text
 from src import vector_db
 from src.prediction import Category, Prediction
 from src.email_analysis import ensure_prediction_analysis, save_analysis_result
@@ -800,7 +801,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 action_result=persist_analysis_actions(
                     context.account_id,email_id,result.analysis,
                     source_created_at=stored['created_at'],
-                    source_text=format_email_text(
+                    source_text=provider_email_text(
                         stored['subject'],stored['body']),
                     timezone_name=config.default_timezone,
                     reminders_enabled=config.action_reminders_enabled,

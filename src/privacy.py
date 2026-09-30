@@ -16,3 +16,15 @@ def redact(text):
 def external_email(sender,subject,body):
     # Display names are arbitrary identifiers; omit the sender entirely.
     return {'sender':'[SENDER]', 'subject':redact(subject),'body':redact(body)}
+
+
+def provider_email_text(subject,body):
+    """The exact email text a cloud provider sees.
+
+    Provider evidence quotes this minimized text (for example '[AMOUNT]'), so
+    anything that grounds provider output must check against it, not the
+    original email.
+    """
+    from .email_text import format_email_text
+    minimized=external_email('',subject,body)
+    return format_email_text(minimized['subject'],minimized['body'])

@@ -4,6 +4,7 @@ A test marked expectedFailure documents a bug that is still open. The phase
 that fixes the bug removes the decorator, so the same test proves the fix.
 Only synthetic mail and mocked providers are used.
 """
+from contextlib import nullcontext
 import json
 import unittest
 from unittest.mock import Mock, patch
@@ -19,7 +20,10 @@ from src.db_utils import log_email_to_db
 from src.notifier import Delivery
 from src.pipeline import process_task
 from src.prediction import Prediction
-from src.work_queue import claim_cycle, finish_cycle, newest_due_tasks
+from src.privacy import provider_email_text
+from src.work_queue import (
+    claim_cycle, finish_cycle, newest_due_tasks, reconcile_email_analysis,
+)
 from tests.test_intelligence_phase4 import (
     A, ORIGIN, SOURCE_TIME, EmptyCollection, Phase4Base,
 )
@@ -228,29 +232,58 @@ class RedactedEvidenceRegressionTests(Phase4Base):
                    VALUES (?,?,'queued','classify',?,?)""",
                 (A, 'mail-1', SOURCE_TIME, SOURCE_TIME))
 
-    @unittest.expectedFailure
-    def test_payment_action_quoting_a_redacted_amount_is_persisted(self):
+    def run_worker_task(self, evidence, *, persist_failure=None):
         client = Mock()
         client.models.generate_content.return_value = gemini_response(enriched_output(
-            'IMPORTANT',
-            [action_output('payment_required', 'pay [AMOUNT] for the venue')]))
+            'IMPORTANT', [action_output('payment_required', evidence)]))
         shadow = Mock(return_value=(Prediction(
             category='IMPORTANT', outcome='CLASSIFIED', source='local',
             model_version='synthetic-local'), 5))
         token, job = claim_cycle(self.manager, self.context)
         self.addCleanup(finish_cycle, self.manager, self.context, token, job)
         task = newest_due_tasks(self.manager, self.context, token, 1)[0]
+        failure = (patch('src.pipeline.persist_analysis_actions', side_effect=persist_failure)
+                   if persist_failure else nullcontext())
         with patch.object(llm_api, 'get_client', return_value=client), \
-             patch.object(llm_api.vector_db, 'search_similar_emails', return_value=[]):
+             patch.object(llm_api.vector_db, 'search_similar_emails', return_value=[]), \
+             failure:
             completed = process_task(
                 task, self.manager, self.context, token, Mock(), Mock(), Mock(),
                 classifier=llm_api.classify_email, shadow=shadow,
                 notifier=Mock(return_value=Delivery('sent', message_id='1')),
                 marker=Mock(), logger=log_email_to_db, validator=Mock(), job_id=job)
         self.assertTrue(completed)
-        actions = list_actions(A, db_path=self.settings.db_path)
-        self.assertEqual([action['action_type'] for action in actions],
-                         ['payment_required'])
+        return token
+
+    def action_types(self):
+        return [action['action_type']
+                for action in list_actions(A, db_path=self.settings.db_path)]
+
+    def test_payment_action_quoting_a_redacted_amount_is_persisted(self):
+        self.run_worker_task('pay [AMOUNT] for the venue')
+        self.assertEqual(self.action_types(), ['payment_required'])
+
+    def test_deferred_action_retry_uses_the_same_provider_text(self):
+        token = self.run_worker_task(
+            'pay [AMOUNT] for the venue',
+            persist_failure=RuntimeError('synthetic derived failure'))
+        self.assertEqual(self.action_types(), [])
+        self.assertEqual(reconcile_email_analysis(
+            self.manager, self.context, token, limit=5), 1)
+        self.assertEqual(self.action_types(), ['payment_required'])
+
+    def test_evidence_absent_from_the_email_is_still_rejected(self):
+        self.run_worker_task('pay [AMOUNT] for the catering')
+        self.assertEqual(self.action_types(), [])
+
+    def test_provider_payload_and_grounding_share_one_text(self):
+        payload, _ = llm_api.build_classification_payload(
+            'Sender <sender@example.test>', 'Invoice due',
+            'Please pay Rs 5,000 via https://pay.example.test by Friday.', [])
+        self.assertEqual(json.loads(payload)['email']['text'],
+                         provider_email_text(
+                             'Invoice due',
+                             'Please pay Rs 5,000 via https://pay.example.test by Friday.'))
 
 
 if __name__ == '__main__':

@@ -164,7 +164,7 @@ def _model_succeeded(version):
 
 def build_classification_payload(sender, subject, body, examples, *, source_timestamp=None):
     """Build one bounded data envelope; retrieved text never becomes instructions."""
-    from .privacy import external_email, redact
+    from .privacy import external_email, provider_email_text, redact
     minimized = external_email(sender, subject, body)
     safe, seen = [], set()
     for item in examples if isinstance(examples, list) else []:
@@ -183,7 +183,7 @@ def build_classification_payload(sender, subject, body, examples, *, source_time
     if len(safe) < MAX_PRECEDENTS:
         safe = []
     email = {'sender': minimized['sender'],
-             'text': format_email_text(minimized['subject'], minimized['body'])}
+             'text': provider_email_text(subject, body)}
     if source_timestamp is not None:
         received_at = normalize_text(source_timestamp, limit=65)
         try:

@@ -6,7 +6,7 @@ import time
 from .database import utc_timestamp
 from .email_analysis import save_analysis_result
 from .action_center import expire_snoozed_actions, persist_analysis_actions
-from .email_text import format_email_text
+from .privacy import provider_email_text
 from .logging_utils import log_event
 from .prediction import EmailAnalysis
 from .account_state import WorkCancelled
@@ -170,7 +170,7 @@ def reconcile_email_analysis(manager, context, token, limit=20):
                         persist_analysis_actions(
                             context.account_id,row['email_id'],analysis,
                             source_created_at=row['created_at'],
-                            source_text=format_email_text(
+                            source_text=provider_email_text(
                                 row['subject'],row['body']),
                             timezone_name=manager.settings.default_timezone,
                             reminders_enabled=(
