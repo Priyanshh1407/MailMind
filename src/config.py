@@ -74,14 +74,14 @@ class Settings:
             if type(getattr(self, name)) is not bool:
                 raise ValueError(f'{name} must be a boolean')
         if self.action_reminders_enabled and not self.action_extraction_enabled:
-            raise ValueError('Action reminders require action extraction')
+            raise ValueError('Action reminders require action extraction: set MAILMIND_ACTION_EXTRACTION_ENABLED=true, or MAILMIND_ACTION_REMINDERS_ENABLED=false')
         if (self.telegram_action_reminders_enabled
                 and not self.action_reminders_enabled):
-            raise ValueError('Telegram action reminders require reminders')
+            raise ValueError('Telegram action reminders require reminders: set MAILMIND_ACTION_REMINDERS_ENABLED=true, or MAILMIND_TELEGRAM_ACTION_REMINDERS_ENABLED=false')
         if self.telegram_action_reminders_enabled and self.local_only:
-            raise ValueError('Telegram action reminders are unavailable in local-only mode')
+            raise ValueError('Telegram action reminders are unavailable in local-only mode: set MAILMIND_TELEGRAM_ACTION_REMINDERS_ENABLED=false for local-only runs, or MAILMIND_LOCAL_ONLY=false')
         if self.token_analytics_visible and not self.token_collection_enabled:
-            raise ValueError('Token analytics visibility requires token collection')
+            raise ValueError('Token analytics visibility requires token collection: set MAILMIND_TOKEN_COLLECTION_ENABLED=true, or MAILMIND_TOKEN_ANALYTICS_VISIBLE=false')
         if self.default_timezone != DEFAULT_TIMEZONE:
             raise ValueError(f'Unsupported default timezone: {self.default_timezone}')
         if self.week_start != WEEK_START:

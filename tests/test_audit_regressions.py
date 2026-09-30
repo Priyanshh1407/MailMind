@@ -551,6 +551,31 @@ class NonNumericRetryTimeTests(Phase4Base):
         self.assertEqual([task['email_id'] for task in due], ['mail-1'])
 
 
+class ConfigurationMessageTests(unittest.TestCase):
+    """CFG-01: local-only startup failed with 'Telegram action reminders are
+    unavailable in local-only mode' but did not say which setting to change."""
+
+    def assert_message_names(self, settings, *settings_to_change):
+        with self.assertRaises(ValueError) as caught:
+            Settings(**settings)
+        for name in settings_to_change:
+            self.assertIn(name, str(caught.exception))
+
+    def test_local_only_conflict_names_the_setting_to_turn_off(self):
+        self.assert_message_names(
+            dict(local_only=True, action_extraction_enabled=True, action_reminders_enabled=True,
+                 telegram_action_reminders_enabled=True),
+            'MAILMIND_TELEGRAM_ACTION_REMINDERS_ENABLED=false', 'MAILMIND_LOCAL_ONLY=false')
+
+    def test_feature_dependencies_name_their_settings(self):
+        self.assert_message_names(dict(action_reminders_enabled=True),
+                                  'MAILMIND_ACTION_EXTRACTION_ENABLED=true')
+        self.assert_message_names(dict(action_extraction_enabled=True, telegram_action_reminders_enabled=True),
+                                  'MAILMIND_ACTION_REMINDERS_ENABLED=true')
+        self.assert_message_names(dict(token_collection_enabled=False, token_analytics_visible=True),
+                                  'MAILMIND_TOKEN_COLLECTION_ENABLED=true')
+
+
 class AccountDeletionErrorTests(Phase4Base):
     """ERR-02: found by the Git Bash guide's sandbox run. A vector-store failure
     after the purge transition was reported as 'There is no account to delete.'"""
