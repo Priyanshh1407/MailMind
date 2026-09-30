@@ -6,6 +6,7 @@ import os
 import re
 from threading import Event, Lock
 from time import monotonic, perf_counter
+from zoneinfo import ZoneInfo
 from contextlib import nullcontext
 from .config import Settings
 from .account_state import WorkCancelled
@@ -26,6 +27,7 @@ from .intelligence_contract import (
     ActionType,
     AnalysisSource,
     ConfidenceBand,
+    DEFAULT_TIMEZONE,
     DuePrecision,
     ExplanationSignal,
     MAX_ACTIONS_PER_EMAIL,
@@ -321,11 +323,16 @@ def _parse_signals(value, source_text):
 def _parse_due_at(value, precision):
     precision = DuePrecision(precision).value
     if value is None:
-        if precision != DuePrecision.UNKNOWN.value:
-            raise ValueError('Known deadline precision requires due_at')
-        return None, precision
+        # A deadline the model noticed but did not resolve: keep the task and
+        # record honestly that its time is unknown instead of discarding it.
+        return None, DuePrecision.UNKNOWN.value
     if not isinstance(value, str) or len(value) > 64:
         raise ValueError('Invalid action deadline')
+    if precision == DuePrecision.DATE_ONLY.value and re.fullmatch(r'\d{4}-\d{2}-\d{2}', value):
+        # A calendar date has no time zone; it means that day where the user
+        # is. Anchor it to local midnight in the configured zone.
+        day = datetime.fromisoformat(value).replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
+        return day.isoformat(), precision
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError('Action deadline requires an explicit offset')

@@ -5,15 +5,18 @@ that fixes the bug removes the decorator, so the same test proves the fix.
 Only synthetic mail and mocked providers are used.
 """
 from contextlib import nullcontext
+from datetime import datetime
 import json
 import unittest
+from zoneinfo import ZoneInfo
 from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
 from api.app import authoritative_prediction, create_app, manual_prediction
 from src import llm_api
-from src.action_center import list_actions
+from src.action_center import list_actions, persist_analysis_actions
+from src.prediction import EmailAnalysis
 from src.config import Settings
 from src.database import connection
 from src.db_utils import log_email_to_db
@@ -320,6 +323,52 @@ class RedactedEvidenceRegressionTests(Phase4Base):
                          provider_email_text(
                              'Invoice due',
                              'Please pay Rs 5,000 via https://pay.example.test by Friday.'))
+
+
+class DeadlineContractTests(Phase4Base):
+    """LLM-04: found by the live evaluation. 35 of 60 Gemini actions and 34 of 63
+    Groq actions were discarded over valid deadline shapes the prompt never forbade."""
+
+    def parse(self, due_at, due_precision):
+        action = {**action_output('payment_required', 'pay [AMOUNT] for the venue'),
+                  'due_at': due_at, 'due_precision': due_precision}
+        _category, analysis = llm_api.parse_provider_analysis(
+            json.dumps(enriched_output('IMPORTANT', [action])), source='gemini',
+            model_version='synthetic', source_text='Please pay [AMOUNT] for the venue by Friday.')
+        return analysis.actions
+
+    def test_date_only_deadline_may_be_a_plain_calendar_date(self):
+        actions = self.parse('2026-10-02', 'date_only')
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0].due_precision, 'date_only')
+        self.assertEqual(actions[0].due_at, '2026-10-02T00:00:00+05:30')
+
+    def test_date_only_deadline_is_stored_on_that_local_calendar_day(self):
+        self.seed_email(subject='Invoice due', body='Please pay Rs 5,000 for the venue by Friday.')
+        with connection(self.settings.db_path) as conn:
+            result = persist_analysis_actions(
+                A, 'mail-1', EmailAnalysis(
+                    predicted_category='IMPORTANT', explanation_summary='Payment request.',
+                    signals=(), source='gemini', model_version='synthetic',
+                    actions=self.parse('2026-10-02', 'date_only')),
+                source_created_at=SOURCE_TIME,
+                source_text=provider_email_text('Invoice due',
+                                                'Please pay Rs 5,000 for the venue by Friday.'),
+                db_conn=conn)
+        self.assertEqual(result['created_count'], 1)
+        due = list_actions(A, db_path=self.settings.db_path)[0]['due_at']
+        local = datetime.fromisoformat(due.replace('Z', '+00:00')).astimezone(
+            ZoneInfo('Asia/Kolkata'))
+        self.assertEqual((local.date().isoformat(), local.hour), ('2026-10-02', 9))
+
+    def test_unresolved_deadline_keeps_the_task_without_inventing_a_date(self):
+        actions = self.parse(None, 'relative')
+        self.assertEqual([(action.due_at, action.due_precision) for action in actions],
+                         [(None, 'unknown')])
+
+    def test_a_time_without_an_offset_is_still_rejected(self):
+        self.assertEqual(self.parse('2026-10-02T17:00:00', 'exact_time'), ())
+        self.assertEqual(self.parse('2026-10-02', 'exact_time'), ())
 
 
 class LocalOnlyDefaultModelTests(unittest.TestCase):
