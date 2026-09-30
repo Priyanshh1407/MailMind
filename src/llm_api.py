@@ -200,6 +200,37 @@ def build_classification_payload(sender, subject, body, examples, *, source_time
                'precedents': safe}
     return json.dumps(payload, ensure_ascii=False), len(safe)
 
+GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+
+def _supports_thinking_level(model):
+    """Gemini 3+ accepts thinking_level; 2.5 rejects it with HTTP 400."""
+    match = re.fullmatch(r'gemini-(\d+)(?:\.\d+)?-.+', model or '')
+    return bool(match) and int(match.group(1)) >= 3
+
+
+def gemini_request_config(model=None):
+    """The exact Gemini request config; shared with the evaluation harness.
+
+    Low thinking keeps a short classification fast on models that support it.
+    """
+    config = {'system_instruction': SYSTEM_INSTRUCTION, 'response_mime_type': 'application/json',
+              'response_json_schema': OUTPUT_SCHEMA, 'max_output_tokens': 2048}
+    if _supports_thinking_level(model):
+        config['thinking_config'] = {'thinking_level': 'low'}
+    return config
+
+
+def groq_request_body(model, contents):
+    """The exact Groq request body; shared with the evaluation harness."""
+    return {'model': model,
+            'messages': [{'role': 'system', 'content': SYSTEM_INSTRUCTION},
+                         {'role': 'user', 'content': contents}],
+            'response_format': {'type': 'json_schema', 'json_schema': {
+                'name': 'mailmind_classification', 'strict': True, 'schema': OUTPUT_SCHEMA}},
+            'temperature': 0, 'max_completion_tokens': 2048}
+
+
 def create_cloud_client(api_key=None):
     if Settings.from_environment().local_only: raise ValueError('Cloud clients disabled in local-only mode')
     key = api_key or os.getenv('GEMINI_API_KEY')
@@ -445,9 +476,6 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
     except Exception as error:
         log_event('cloud_client_unavailable', error=error)
         return result(outcome='UNAVAILABLE', reason='cloud_not_configured_or_unavailable')
-    config = {'system_instruction': SYSTEM_INSTRUCTION, 'response_mime_type': 'application/json',
-              'response_json_schema': OUTPUT_SCHEMA,
-              'max_output_tokens': 2048}
     # At most one request to each provider/model. No SDK retry loop or sleep.
     # A failed route never ends the chain by itself: a retired model (404), a
     # rejected parameter (400) or a malformed answer on one route says nothing
@@ -471,7 +499,7 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
         attempted, captured = Event(), []
         try:
             timeout=budget.timeout(settings.provider_timeout_seconds)
-            request_config=config
+            request_config=gemini_request_config(version)
             def generate(version=version, request_config=request_config):
                 with guard():
                     attempted.set()
@@ -529,12 +557,9 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
         def generate_groq():
             with guard():
                 attempted.set()
-                response=requests.post('https://api.groq.com/openai/v1/chat/completions',
+                response=requests.post(GROQ_URL,
                     headers={'Authorization':f'Bearer {key}'},timeout=(timeout/2,timeout/2),
-                    json={'model':version,'messages':[{'role':'system','content':SYSTEM_INSTRUCTION},
-                                                     {'role':'user','content':contents}],
-                          'response_format':{'type':'json_schema','json_schema':{'name':'mailmind_classification','strict':True,'schema':OUTPUT_SCHEMA}},'temperature':0,
-                          'max_completion_tokens':2048})
+                    json=groq_request_body(version,contents))
                 response.raise_for_status()
                 payload=response.json()
                 captured.append(payload)

@@ -215,7 +215,18 @@ class ClassificationTests(unittest.TestCase):
         config=client.models.generate_content.call_args.kwargs['config']
         self.assertIs(config['response_json_schema'],llm_api.OUTPUT_SCHEMA)
         self.assertEqual(config['max_output_tokens'],2048)
-        self.assertNotIn('thinking_config',config)
+        self.assertEqual(config['thinking_config'],{'thinking_level':'low'})
+
+    def test_thinking_level_is_sent_only_to_models_that_support_it(self):
+        # Gemini 3+ accepts thinking_level; gemini-2.5-flash rejects it with
+        # 400 "Thinking level is not supported for this model." (live, 2026-09-30).
+        for model in ('gemini-3.8-flash','gemini-3.5-flash-lite','gemini-10.0-pro'):
+            with self.subTest(model=model):
+                self.assertEqual(llm_api.gemini_request_config(model)['thinking_config'],
+                                 {'thinking_level':'low'})
+        for model in ('gemini-2.5-flash','gemini-1.5-flash','gemini-flash-latest','custom-model'):
+            with self.subTest(model=model):
+                self.assertNotIn('thinking_config',llm_api.gemini_request_config(model))
 
     def test_output_schema_satisfies_strict_structured_output_rules(self):
         # Groq strict json_schema mode rejects any object that does not list
