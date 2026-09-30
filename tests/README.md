@@ -59,7 +59,7 @@ Set-Location ..
 Current verified result:
 
 - 42 Node unit tests passed;
-- 24 Playwright browser scenarios passed;
+- 27 Playwright browser scenarios passed;
 - lint passed;
 - production build passed.
 

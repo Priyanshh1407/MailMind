@@ -38,4 +38,19 @@ Measured on 2026-09-30 on the developer's Windows x64 workstation (CPU only). Th
 | Before | 632.9 kB | 188.9 kB | — |
 | After | 264.2 kB | 82.7 kB | 369.8 kB (loaded on first Usage visit) |
 
-Initial JavaScript is 58% smaller before gzip and 56% smaller after gzip. The build no longer warns. The Playwright browser suite, including the Usage-tab chart test, passes 24/24.
+Initial JavaScript is 58% smaller before gzip and 56% smaller after gzip. The build no longer warns. The Playwright browser suite, including the Usage-tab chart test, passed 24/24 at the time.
+
+### Animations (Framer Motion)
+
+Adding Framer Motion with ordinary imports put 409 kB (130 kB gzip) in the initial chunk. That was too much for the effect, so:
+
+- components use the small `m` elements inside `<LazyMotion>`, and the `domMax` feature set loads as its own chunk after first paint (`src/motionFeatures.js`);
+- the number count-up uses a `requestAnimationFrame` loop instead of the animation engine.
+
+| Build | Initial JS | Initial JS (gzip) | Deferred chunks |
+| --- | ---: | ---: | ---: |
+| Before animations | 264.2 kB | 82.7 kB | chart 369.8 kB |
+| Framer Motion, direct imports | 408.9 kB | 129.6 kB | chart 372.9 kB |
+| Framer Motion, `LazyMotion` (shipped) | 315.5 kB | 100.4 kB | chart 372.9 kB, motion 85.6 kB |
+
+The Playwright browser suite passes 27/27, including tests that the animations settle on exact values and that reduced motion shows final values at once.

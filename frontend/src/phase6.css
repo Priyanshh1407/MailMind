@@ -78,7 +78,6 @@ html {
   white-space: nowrap;
 }
 
-.dashboard-tabs button[aria-selected='true'],
 .filter-chip.active {
   border-color: var(--line-strong);
   background: var(--surface-subtle);
@@ -92,6 +91,34 @@ html {
 .classification-explanation summary:focus-visible {
   outline: 3px solid var(--update);
   outline-offset: 2px;
+}
+
+/* The selected tab's pill is a single shared element that slides between
+   tabs (Framer Motion layoutId); labels sit above it. */
+.dashboard-tabs button {
+  position: relative;
+}
+
+.dashboard-tabs button[aria-selected='true'] {
+  color: var(--ink);
+}
+
+.tab-indicator {
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+}
+
+.tab-label {
+  position: relative;
+}
+
+/* Motion wrappers around cards: stretch like the card they hold. */
+.motion-item {
+  display: grid;
+  min-width: 0;
 }
 
 [role='tabpanel'] {
@@ -319,8 +346,13 @@ html {
   list-style: none;
 }
 
-.classification-explanation summary svg:last-child {
+.explanation-chevron {
+  display: inline-flex;
   margin-left: auto;
+}
+
+.explanation-reveal {
+  overflow: hidden;
 }
 
 .explanation-content {
@@ -514,6 +546,7 @@ html {
 
 .breakdown-bar {
   display: block;
+  transform-origin: left center;
   height: 100%;
   border-radius: 0 4px 4px 0;
   background: var(--primary);

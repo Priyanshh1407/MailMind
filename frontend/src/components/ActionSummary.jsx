@@ -1,11 +1,11 @@
 import { CircleDot, ClockAlert, Coins, TriangleAlert } from 'lucide-react';
-import { formatCount } from '../dashboard';
+import { AnimatedCount } from './ui/AnimatedCount';
 
 function SummaryItem({ icon: Icon, label, value, state }) {
   return <div className='intelligence-kpi'>
     <Icon size={16} aria-hidden='true' />
     <span>{label}</span>
-    <strong>{state === 'ready' ? formatCount(value) : '-'}</strong>
+    <strong>{state === 'ready' ? <AnimatedCount value={value} /> : '-'}</strong>
   </div>;
 }
 

@@ -176,6 +176,7 @@ The dashboard provides:
 - Action Center filters by status and by action type (only the types the account actually has, with counts)
 - Day, week, and month token charts that separate provider-billed from locally processed usage, with ranked per-provider and per-operation breakdowns
 - An explicit, observable saved-mail intelligence backfill control
+- Framer Motion animations: sliding tab pill, card entrances, lane-to-lane moves on relabel, count-up numbers, growing share bars (all switched off by the system reduced-motion setting)
 - Responsive keyboard-accessible layouts and reduced-motion behavior
 
 See [User guide](docs/USER_GUIDE.md) and [Frontend guide](frontend/README.md).
@@ -265,8 +266,8 @@ Latest local verification (30 September 2026):
 
 - Backend discovery: 526 tests passed, and each of the 25 test modules also passes when run alone (no test-order dependence).
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
-- Frontend unit suite: 48 passed. Playwright browser suite: 25 passed.
-- Frontend lint and production build passed; initial JavaScript is 264 kB (83 kB gzip).
+- Frontend unit suite: 48 passed. Playwright browser suite: 27 passed.
+- Frontend lint and production build passed; initial JavaScript is 315 kB (100 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
 

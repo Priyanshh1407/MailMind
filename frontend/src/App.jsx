@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { m } from 'motion/react';
 import { createApi } from './api';
 import { useDashboard } from './hooks/useDashboard';
 import { ActionCenter } from './components/ActionCenter';
@@ -14,6 +15,7 @@ import { IngestionStatus } from './components/IngestionStatus';
 import { Pagination } from './components/Pagination';
 import { SearchFilters } from './components/SearchFilters';
 import { TokenUsagePanel } from './components/TokenUsagePanel';
+import { EASE_OUT, spring } from './motion';
 
 const api = createApi('http://' + window.location.hostname + ':8000');
 const INITIAL_QUERY = {
@@ -21,6 +23,19 @@ const INITIAL_QUERY = {
   actionOffset: 0, actionStatus: 'open', actionFilter: 'open', actionType: '',
   actionDueFrom: '', actionDueTo: '', tokenWindow: 'day',
 };
+// Panels stay mounted (hidden) so state survives a tab switch; the content
+// fades up each time its panel becomes the visible one.
+const PANEL_MOTION = {
+  hidden: { opacity: 0, y: 8 },
+  shown: { opacity: 1, y: 0, transition: { duration: 0.28, ease: EASE_OUT } },
+};
+
+function TabPanel({ id, active, children }) {
+  return <m.section id={'panel-' + id} role='tabpanel' aria-labelledby={'tab-' + id} hidden={!active} initial={false} variants={PANEL_MOTION} animate={active ? 'shown' : 'hidden'}>
+    {children}
+  </m.section>;
+}
+
 const TABS = [
   { key: 'inbox', label: 'Inbox' },
   { key: 'actions', label: 'Action Center' },
@@ -93,9 +108,12 @@ function App() {
       {connected && <>
         <ActionSummary snapshot={snapshot} />
         <div className='dashboard-tabs' role='tablist' aria-label='Dashboard sections' onKeyDown={tabKeys}>
-          {TABS.map((tab, index) => <button key={tab.key} ref={node => { tabRefs.current[index] = node; }} id={'tab-' + tab.key} role='tab' aria-selected={activeTab === tab.key} aria-controls={'panel-' + tab.key} tabIndex={activeTab === tab.key ? 0 : -1} onClick={() => selectTab(tab.key)}>{tab.label}</button>)}
+          {TABS.map((tab, index) => <button key={tab.key} ref={node => { tabRefs.current[index] = node; }} id={'tab-' + tab.key} role='tab' aria-selected={activeTab === tab.key} aria-controls={'panel-' + tab.key} tabIndex={activeTab === tab.key ? 0 : -1} onClick={() => selectTab(tab.key)}>
+            {activeTab === tab.key && <m.span layoutId='active-tab' className='tab-indicator' transition={spring} aria-hidden='true' />}
+            <span className='tab-label'>{tab.label}</span>
+          </button>)}
         </div>
-        <section id='panel-inbox' role='tabpanel' aria-labelledby='tab-inbox' hidden={activeTab !== 'inbox'}>
+        <TabPanel id='inbox' active={activeTab === 'inbox'}>
           <DashboardStats snapshot={snapshot} />
           <div className='work-grid'><InboxProgress snapshot={snapshot} /><InboxIntake snapshot={snapshot} loading={loading} disabled={disabled} pending={pending} mutate={mutate} /></div>
           <IngestionStatus snapshot={snapshot} disabled={disabled} pending={pending} mutate={mutate} />
@@ -106,13 +124,13 @@ function App() {
             {!page.emails.length && <p className='empty-state'>{page.total === 0 ? query.emailId ? 'The source email is not available for this connected account.' : query.search || query.category ? 'No emails match these filters. Clear them or try a different search.' : 'No saved emails yet. Sync new messages or wait for live monitoring.' : 'This page is now empty. Go to the previous page.'}</p>}
             <EmailBoard page={page} pending={pending} disabled={disabled} mutate={mutate} api={api} generation={snapshot.session.generation} />
           </div>}
-        </section>
-        <section id='panel-actions' role='tabpanel' aria-labelledby='tab-actions' hidden={activeTab !== 'actions'}>
+        </TabPanel>
+        <TabPanel id='actions' active={activeTab === 'actions'}>
           <ActionCenter snapshot={snapshot} query={query} setQuery={setQuery} loading={loading} disabled={disabled} pending={pending} mutate={mutate} openSource={openSource} />
-        </section>
-        <section id='panel-usage' role='tabpanel' aria-labelledby='tab-usage' hidden={activeTab !== 'usage'}>
+        </TabPanel>
+        <TabPanel id='usage' active={activeTab === 'usage'}>
           {usageOpened && <TokenUsagePanel snapshot={snapshot} setQuery={setQuery} />}
-        </section>
+        </TabPanel>
       </>}
       <AppFooter autoMarkRead={snapshot?.status.auto_mark_read} />
     </main>

@@ -1,7 +1,9 @@
 import { ClipboardCheck } from 'lucide-react';
+import { AnimatePresence, m } from 'motion/react';
 import { ACTION_FILTERS, actionFilterQuery, actionTypeLabel } from '../intelligence';
 import { ActionCard } from './ActionCard';
 import { Surface, SectionTitle } from './ui/Surface';
+import { enterTransition, fadeUp, spring } from '../motion';
 
 export function ActionCenter({
   snapshot, query, setQuery, loading, disabled, pending, mutate, openSource,
@@ -52,7 +54,12 @@ export function ActionCenter({
     {section.pageState === 'disabled' && <p className='empty-state'>Action extraction is disabled in this installation.</p>}
     {section.pageState === 'unavailable' && <p className='empty-state'>Connect Google before MailMind can show account actions.</p>}
     {section.pageState === 'ready' && <div className='action-list' aria-busy={loading}>
-      {actions.map(action => <ActionCard key={action.action_id} action={action} busy={Boolean(pending['action:' + action.action_id])} disabled={disabled} mutate={mutate} openSource={openSource} />)}
+      {/* Completed, snoozed or dismissed items leave the view; the rest close the gap. */}
+      <AnimatePresence mode='popLayout' initial={true}>
+        {actions.map((action, index) => <m.div key={action.action_id} layout className='motion-item' initial={fadeUp.initial} animate={fadeUp.animate} exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }} transition={{ ...enterTransition(index), layout: spring }}>
+          <ActionCard action={action} busy={Boolean(pending['action:' + action.action_id])} disabled={disabled} mutate={mutate} openSource={openSource} />
+        </m.div>)}
+      </AnimatePresence>
       {!actions.length && <p className='empty-state'>{shownEmptyMessage}</p>}
     </div>}
     {section.pageState === 'ready' && actions.length > 0 && <nav className='action-pagination' aria-label='Action pages'>

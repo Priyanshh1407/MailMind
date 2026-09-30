@@ -266,6 +266,24 @@ test('narrow screen has no horizontal overflow even with long email text',async(
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'../docs/phase6-mobile.png',fullPage:false});
 });
+test('animations settle on exact values: counters, share bars, tab pill and panel',async({page})=>{
+  await setup(page);
+  await page.getByRole('tab',{name:'Usage'}).click();
+  const panel=page.locator('#panel-usage');
+  await expect(panel).toHaveCSS('opacity','1');
+  await expect(page.locator('.usage-metric').filter({hasText:'Cloud billed'}).locator('strong')).toHaveText('130');
+  await expect(page.locator('.usage-metric').filter({hasText:'Input'}).locator('strong')).toHaveText('120');
+  const bar=page.locator('.breakdown-bar').first();
+  await expect(bar).toHaveCSS('transform','none');
+  await expect(page.getByRole('tab',{name:'Usage'}).locator('.tab-indicator')).toHaveCount(1);
+  await expect(page.locator('.tab-indicator')).toHaveCount(1);
+});
+test('reduced motion shows final numbers and bars immediately',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await setup(page);
+  await page.getByRole('tab',{name:'Usage'}).click();
+  await expect(page.locator('.usage-metric').filter({hasText:'Cloud billed'}).locator('strong')).toHaveText('130',{timeout:500});
+  await expect(page.locator('.breakdown-bar').first()).toHaveCSS('transform','none',{timeout:500});
+});
 test('reduced motion disables hover movement and transitions',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'});await setup(page);const card=page.getByRole('article',{name:'Synthetic email 0',exact:true});await card.hover();await expect(card).toHaveCSS('transform','none');await expect(card).toHaveCSS('transition-duration','0s');
 });

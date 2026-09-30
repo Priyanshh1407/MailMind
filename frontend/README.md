@@ -17,8 +17,31 @@ The current interface follows a dark, compact dashboard design with:
 - single-line email action controls where space permits;
 - system-health and account popovers;
 - dismissible success/error feedback;
-- mobile overflow protection; and
+- mobile overflow protection;
+- Framer Motion animations; and
 - reduced-motion behavior.
+
+## Motion
+
+Animations use [Framer Motion](https://motion.dev) (the `motion` package). They are there to show what changed, not to decorate:
+
+| Where | What moves | Why |
+| --- | --- | --- |
+| Section tabs | The selected-tab pill slides to the new tab; the panel fades up | Shows which section you moved to |
+| Email lanes | Cards fade up in a short stagger; a relabelled email glides to its new lane | Makes a correction visibly land where it went |
+| Action Center | Items fade in; completed, snoozed or dismissed items shrink out and the rest close the gap | Confirms the item left this view |
+| KPI and usage numbers | Values count from the previous number to the new one | Draws the eye to a number that changed |
+| Usage share bars | Bars grow from the baseline, largest first | Reads the ranking in order |
+| "Why this category?" | The panel grows open and the chevron turns | Keeps the card from jumping |
+| Notifications | Toasts slide in and out | Separates new feedback from the page |
+
+Rules the code keeps:
+
+- Only opacity, transform and height animate, and every animation settles within about 0.6 s on the exact final value.
+- Motion sits on wrapper elements, so the cards keep their own CSS hover effects.
+- `<MotionConfig reducedMotion='user'>` turns movement off when the operating system asks for reduced motion. Numbers then show their final value at once, and the CSS reduced-motion rules still apply.
+- `<LazyMotion>` loads the animation engine as a separate chunk after first paint, and the count-up uses a plain `requestAnimationFrame` loop. First-load JavaScript therefore grows by only about 18 kB gzip.
+- Shared timings live in `src/motion.js`.
 
 ## Data flow
 
@@ -65,6 +88,7 @@ section-local, while a session/account mismatch cancels the complete snapshot.
 | <code>ActionCenter</code> | Status filters, a type filter built from the account's type counts, lifecycle controls, snoozing, and source navigation |
 | <code>ClassificationExplanation</code> | Rendered inside each email card: validated rationale, signals with quoted evidence, source, and model |
 | <code>TokenUsagePanel</code> | Daily bar chart (Recharts, loaded on first visit), cloud/local split, and ranked provider/operation share bars |
+| <code>ui/AnimatedCount</code> | Counts a number from its previous value to the new one; shows the final value at once under reduced motion |
 
 ## Search behavior
 
@@ -123,7 +147,7 @@ npx playwright install chromium
 npm run test:browser
 ~~~
 
-The browser suite uses synthetic in-browser API fixtures. It exercises account menus, category lanes, search, pagination, feedback, error handling, sync/backlog controls, history, responsive overflow, reduced motion, account transitions, provider display, and local-only behavior.
+The browser suite uses synthetic in-browser API fixtures. It exercises account menus, category lanes, search, pagination, feedback, error handling, sync/backlog controls, history, responsive overflow, animations settling on exact values, reduced motion, account transitions, provider display, and local-only behavior.
 
 It does not sign in to Google, read real mail, call live cloud providers, or send Telegram messages.
 

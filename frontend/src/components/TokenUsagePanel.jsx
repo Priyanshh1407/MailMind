@@ -1,8 +1,11 @@
 import { lazy, Suspense } from 'react';
+import { m } from 'motion/react';
 import { BarChart3, Cloud, Cpu, Info, MoveDown, MoveUp } from 'lucide-react';
 import { formatCount } from '../dashboard';
 import { countLabel, hasEstimatedUsage, operationLabel, sourceLabel } from '../intelligence';
 import { Surface, SectionTitle } from './ui/Surface';
+import { AnimatedCount } from './ui/AnimatedCount';
+import { EASE_OUT, staggerDelay } from '../motion';
 
 // Recharts is the largest dependency and only this tab uses it: load it on demand.
 const TokenUsageChart = lazy(() => import('./TokenUsageChart')
@@ -15,7 +18,7 @@ const WINDOWS = [
 ];
 
 function UsageMetric({ icon: Icon, label, value }) {
-  return <div className='usage-metric'><Icon size={16} aria-hidden='true' /><span>{label}</span><strong>{formatCount(value)}</strong></div>;
+  return <div className='usage-metric'><Icon size={16} aria-hidden='true' /><span>{label}</span><strong><AnimatedCount value={value} /></strong></div>;
 }
 
 // Ranked share bars: one series, so one hue; values stay in text colours.
@@ -25,7 +28,7 @@ function Breakdown({ title, rows, label }) {
   const largest = ranked[0]?.total_tokens || 0;
   return <section className='usage-breakdown'>
     <h3>{title}</h3>
-    {ranked.length ? <ul>{ranked.map(row => {
+    {ranked.length ? <ul>{ranked.map((row, index) => {
       // Events whose tokens were never counted are not "0 tokens".
       const unmeasured = row.total_tokens === 0 && row.unknown_events > 0;
       const share = total ? row.total_tokens / total : 0;
@@ -37,7 +40,8 @@ function Breakdown({ title, rows, label }) {
           <strong className={unmeasured ? 'breakdown-value unmeasured' : 'breakdown-value'}>{unmeasured ? 'Not measured' : formatCount(row.total_tokens)}</strong>
         </div>
         <div className='breakdown-track' aria-hidden='true'>
-          <span className='breakdown-bar' style={{ width: largest && !unmeasured ? Math.max(2, row.total_tokens / largest * 100) + '%' : '0%' }} />
+          {/* Bars grow from the baseline, largest first, so the ranking reads in order. */}
+          <m.span className='breakdown-bar' initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.6, ease: EASE_OUT, delay: 0.1 + staggerDelay(index, 0.06) }} style={{ width: largest && !unmeasured ? Math.max(2, row.total_tokens / largest * 100) + '%' : '0%' }} />
         </div>
         <small>{detail}</small>
       </li>;

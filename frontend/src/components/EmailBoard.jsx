@@ -1,5 +1,7 @@
 import { CATEGORIES, categoryName, effectiveCategory } from '../dashboard';
+import { LayoutGroup, m } from 'motion/react';
 import { EmailCard } from './EmailCard';
+import { enterTransition, fadeUp, spring } from '../motion';
 
 const LANE_STYLES = {
   IMPORTANT: { className: 'lane-important', badge: 'important', dot: 'important', label: 'Important', empty: 'No important mail on this page.' },
@@ -9,7 +11,7 @@ const LANE_STYLES = {
 };
 
 export function EmailBoard({ page, pending, disabled, mutate, api, generation }) {
-  return <div id='emails' className='board'>{CATEGORIES.map(category => {
+  return <LayoutGroup><div id='emails' className='board'>{CATEGORIES.map(category => {
     const rows = page.emails.filter(email => effectiveCategory(email) === category);
     const style = LANE_STYLES[category];
     const title = category === 'NEEDS_REVIEW' && rows.some(email => email.processing_state === 'pending') ? 'Processing / Needs Review' : style.label;
@@ -19,9 +21,13 @@ export function EmailBoard({ page, pending, disabled, mutate, api, generation })
         <span>{rows.length} on this page</span>
       </div>
       <div className='lane-cards'>
-        {rows.map(email => <EmailCard key={generation + ':' + email.id} email={email} style={style} pending={Boolean(pending[email.id])} disabled={disabled} mutate={mutate} api={api} generation={generation} />)}
+        {/* The wrapper owns the motion so the card keeps its own CSS hover lift.
+            A shared layoutId lets a relabelled email glide to its new lane. */}
+        {rows.map((email, index) => <m.div key={generation + ':' + email.id} layoutId={'email-' + generation + ':' + email.id} layout='position' className='motion-item' initial={fadeUp.initial} animate={fadeUp.animate} transition={{ ...enterTransition(index), layout: spring }}>
+          <EmailCard email={email} style={style} pending={Boolean(pending[email.id])} disabled={disabled} mutate={mutate} api={api} generation={generation} />
+        </m.div>)}
         {!rows.length && <p className='lane-empty'>{style.empty}</p>}
       </div>
     </section>;
-  })}</div>;
+  })}</div></LayoutGroup>;
 }
