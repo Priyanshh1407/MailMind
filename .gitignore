@@ -42,6 +42,8 @@ token.*.json
 *.sqlite
 *.sqlite-*
 *.sqlite3
+# Git bundles and repository backups can contain full private history.
+*.bundle
 *.parquet
 *.feather
 *.pickle
