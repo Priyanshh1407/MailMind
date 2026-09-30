@@ -11,7 +11,7 @@ import time
 from src.config import Settings
 from src.email_text import MODEL_MAX_TOKENS, format_model_text
 from src.evaluation import classification_metrics
-from src.inbox_training import prepare_user_approved_splits
+from src.inbox_training import human_labelled_subset, prepare_user_approved_splits
 from src.prediction import ID2LABEL, LABEL2ID
 
 
@@ -204,9 +204,13 @@ def run(args):
     confidence, margin, calibrated_validation = select_thresholds(truth_validation, validation_probabilities)
     test_probabilities = probability_rows(final_model, encoded["test"], args.batch_size)
     raw_test = classification_metrics(truth_test, categories(test_probabilities))
-    calibrated_test = classification_metrics(
-        truth_test, categories(test_probabilities, confidence, margin)
-    )
+    calibrated_predictions = categories(test_probabilities, confidence, margin)
+    calibrated_test = classification_metrics(truth_test, calibrated_predictions)
+    human_truth, human_predicted = human_labelled_subset(
+        splits["test"], calibrated_predictions)
+    human_test = ({"rows": len(human_truth),
+                   **classification_metrics(human_truth, human_predicted)}
+                  if human_truth else {"rows": 0})
     elapsed = time.perf_counter() - started
 
     version = "inbox-approved-v2-" + dataset["dataset_hash"][:10] + "-" + str(selected_seed)
@@ -247,10 +251,16 @@ def run(args):
         },
         "test_raw":raw_test,
         "test_calibrated":calibrated_test,
+        "test_metric_meaning":(
+            "Agreement with approved labels. Rows without human feedback carry the "
+            "cloud classifier's own decision, so test_raw/test_calibrated measure "
+            "agreement with that classifier, not accuracy. See dataset.label_provenance."),
+        "test_human_labelled_subset":human_test,
         "training_seconds":elapsed,
         "limitations":[
             "Private single-mailbox data; not validated for other users.",
-            "Most labels are owner-approved prior predictions, not individual corrections.",
+            "Most labels are owner-approved cloud predictions, not individual corrections; "
+            "local-model predictions are excluded from labels.",
             "Small held-out class counts make metrics uncertain.",
             "New data changes weights only after explicit retraining and evaluation.",
         ],

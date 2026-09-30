@@ -26,22 +26,50 @@ def _template_group(sender, subject):
     return _identity("template:" + domain + "|" + template)
 
 
+LABEL_POLICY = "explicit_human_feedback_else_non_local_approved_prediction"
+
+
+def _label_source(stored_row):
+    """Who produced this label: a person, a cloud model, or an unrecorded origin."""
+    if stored_row["human_label"] is not None:
+        return "human"
+    source = stored_row["prediction_source"]
+    if source is None:
+        return "unrecorded"
+    return "local" if source == "local" else "cloud"
+
+
 def load_user_approved_rows(db_path):
-    """Prefer explicit feedback, then use predictions approved by the mailbox owner."""
+    """Prefer explicit feedback, then use approved predictions from other models.
+
+    email_logs.prediction keeps the first successful decision. In local-only
+    mode that decision is the local model's own output, so it is excluded:
+    training on it would teach the model its own mistakes.
+    """
     with connection(db_path) as conn:
         stored = conn.execute(
-            """SELECT sender,subject,body,COALESCE(human_label,prediction) AS approved_label
-               FROM email_logs
+            """SELECT sender,subject,body,human_label,
+                      COALESCE(human_label,prediction) AS approved_label,
+                      (SELECT p.source FROM prediction_attempts p
+                       WHERE p.account_id=e.account_id AND p.email_id=e.email_id
+                         AND p.category IS NOT NULL
+                       ORDER BY p.attempt_id LIMIT 1) AS prediction_source
+               FROM email_logs e
                WHERE COALESCE(human_label,prediction) IS NOT NULL
                ORDER BY account_id,email_id"""
         ).fetchall()
 
     grouped = defaultdict(list)
+    excluded_local = 0
     for stored_row in stored:
         subject = normalize_subject(stored_row["subject"])
         body = normalize_text(stored_row["body"])
         label = stored_row["approved_label"]
         if label not in LABEL2ID or not (subject or body):
+            continue
+        label_source = _label_source(stored_row)
+        if label_source == "local":
+            excluded_local += 1
             continue
         sender = normalize_text(stored_row["sender"], limit=1000)
         text = format_model_text(sender, subject, body)
@@ -50,6 +78,7 @@ def load_user_approved_rows(db_path):
             "subject": subject,
             "body": body,
             "human_label": label,
+            "label_source": label_source,
         })
 
     rows = []
@@ -80,9 +109,23 @@ def load_user_approved_rows(db_path):
             "group_hash": row["group_id"],
             "label": row["human_label"],
         } for row in rows]),
-        "label_policy": "explicit_human_feedback_else_user_approved_prediction",
+        "label_policy": LABEL_POLICY,
+        "label_provenance": dict(sorted(Counter(
+            row["label_source"] for row in rows).items())),
+        "excluded_local_self_labels": excluded_local,
     }
     return rows, summary
+
+
+def human_labelled_subset(rows, predicted):
+    """Truth/prediction pairs for rows a person labelled.
+
+    Other rows mostly carry the cloud classifier's own labels, so metrics over
+    them measure agreement with that classifier, not accuracy.
+    """
+    pairs = [(row["human_label"], value) for row, value in zip(rows, predicted, strict=True)
+             if row["label_source"] == "human"]
+    return [truth for truth, _ in pairs], [value for _, value in pairs]
 
 
 def prepare_user_approved_splits(db_path, seed=42):
