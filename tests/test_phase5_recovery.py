@@ -608,12 +608,15 @@ class ProviderAndReadinessTests(unittest.TestCase):
             self.assertEqual(notifier.send_telegram_alert('s','s','s').status,'blocked')
         post.assert_not_called()
 
-    def test_permanent_cloud_error_does_not_failover(self):
+    def test_rejected_gemini_key_is_not_retried_on_other_gemini_models(self):
+        # All Gemini models share one credential. Groq failover is covered in
+        # tests.test_audit_regressions; here no Groq key is configured.
         client=Mock()
         error=RuntimeError('synthetic private text')
         error.code=401
         client.models.generate_content.side_effect=error
-        with patch.object(llm_api,'get_client',return_value=client):
+        with patch.object(llm_api,'get_client',return_value=client), \
+             patch.dict(os.environ,{'GROQ_API_KEY':''},clear=False):
             result=llm_api.classify_email('s','s','b')
         self.assertEqual(result.reason,'provider_auth')
         self.assertEqual(client.models.generate_content.call_count,1)

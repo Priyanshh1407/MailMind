@@ -76,39 +76,89 @@ class ProviderFailoverRegressionTests(unittest.TestCase):
         llm_api._model_cooldowns.clear()
         self.addCleanup(llm_api._model_cooldowns.clear)
 
-    def classify(self, primary_failure):
+    def classify(self, primary_failure, fallback=None, groq=None):
+        """Run the real chain; each route is a callable that returns or raises."""
         called = []
+        routes = {
+            'audit-primary': primary_failure,
+            'audit-fallback': fallback or (
+                lambda: gemini_response(enriched_output('UPDATES'))),
+        }
 
         def generate_content(model, contents, config):
             called.append(model)
-            if model == 'audit-primary':
-                return primary_failure()
-            return gemini_response(enriched_output('UPDATES'))
+            return routes[model]()
+
+        def groq_post(*args, **kwargs):
+            called.append('groq')
+            return groq()
 
         client = Mock()
         client.models.generate_content.side_effect = generate_content
         with patch.object(llm_api, 'get_client', return_value=client), \
              patch.object(llm_api.vector_db, 'search_similar_emails', return_value=[]), \
-             patch.dict(llm_api.os.environ, {'GROQ_API_KEY': ''}, clear=False):
+             patch.dict(llm_api.os.environ,
+                        {'GROQ_API_KEY': 'synthetic' if groq else ''}, clear=False), \
+             patch('requests.post', side_effect=groq_post):
             result = llm_api.classify_email(
                 'sender@example.test', 'Weekly digest', 'Your weekly summary.',
                 settings=self.settings)
         return result, called
 
-    @unittest.expectedFailure
+    @staticmethod
+    def raises(status):
+        def route():
+            raise ProviderError(status)
+        return route
+
+    @staticmethod
+    def groq_answer(text):
+        def route():
+            response = Mock(status_code=200)
+            response.raise_for_status.return_value = None
+            response.json.return_value = {'choices': [{'message': {'content': text}}]}
+            return response
+        return route
+
     def test_retired_primary_model_fails_over_to_next_gemini_model(self):
-        def not_found():
-            raise ProviderError(404)
-        result, called = self.classify(not_found)
+        result, called = self.classify(self.raises(404))
         self.assertEqual(called, ['audit-primary', 'audit-fallback'])
         self.assertEqual((result.outcome, result.category, result.model_version),
                          ('CLASSIFIED', 'UPDATES', 'audit-fallback'))
 
-    @unittest.expectedFailure
     def test_invalid_primary_output_fails_over_to_next_gemini_model(self):
         result, called = self.classify(lambda: gemini_response('not json'))
         self.assertEqual(called, ['audit-primary', 'audit-fallback'])
         self.assertEqual((result.outcome, result.category), ('CLASSIFIED', 'UPDATES'))
+
+    def test_broken_model_is_cooled_down_but_bad_answer_is_not(self):
+        self.classify(self.raises(404))
+        self.assertFalse(llm_api._model_is_available('audit-primary'))
+        llm_api._model_cooldowns.clear()
+        self.classify(lambda: gemini_response('not json'))
+        self.assertTrue(llm_api._model_is_available('audit-primary'))
+
+    def test_rejected_gemini_key_skips_other_gemini_models_and_uses_groq(self):
+        result, called = self.classify(
+            self.raises(401),
+            groq=self.groq_answer(json.dumps(enriched_output('IMPORTANT'))))
+        self.assertEqual(called, ['audit-primary', 'groq'])
+        self.assertEqual((result.outcome, result.category, result.source),
+                         ('CLASSIFIED', 'IMPORTANT', 'groq'))
+
+    def test_every_route_rejecting_the_request_is_a_permanent_failure(self):
+        result, called = self.classify(
+            self.raises(400), fallback=self.raises(404), groq=self.raises(400))
+        self.assertEqual(called, ['audit-primary', 'audit-fallback', 'groq'])
+        self.assertEqual((result.outcome, result.reason),
+                         ('ERROR', 'provider_invalid_request'))
+
+    def test_temporary_failure_on_any_route_keeps_the_email_retryable(self):
+        result, called = self.classify(
+            self.raises(429), fallback=self.raises(404),
+            groq=self.groq_answer('not json'))
+        self.assertEqual(called, ['audit-primary', 'audit-fallback', 'groq'])
+        self.assertEqual((result.outcome, result.reason), ('ERROR', 'provider_quota'))
 
 
 class ReanalyzeAuthorityRegressionTests(Phase4Base):

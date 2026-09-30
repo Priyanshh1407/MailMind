@@ -9,7 +9,8 @@ from time import monotonic, perf_counter
 from contextlib import nullcontext
 from .config import Settings
 from .account_state import WorkCancelled
-from .provider_policy import RequestBudget, provider_failure, BoundedCalls, RETRIEVAL_CALLS
+from .provider_policy import (RequestBudget, provider_failure, BoundedCalls, RETRIEVAL_CALLS,
+                              Failure)
 from . import vector_db
 from .prediction import (
     ANALYSIS_VERSION,
@@ -462,9 +463,18 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
               'response_json_schema': OUTPUT_SCHEMA,
               'max_output_tokens': 2048}
     # At most one request to each provider/model. No SDK retry loop or sleep.
-    last_failure=None
+    # A failed route never ends the chain by itself: a retired model (404), a
+    # rejected parameter (400) or a malformed answer on one route says nothing
+    # about the next one. The email is failed only after every route is tried.
+    failures=[]
+    gemini_key_rejected=False
+    def routes_failed():
+        # Any temporary failure keeps the email retryable; otherwise report the
+        # last permanent reason so the task can stop instead of looping.
+        retryable=[failure for failure in failures if failure.retryable]
+        return result(outcome='ERROR',reason=(retryable or failures)[-1].code)
     for index,version in enumerate(settings.gemini_models):
-        if not _model_is_available(version):
+        if gemini_key_rejected or not _model_is_available(version):
             continue
         attempted, captured = Event(), []
         try:
@@ -502,7 +512,10 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
                         outcome=TokenOutcome.FAILED.value,
                         measurement=measurement,
                     )
-                return result(outcome='ERROR',reason='invalid_provider_output')
+                # A malformed answer is specific to this request, not proof
+                # that the model is broken, so the model is not cooled down.
+                log_event('cloud_provider_invalid_output')
+                failures.append(Failure('invalid_provider_output',False))
         except WorkCancelled:
             if attempted.is_set() and usage_recorder is not None:
                 usage_recorder.record(
@@ -524,18 +537,23 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
                     measurement=(gemini_usage_measurement(captured[0])
                                  if captured else unavailable_measurement()),
                 )
-            last_failure=provider_failure(error)
+            failure=provider_failure(error)
+            failures.append(failure)
             log_event('cloud_provider_failed',error=error)
-            if last_failure.retryable:
+            if failure.code == 'provider_auth':
+                # Every Gemini model shares one credential; only Groq can help.
+                gemini_key_rejected=True
+            else:
                 _cool_down_model(version)
-            if not last_failure.retryable:
-                return result(outcome='ERROR',reason=last_failure.code)
-            if budget.remaining() < 0.05:
-                return result(outcome='ERROR',reason='provider_budget_exhausted')
-    source,version='groq',settings.groq_model
+        if budget.remaining() < 0.05:
+            return result(outcome='ERROR',reason='provider_budget_exhausted')
     key=os.getenv('GROQ_API_KEY')
     if not key:
+        if failures and not any(failure.retryable for failure in failures):
+            return routes_failed()
+        source,version='groq',settings.groq_model
         return result(outcome='UNAVAILABLE',reason='fallback_not_configured')
+    source,version='groq',settings.groq_model
     attempted, captured = Event(), []
     try:
         import requests
@@ -576,7 +594,9 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
                     operation=usage_operation, outcome=TokenOutcome.FAILED.value,
                     measurement=measurement,
                 )
-            return result(outcome='ERROR',reason='invalid_provider_output')
+            log_event('groq_invalid_output')
+            failures.append(Failure('invalid_provider_output',False))
+            return routes_failed()
     except WorkCancelled:
         if attempted.is_set() and usage_recorder is not None:
             usage_recorder.record(
@@ -597,5 +617,7 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
                              if captured else unavailable_measurement()),
             )
         log_event('groq_failed',error=error)
-        failure=provider_failure(error)
-        return result(outcome='ERROR',reason='provider_budget_exhausted' if budget.remaining() < 0.05 else failure.code)
+        if budget.remaining() < 0.05:
+            return result(outcome='ERROR',reason='provider_budget_exhausted')
+        failures.append(provider_failure(error))
+        return routes_failed()
