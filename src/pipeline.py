@@ -1,5 +1,6 @@
 """Resume each saved message at its first unfinished step."""
 from contextlib import contextmanager
+from threading import Event
 import time
 from .account_state import WorkCancelled
 from .database import utc_timestamp
@@ -215,14 +216,20 @@ def process_task(task, manager, context, token, service, model, collection_provi
                 # Commit 'sending' BEFORE contacting Telegram. A crash is ambiguous.
                 conn.execute("UPDATE notification_outbox SET status='sending',attempt_count=attempt_count+1,updated_at=? WHERE account_id=? AND email_id=?",(utc_timestamp(),context.account_id,identity))
         if stage == 'notify':
+            from .notifier import telegram_timeouts
+            request_timeout,wait_seconds=telegram_timeouts(config.provider_timeout_seconds)
+            # Set only when the send is handed to Telegram. A timeout before that
+            # (busy pool, lease check) sent nothing, so it is a plain retry.
+            attempted=Event()
             try:
                 with cycle_external(manager,context,token):
                     def send():
                         with cycle_external(manager,context,token):
                             from .privacy import redact
                         from .notifier import send_telegram_alert
-                        return notifier('[SENDER]',redact(task['subject']),preview_text(redact(task['body']))[:100]+'...',timeout=config.provider_timeout_seconds,**({'settings':config} if notifier is send_telegram_alert else {}))
-                    delivery=TELEGRAM_CALLS.run(send,config.provider_timeout_seconds)
+                        attempted.set()
+                        return notifier('[SENDER]',redact(task['subject']),preview_text(redact(task['body']))[:100]+'...',timeout=request_timeout,**({'settings':config} if notifier is send_telegram_alert else {}))
+                    delivery=TELEGRAM_CALLS.run(send,wait_seconds)
                 # Explicit compatibility for injected old boolean test adapters.
                 if isinstance(delivery,bool):
                     delivery=Delivery('sent' if delivery else 'retry','delivery_failed' if not delivery else None)
@@ -230,7 +237,10 @@ def process_task(task, manager, context, token, service, model, collection_provi
                 raise
             except Exception as error:
                 failure=provider_failure(error)
-                delivery=Delivery('unknown' if failure.ambiguous else 'retry' if failure.retryable else 'blocked',failure.code)
+                if not attempted.is_set():
+                    delivery=Delivery('retry','notification_not_attempted',retry_after=5)
+                else:
+                    delivery=Delivery('unknown' if failure.ambiguous else 'retry' if failure.retryable else 'blocked',failure.code)
             with manager.guard(context) as conn:
                 fence(manager,context,token,conn)
                 count=conn.execute('SELECT attempt_count FROM notification_outbox WHERE account_id=? AND email_id=?',(context.account_id,identity)).fetchone()[0]

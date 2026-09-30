@@ -17,6 +17,16 @@ class Delivery:
         return self.status == 'sent'
 
 
+def telegram_timeouts(seconds):
+    """Return the request's (connect, read) timeout and how long a caller waits.
+
+    The caller must outlast the request's own limits. Otherwise a slow but
+    successful send is abandoned first and recorded as an unknown delivery.
+    """
+    connect, read = min(3.0, float(seconds)), float(seconds)
+    return (connect, read), connect + read + 2.0
+
+
 def send_telegram_alert(sender, subject, summary, *, timeout=5, settings=None):
     from .config import Settings
     if (settings or Settings.from_environment()).local_only:

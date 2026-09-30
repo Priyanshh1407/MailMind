@@ -5,6 +5,9 @@ that fixes the bug removes the decorator, so the same test proves the fix.
 Only synthetic mail and mocked providers are used.
 """
 from contextlib import nullcontext
+from dataclasses import replace
+import threading
+import time
 from datetime import datetime
 import json
 import unittest
@@ -431,6 +434,55 @@ class ExplanationHonestyTests(Phase4Base):
                     'Contract', 'Please sign the "revised" contract before 5 pm - today.'),
                 db_conn=conn)
         self.assertEqual(result['created_count'], 1)
+
+
+class TelegramDeliveryTimeoutTests(Phase4Base):
+    """NOTIFY-01: reported as 'dead - notify - provider_timeout' (7 of 79 real
+    alerts). The worker stopped waiting before the request's own timeouts, and a
+    send that never started was recorded as an ambiguous delivery."""
+
+    def setUp(self):
+        super().setUp()
+        self.settings = replace(self.settings, provider_timeout_seconds=1)
+        self.seed_email(subject='Contract', body='Please sign the contract today.')
+        self.manager, _token = self.connected_manager(self.settings)
+        self.context = self.manager.worker_context()
+        with connection(self.settings.db_path) as conn:
+            conn.execute("""INSERT INTO processing_tasks(account_id,email_id,status,stage,created_at,updated_at)
+                            VALUES (?,?,'queued','classify',?,?)""", (A, 'mail-1', SOURCE_TIME, SOURCE_TIME))
+
+    def run_task(self, notifier):
+        token, job = claim_cycle(self.manager, self.context)
+        self.addCleanup(finish_cycle, self.manager, self.context, token, job)
+        task = newest_due_tasks(self.manager, self.context, token, 1)[0]
+        cloud = Mock(return_value=Prediction(category='IMPORTANT', outcome='CLASSIFIED',
+                                             source='gemini', model_version='synthetic'))
+        shadow = Mock(return_value=(Prediction(category='IMPORTANT', outcome='CLASSIFIED',
+                                               source='local'), 5))
+        process_task(task, self.manager, self.context, token, Mock(), Mock(), Mock(),
+                     classifier=cloud, shadow=shadow, notifier=notifier, marker=Mock(),
+                     logger=log_email_to_db, validator=Mock(), job_id=job)
+        with connection(self.settings.db_path) as conn:
+            outbox = conn.execute("SELECT status FROM notification_outbox WHERE email_id='mail-1'").fetchone()[0]
+            task_state = conn.execute("SELECT status FROM processing_tasks WHERE email_id='mail-1'").fetchone()[0]
+        return outbox, task_state
+
+    def test_slow_but_successful_send_is_recorded_as_sent(self):
+        # Longer than the old 1 s wait, well inside the request's own limits.
+        def slow_send(*args, **kwargs):
+            time.sleep(1.6)
+            return Delivery('sent', message_id='42')
+        self.assertEqual(self.run_task(slow_send), ('sent', 'complete'))
+
+    def test_send_that_never_started_is_retried_not_marked_unknown(self):
+        release = threading.Event()
+        from src.provider_policy import TELEGRAM_CALLS
+        with self.assertRaises(TimeoutError):   # an earlier send still occupies the only slot
+            TELEGRAM_CALLS.run(lambda: release.wait(10), 0.01)
+        self.addCleanup(release.set)
+        notifier = Mock(return_value=Delivery('sent', message_id='1'))
+        self.assertEqual(self.run_task(notifier), ('retry', 'retry'))
+        notifier.assert_not_called()
 
 
 class AccountDeletionErrorTests(Phase4Base):
