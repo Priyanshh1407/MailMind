@@ -33,6 +33,11 @@ def claim_cycle(manager, context, *, now=None):
         stamp=utc_timestamp()
         conn.execute("UPDATE worker_jobs SET status='failed',error_code='lease_expired',updated_at=? WHERE account_id=? AND status='running'",(stamp,context.account_id))
         conn.execute("UPDATE processing_tasks SET status='retry',owner_token=NULL,error_code='interrupted',next_retry_at=0 WHERE account_id=? AND status='running'",(context.account_id,))
+        # A non-numeric retry time (e.g. an ISO string from a manual fix) ranks
+        # above every number in SQLite, so 'next_retry_at <= now' never holds and
+        # the item is stranded forever. Make any such row due again.
+        for table in ('processing_tasks','notification_outbox'):
+            conn.execute(f"UPDATE {table} SET next_retry_at=0 WHERE account_id=? AND typeof(next_retry_at) NOT IN ('real','integer')",(context.account_id,))
         conn.execute(
             """UPDATE intelligence_backfill_items
                SET status='retry',error_code='interrupted',updated_at=?

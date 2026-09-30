@@ -525,6 +525,32 @@ class ActionTypeFilterTests(Phase4Base):
         self.assertEqual(set(get_args(ACTION_TYPE_VALUES)), {item.value for item in ActionType})
 
 
+class NonNumericRetryTimeTests(Phase4Base):
+    """QUEUE-01: 'Fetch next 100' stayed disabled. Seven real tasks had a text
+    next_retry_at ('2026-09-29T13:00:26...+00:00'); SQLite ranks text above every
+    number, so 'next_retry_at <= now' was never true and the backlog never ended."""
+
+    def setUp(self):
+        super().setUp()
+        self.seed_email()
+        self.manager, _token = self.connected_manager()
+        self.context = self.manager.worker_context()
+        with connection(self.settings.db_path) as conn:
+            conn.execute("""INSERT INTO processing_tasks(account_id,email_id,status,stage,source,
+                            next_retry_at,created_at,updated_at)
+                            VALUES (?,?,'retry','classify','backlog','2026-09-29T13:00:26.931491+00:00',?,?)""",
+                         (A, 'mail-1', SOURCE_TIME, SOURCE_TIME))
+
+    def test_a_text_retry_time_is_repaired_and_the_task_becomes_due(self):
+        token, job = claim_cycle(self.manager, self.context)
+        self.addCleanup(finish_cycle, self.manager, self.context, token, job)
+        with connection(self.settings.db_path) as conn:
+            kind = conn.execute("SELECT typeof(next_retry_at) FROM processing_tasks WHERE email_id='mail-1'").fetchone()[0]
+        self.assertIn(kind, ('real', 'integer'))
+        due = newest_due_tasks(self.manager, self.context, token, 5)
+        self.assertEqual([task['email_id'] for task in due], ['mail-1'])
+
+
 class AccountDeletionErrorTests(Phase4Base):
     """ERR-02: found by the Git Bash guide's sandbox run. A vector-store failure
     after the purge transition was reported as 'There is no account to delete.'"""
