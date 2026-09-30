@@ -64,17 +64,19 @@ These controls are not equivalent. Sync never grants more historical backlog. Sa
 
 ### Inbox explanations
 
-Expanded cards can show a bounded explanation, evidence signals, model/source label, and retrieval-use indicator. Explanations summarize decision signals; they are not hidden chain-of-thought. A correction changes the effective category but preserves the original analysis for audit.
+Each email card has a **Why this category?** section under the email text (it needs `MAILMIND_EXPLANATIONS_VISIBLE=true`). It shows a short reason, the signals behind it, each with the quoted words from the email, and the source model. Explanations summarize decision signals; they are not hidden chain-of-thought. A quote that can't be matched to the email is omitted, but the rest of the explanation is kept. A correction changes the effective category but preserves the original analysis for audit.
+
+Mail classified before explanations were enabled says *No explanation was recorded for this email*. Use **Analyze up to 20 saved emails** (Inbox tab) to generate explanations for it. Each email is a real provider request.
 
 ### Action Center
 
-The Action Center lists extracted replies, tasks, approvals, payments, meetings, and deadlines. Filters include open, due soon, overdue, snoozed, and completed. You can complete, dismiss, reopen, or snooze an action, and navigate to its account-owned source email.
+The Action Center lists extracted replies, tasks, approvals, payments, meetings, and deadlines. Filters include open, due soon, overdue, snoozed, and completed, plus a **Type** filter that lists only the action types this account actually has, with counts (for example *Payment · 3*). You can complete, dismiss, reopen, or snooze an action, and navigate to its account-owned source email; **Clear source email** beside the search hint returns to the full inbox.
 
 Automatic dashboard reminders require explicit configuration. Telegram action reminders require a separate opt-in. Ambiguous, past-due, low-confidence, or date-unknown candidates do not silently create automatic reminders.
 
 ### Usage
 
-Usage shows day, week, and month token totals with Recharts trends and an accessible data table. Provider-billed tokens and locally processed tokens are separate. Counts can be provider-reported, tokenizer-counted, estimated, or unavailable; they are usage measurements, not prices.
+Usage shows day, week, and month token totals with a daily bar chart, an accessible data table, and ranked per-provider and per-operation breakdowns with share bars. Rows whose events have no reported token count read **Not measured** rather than zero. Provider-billed tokens and locally processed tokens are separate. Counts can be provider-reported, tokenizer-counted, estimated, or unavailable; they are usage measurements, not prices.
 
 ## Categories
 
@@ -176,7 +178,7 @@ After connection:
 
 ## Notifications and read state
 
-Telegram is optional. Important-message notification state is durable.
+Telegram is optional. Important-message notification state is durable. An alert is marked **unknown** only when it may really have been delivered (for example, the request timed out after reaching Telegram). Unknown alerts are never resent automatically: use **Confirm alert arrived** if you received it, or **Retry alert** if you didn't. A send that failed before reaching Telegram is simply retried.
 
 Automatic mark-as-read is off by default. If explicitly enabled, it remains a separate workflow stage and never treats an unavailable classification as success.
 
@@ -200,7 +202,7 @@ Lexical search remains available. Keep MailMind connected and running while the 
 
 ### Historical backlog remains
 
-Wait for the admitted batch to finish, then choose **Fetch next 100**. Live mail continues to receive priority.
+Wait for the admitted batch to finish, then choose **Fetch next 100**. It stays disabled while any older-mail task is still queued, retrying, or running. Live mail continues to receive priority.
 
 ### Saved-mail analysis is unavailable
 

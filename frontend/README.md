@@ -56,15 +56,15 @@ section-local, while a session/account mismatch cancels the complete snapshot.
 | <code>DashboardStats</code> | Account-wide saved, processed, feedback, and latency KPIs |
 | <code>InboxProgress</code> | Current admitted batch and durable workflow counts |
 | <code>InboxIntake</code> | Live sync, bounded historical backlog, and explicit saved-mail intelligence backfill |
-| <code>SearchFilters</code> | Debounced hybrid query, category filter, and semantic progress |
+| <code>SearchFilters</code> | Debounced hybrid query, category filter, semantic progress, and the source-email hint with its clear action |
 | <code>EmailBoard</code> | Important, Updates, Spam, and Review lanes |
-| <code>EmailCard</code> | Classification details, feedback, history, and recovery |
+| <code>EmailCard</code> | The "Why this category?" explanation, classification details, feedback, history, and recovery |
 | <code>Pagination</code> | Stable 20-message pages |
 | <code>AppFeedback</code> | Persistent outages and timed action notices |
 | <code>ActionSummary</code> | Open, due-soon, overdue, and tokens-today KPIs |
-| <code>ActionCenter</code> | Bounded action filters, lifecycle controls, snoozing, and source navigation |
-| <code>ClassificationExplanation</code> | Validated category rationale, signal chips, source, and model details |
-| <code>TokenUsagePanel</code> | Recharts daily trend, cloud/local split, and provider/operation breakdowns |
+| <code>ActionCenter</code> | Status filters, a type filter built from the account's type counts, lifecycle controls, snoozing, and source navigation |
+| <code>ClassificationExplanation</code> | Rendered inside each email card: validated rationale, signals with quoted evidence, source, and model |
+| <code>TokenUsagePanel</code> | Daily bar chart (Recharts, loaded on first visit), cloud/local split, and ranked provider/operation share bars |
 
 ## Search behavior
 

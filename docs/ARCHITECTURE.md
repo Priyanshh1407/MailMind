@@ -158,8 +158,9 @@ flowchart TD
   E[Saved email] --> R[Conservative feedback retrieval]
   R --> P[Cloud provider policy]
   P --> G1[Gemini primary]
-  G1 -->|retryable failure| G2[Gemini fallback]
-  G2 -->|retryable failure| Q[Groq]
+  G1 -->|route failed| G2[Gemini fallback]
+  G2 -->|route failed| Q[Groq]
+  G1 -->|key rejected 401/403| Q
   P --> V[Strict category validation]
   E --> L[Local shadow classifier]
   V --> D[Authoritative decision]
@@ -168,13 +169,29 @@ flowchart TD
   H --> S
 ```
 
+Failover classifies each failure by what it proves (every case is tested in [the resilience matrix](RESILIENCE.md)):
+
+- temporary (timeout, 429, 5xx): cool the model down, try the next route;
+- broken model (400, 404, unknown error): cool it down, try the next route;
+- rejected Gemini key (401/403): skip the other Gemini models, go to Groq;
+- invalid answer: try the next route without a cooldown.
+
+An email fails only after every route is tried. It stays retryable if any route failed temporarily; otherwise it goes to Needs Review. Gemini 3+ models are sent `thinking_level: low`; older models, which reject it, are not.
+
+All routing rules live in `src/classification_service.py`, shared by the worker and the API:
+
+- normal mode: the cloud decides and the local model only runs as a shadow, including on re-analysis;
+- local-only mode: the local model decides, with the same sender-aware input it was trained on.
+
+Grounding uses one rule, `quote_in_source()` in `src/email_text.py`, for both explanation signals and action evidence. It checks against the same privacy-minimized text the provider saw, ignores differences in quote marks, dashes, ellipses and whitespace, and requires the words to match exactly.
+
 Only `IMPORTANT`, `UPDATES`, and `SPAM` are model categories. `NEEDS_REVIEW` is a system presentation state for unavailable, ambiguous, or failed processing.
 
 Feedback retrieval may support a decision only when current account-owned examples are close enough, revision-valid, independently supported, and sufficiently dominant. Otherwise it abstains.
 
 ## Notification and read-state safety
 
-Telegram delivery is recorded through a durable outbox. A request that might have reached Telegram but lacks a safe acknowledgement becomes `unknown`; it is not automatically resent.
+Telegram delivery is recorded through a durable outbox. A request that might have reached Telegram but lacks a safe acknowledgement becomes `unknown`; it is not automatically resent. The worker waits longer than the request's own connect and read timeouts, so a slow but successful send is recorded as sent. The worker also marks the moment a send is handed to Telegram: a failure before that point sent nothing and is simply retried.
 
 Automatic mark-as-read defaults to off. When enabled, it remains a separate durable stage. Important mail is not automatically marked read before required notification success.
 
@@ -197,6 +214,7 @@ If embedding or Chroma query work fails, the API logs a safe event and returns l
 - Provider timeouts do not consume unrelated Gmail or Telegram capacity.
 - A poisoned message does not stop the batch.
 - An expired lease prevents a stale worker from committing.
+- A malformed (non-numeric) retry time cannot strand a task: each worker cycle repairs it, because SQLite ranks text above every number.
 - An interrupted intelligence backfill is recovered through the same lease/retry path without repeating historical side effects.
 - Unknown notification delivery requires explicit recovery.
 - Historical transient runtime errors are cleared after restart or a successful worker cycle.

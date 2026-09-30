@@ -10,7 +10,13 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
-At the 29 September 2026 Phase 8 verification, all 478 discovered backend tests passed, including seven feature-specific saved-mail intelligence backfill checks and the release-policy checks for exact dependency declarations.
+At the 30 September 2026 verification, all 526 discovered backend tests passed, and each of the 25 test modules also passes when run on its own.
+
+Regression and contract suites added after the audit:
+
+- `test_audit_regressions.py`: every audit finding reproduced through the real code path (provider failover, shadow authority, grounding, deadlines, explanations, Telegram timing, retry-time repair, deletion errors, configuration messages, the action-type filter).
+- `test_provider_faults.py`: 9 provider fault types × 2 scopes against a written contract (rendered to `docs/RESILIENCE.md`).
+- `test_cloud_evaluation.py`: the evaluation harness scores recordings exactly as production parses them.
 
 The backend suite covers:
 
@@ -26,7 +32,8 @@ The backend suite covers:
 - semantic search reconciliation and hybrid ranking;
 - supervisor ownership and restart limits;
 - prompt-injection and retrieval-poisoning boundaries; and
-- privacy-safe failure behavior.
+- privacy-safe failure behavior; and
+- configuration errors that name the exact setting to change.
 - schema-14 bounded intelligence backfill, queue priority, recovery, side-effect suppression, rollout gating, CSRF, account isolation, and purge.
 
 Focused security checks:

@@ -172,7 +172,9 @@ The dashboard provides:
 - Classification details, confirmation, correction, undo, and history
 - Explicit retry/recovery controls for unfinished processing and ambiguous notifications
 - Inbox, Action Center, and Usage tabs with source-labelled explanations and bounded action lifecycle controls
-- Day, week, and month token charts that separate provider-billed from locally processed usage
+- A "Why this category?" explanation inside each email card: a summary, the signals, and the quoted evidence that grounds them
+- Action Center filters by status and by action type (only the types the account actually has, with counts)
+- Day, week, and month token charts that separate provider-billed from locally processed usage, with ranked per-provider and per-operation breakdowns
 - An explicit, observable saved-mail intelligence backfill control
 - Responsive keyboard-accessible layouts and reduced-motion behavior
 
@@ -261,9 +263,9 @@ npm run test:browser
 
 Latest local verification (30 September 2026):
 
-- Backend discovery: 506 tests passed, and each of the 25 test modules also passes when run alone (no test-order dependence).
+- Backend discovery: 526 tests passed, and each of the 25 test modules also passes when run alone (no test-order dependence).
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
-- Frontend unit suite: 42 passed. Playwright browser suite: 24 passed.
+- Frontend unit suite: 48 passed. Playwright browser suite: 25 passed.
 - Frontend lint and production build passed; initial JavaScript is 264 kB (83 kB gzip).
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
@@ -294,6 +296,10 @@ A deliberate audit of this codebase found and fixed these defects. Each one was 
 | Training-serving skew | Local-only re-analysis called the model without the sender field it was trained with | The sender is passed on every authoritative local path |
 | No label provenance | Retraining could learn from the local model's own outputs; 87% of labels were cloud decisions | Provenance tracked; local self-labels excluded |
 | Deadline contract mismatch (found by the evaluation) | The parser rejected plain calendar dates and unresolved deadlines, silently discarding 58% of Gemini's proposed actions | Date-only deadlines anchored to the local day; unresolved ones kept as "unknown": 25/60 → 60/60 on the same recordings |
+| Telegram wait shorter than the request | Slow but successful alerts were recorded as "delivery unknown", and a send that never started was too | The worker outlasts the request's own timeouts; "unknown" now means the alert may really have been delivered |
+| Text-typed retry times | Retry times stored as text never compared as due in SQLite, freezing the backlog and disabling "Fetch next 100" | Each worker cycle repairs non-numeric retry times |
+| One quote voided an explanation | A single quote not found byte-for-byte in the email discarded the whole explanation | Punctuation-tolerant grounding shared by explanations and actions; unverifiable quotes are dropped individually |
+| Misleading deletion error | An interrupted account deletion reported "no account to delete" while the data was still there | Only a missing account is a conflict; other failures say "retry" |
 
 Live evaluation also found that the previously configured fallback model (`gemini-1.5-flash`) is retired (HTTP 404), which is exactly the case the first fix handles.
 
