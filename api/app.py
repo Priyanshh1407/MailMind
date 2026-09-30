@@ -914,12 +914,14 @@ def create_app(*, settings=None, model_factory=MailMindModel,
 
     @application.delete('/account-data')
     def purge(context=Depends(session)):
+        # Only a missing account is a conflict. Any later failure happens after
+        # the purge transition committed: processing is paused and must retry.
+        if not context.account_id:
+            raise HTTPException(409, 'There is no account to delete.')
         try:
             application.state.accounts.purge(context, collection, search_collection)
         except (WorkCancelled, AccessDenied, sqlite3.OperationalError):
             raise
-        except ValueError:
-            raise HTTPException(409, 'There is no account to delete.') from None
         except Exception as error:
             log_event('account_purge_failed', error=error)
             raise HTTPException(503, 'Deletion did not finish. Processing is paused. Retry deleting this account data.') from None

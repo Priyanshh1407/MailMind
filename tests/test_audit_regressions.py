@@ -371,6 +371,39 @@ class DeadlineContractTests(Phase4Base):
         self.assertEqual(self.parse('2026-10-02', 'exact_time'), ())
 
 
+class AccountDeletionErrorTests(Phase4Base):
+    """ERR-02: found by the Git Bash guide's sandbox run. A vector-store failure
+    after the purge transition was reported as 'There is no account to delete.'"""
+
+    def client_for(self, vector_factory):
+        model = Mock(model_loaded=False, load_reason='missing_checkpoint')
+        app = create_app(settings=self.settings, model_factory=Mock(return_value=model),
+                         vector_factory=vector_factory)
+        client = TestClient(app, base_url='http://localhost')
+        client.__enter__()
+        self.addCleanup(client.__exit__, None, None, None)
+        client.headers['Origin'] = ORIGIN
+        client.headers['X-CSRF-Token'] = client.post('/session').json()['csrf_token']
+        return app, client
+
+    def test_interrupted_deletion_says_retry_not_that_there_is_no_account(self):
+        app, client = self.client_for(Mock(side_effect=ValueError('vector store unavailable')))
+        context, _ = app.state.accounts.session(client.cookies.get('mailmind_session'))
+        app.state.accounts.finish_auth(app.state.accounts.begin_auth(context), (A, '{}'))
+        client.headers['X-CSRF-Token'] = client.get('/session').json()['csrf_token']
+        self.seed_email()
+        response = client.delete('/account-data')
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('Retry', response.json()['detail'])
+        self.assertTrue(client.get('/status').json()['purge_pending'])
+
+    def test_deleting_without_an_account_is_a_conflict(self):
+        _app, client = self.client_for(Mock(return_value=EmptyCollection()))
+        response = client.delete('/account-data')
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['detail'], 'There is no account to delete.')
+
+
 class LocalOnlyDefaultModelTests(unittest.TestCase):
     """ML-02: local-only mode must default to a three-category checkpoint."""
 
