@@ -1,8 +1,12 @@
+import { lazy, Suspense } from 'react';
 import { BarChart3, Cloud, Cpu, Info, MoveDown, MoveUp } from 'lucide-react';
 import { formatCount } from '../dashboard';
 import { hasEstimatedUsage, operationLabel, sourceLabel } from '../intelligence';
-import { TokenUsageChart } from './TokenUsageChart';
 import { Surface, SectionTitle } from './ui/Surface';
+
+// Recharts is the largest dependency and only this tab uses it: load it on demand.
+const TokenUsageChart = lazy(() => import('./TokenUsageChart')
+  .then(module => ({ default: module.TokenUsageChart })));
 
 const WINDOWS = [
   { value: 'day', label: 'Today' },
@@ -40,7 +44,9 @@ export function TokenUsagePanel({ snapshot, setQuery }) {
         <UsageMetric icon={Cpu} label='Local processed' value={summary.local_processed_tokens} />
       </div>
       <p className='usage-note'><Info size={14} />Token counts are operational usage, not a cost estimate. Local processing is shown separately from provider-billed usage.</p>
-      <TokenUsageChart daily={summary.daily} />
+      <Suspense fallback={<p className='usage-note' role='status'>Loading chart...</p>}>
+        <TokenUsageChart daily={summary.daily} />
+      </Suspense>
       <div className='breakdown-grid'>
         <Breakdown title='By provider' rows={summary.providers} label={sourceLabel} />
         <Breakdown title='By operation' rows={summary.operations} label={operationLabel} />

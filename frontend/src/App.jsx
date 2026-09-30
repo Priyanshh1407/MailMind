@@ -31,6 +31,9 @@ function App() {
   const [query, setQuery] = useState(INITIAL_QUERY);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('inbox');
+  // Mount the Usage panel on first visit so its chart bundle loads on demand.
+  const [usageOpened, setUsageOpened] = useState(false);
+  useEffect(() => { if (activeTab === 'usage') setUsageOpened(true); }, [activeTab]);
   const tabRefs = useRef([]);
   const {
     snapshot, loading, error, actionError, notice, pending, refresh, mutate,
@@ -108,7 +111,7 @@ function App() {
           <ActionCenter snapshot={snapshot} query={query} setQuery={setQuery} loading={loading} disabled={disabled} pending={pending} mutate={mutate} openSource={openSource} />
         </section>
         <section id='panel-usage' role='tabpanel' aria-labelledby='tab-usage' hidden={activeTab !== 'usage'}>
-          <TokenUsagePanel snapshot={snapshot} setQuery={setQuery} />
+          {usageOpened && <TokenUsagePanel snapshot={snapshot} setQuery={setQuery} />}
         </section>
       </>}
       <AppFooter autoMarkRead={snapshot?.status.auto_mark_read} />
