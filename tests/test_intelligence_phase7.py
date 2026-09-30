@@ -290,7 +290,7 @@ class Phase7ApiTests(Phase7Base):
             model_version="synthetic-phase7-v1",
             analysis=analysis(),
         )
-        with patch("api.app.manual_prediction", return_value=result) as call:
+        with patch("api.app.authoritative_prediction", return_value=result) as call:
             first = self.client.post("/emails/mail-1/reanalyze", json={})
             repeated = self.client.post(
                 "/emails/mail-1/reanalyze",

@@ -459,7 +459,7 @@ class Phase4ApiTests(Phase4Base):
                 measurement=tokenizer_usage_measurement(7))
             return prediction
 
-        with patch("api.app.manual_prediction",side_effect=reanalyze) as call:
+        with patch("api.app.authoritative_prediction",side_effect=reanalyze) as call:
             response = self.client.post("/emails/mail-1/reanalyze",json={})
             repeated = self.client.post(
                 "/emails/mail-1/reanalyze",

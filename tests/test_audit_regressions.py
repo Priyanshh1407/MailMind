@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
-from api.app import create_app
+from api.app import authoritative_prediction, create_app
 from src import llm_api
 from src.action_center import list_actions
 from src.config import Settings
@@ -189,7 +189,14 @@ class ReanalyzeAuthorityRegressionTests(Phase4Base):
                 Prediction(category='SPAM', outcome='CLASSIFIED', source='local'),
                 account_id=A, db_conn=conn)
 
-    @unittest.expectedFailure
+    def test_local_only_mode_decides_with_the_local_model(self):
+        cloud = Mock(side_effect=AssertionError('cloud must not run in local-only mode'))
+        result = authoritative_prediction(
+            LoadedShadowModel(), 'Approval needed', self.body, A,
+            Settings(local_only=True), Mock(), Mock(), classifier=cloud)
+        self.assertEqual((result.source, result.category), ('local', 'SPAM'))
+        cloud.assert_not_called()
+
     def test_reanalyze_keeps_cloud_authority_and_extracts_actions(self):
         client = Mock()
         client.models.generate_content.return_value = gemini_response(enriched_output(

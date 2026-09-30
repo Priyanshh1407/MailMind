@@ -213,6 +213,32 @@ def manual_prediction(model, subject, body, account_id, settings,
             )
     return prediction
 
+
+def authoritative_prediction(model, subject, body, account_id, settings,
+                             collection_provider, validator, classifier=classify_email,
+                             usage_recorder=None,
+                             usage_operation=TokenOperation.MANUAL_PREDICTION.value,
+                             sender='[MANUAL]', source_timestamp=None):
+    """Decide with the same route the worker trusts for saved mail.
+
+    Normal mode: cloud only. The API's local model is a shadow evaluator and
+    must never replace a saved decision, whether or not it has loaded.
+    Local-only mode: the local model is the authoritative route.
+    """
+    if settings.local_only:
+        return manual_prediction(
+            model, subject, body, account_id, settings, collection_provider,
+            validator, usage_recorder=usage_recorder,
+            usage_operation=usage_operation, sender=sender,
+            source_timestamp=source_timestamp)
+    return ensure_prediction_analysis(classifier(
+        sender, subject, body, account_id=account_id,
+        source_timestamp=source_timestamp,
+        collection_provider=collection_provider, validator=validator,
+        settings=settings, usage_recorder=usage_recorder,
+        usage_operation=usage_operation,
+    ))
+
 def create_app(*, settings=None, model_factory=MailMindModel,
                vector_factory=vector_db.create_vector_collection, search_vector_factory=None,
                oauth_factory=None):
@@ -723,7 +749,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         with application.state.accounts.external(
                 context,connected=not config.local_only):
             try:
-                result=manual_prediction(
+                result=authoritative_prediction(
                     application.state.model,stored['subject'],stored['body'],
                     context.account_id,config,collection,
                     lambda metadata:current_vector(
