@@ -91,6 +91,33 @@ def authenticate_gmail():
         return None
 
 
+class GmailUnavailable(Exception):
+    """Gmail can't be reached right now (no internet, DNS, timeout, Gmail outage).
+    Temporary: the account stays connected and the next cycle tries again."""
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def _temporary_gmail_failure(error):
+    """The code for a failure that proves nothing about the login, else None."""
+    import socket
+    from google.auth.exceptions import RefreshError, TransportError
+    if isinstance(error, RefreshError):
+        return None  # Google rejected the saved login (revoked, expired grant)
+    status = getattr(getattr(error, 'resp', None), 'status', None)
+    if status in (401, 403):
+        return None
+    if isinstance(error, (TransportError, httplib2.ServerNotFoundError, socket.gaierror,
+                          TimeoutError, ConnectionError, socket.timeout)):
+        return 'network_unavailable'
+    if isinstance(status, int) and (status >= 500 or status == 429):
+        return 'gmail_temporarily_unavailable'
+    if isinstance(error, OSError):
+        return 'network_unavailable'
+    return None
+
+
 def refresh_gmail(manager, context):
     if manager.settings.local_only: return None
     try:
@@ -124,6 +151,35 @@ def refresh_gmail(manager, context):
         raise
     except Exception as error:
         log_event('gmail_refresh_failed',error=error)
+        temporary=_temporary_gmail_failure(error)
+        if temporary:
+            raise GmailUnavailable(temporary) from None
+        return None
+
+
+def renew_saved_login(path, expected_account, *, timeout):
+    """Silent reconnect: renew a saved Google login without opening Google's
+    page. Returns (account_id, credential_json), or None when Google refuses
+    it (expired, revoked), it belongs to another account, or it can't be read.
+    The caller then falls back to the normal Google sign-in page."""
+    try:
+        creds=Credentials.from_authorized_user_file(str(path),SCOPES)
+        if not creds.valid:
+            if not creds.refresh_token:
+                return None
+            class BoundedRefresh(Request):
+                def __call__(self,*args,**kwargs):
+                    kwargs['timeout']=timeout
+                    return super().__call__(*args,**kwargs)
+            GMAIL_CREDENTIAL_CALLS.run(lambda: creds.refresh(BoundedRefresh()),timeout)
+        service=build_gmail(creds,timeout)
+        account_id=execute_gmail(service.users().getProfile(userId='me')).get('emailAddress')
+        if account_id != expected_account:
+            log_event('gmail_account_mismatch')
+            return None
+        return account_id,creds.to_json()
+    except Exception as error:
+        log_event('gmail_silent_reconnect_failed',error=error)
         return None
 
 
@@ -211,6 +267,12 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
     guard=before_request or nullcontext
     overflow=False
     while batch.pages < max_pages and not overflow:
+        if len(seen) >= max_results:
+            # The batch is full and Gmail has more pages. Asking for
+            # maxResults=0 is rejected (HTTP 400); stop here instead, and the
+            # cursor stays put so the next cycle continues from it.
+            overflow=True
+            break
         parameters={'userId':'me','startHistoryId':start_history_id,
                     'historyTypes':['messageAdded'],'labelId':'INBOX',
                     'maxResults':min(100,max_results-len(seen))}
@@ -230,6 +292,9 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
                 return batch
             log_event('gmail_history_failed',error=error)
             batch.listing_error=True
+            # Earlier pages may have moved the cursor, but their messages were
+            # not fetched. Advancing would skip them for good.
+            batch.history_id=start_history_id
             return batch
         batch.pages+=1
         cursor=result.get('historyId')
@@ -255,7 +320,7 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
     batch.has_more=bool(page_token) or overflow
     batch.deferred=overflow
     batch.next_page_token=page_token
-    if batch.has_more:
+    if batch.has_more or batch.listing_error:
         # Do not advance beyond events that were not admitted. Re-reading the
         # history range is safe because durable Gmail IDs are excluded.
         batch.history_id=start_history_id
@@ -273,8 +338,63 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
             batch.failures.append({'code':error.code,'email_id':msg_id})
         except Exception as error:
             log_event('gmail_message_fetch_failed',error=error)
-            batch.failures.append({'code':'message_fetch_failed','email_id':msg_id})
+            batch.failures.append({'code':fetch_failure_code(error),'email_id':msg_id})
     return batch
+
+
+def fetch_failure_code(error):
+    """'message_fetch_failed' for a temporary failure (retried until Gmail
+    answers); 'message_unavailable' for a permanent one (deleted, rejected)."""
+    from .provider_policy import provider_failure
+    if _temporary_gmail_failure(error) or provider_failure(error).retryable:
+        return 'message_fetch_failed'
+    return 'message_unavailable'
+
+
+def get_messages_by_id(service, message_ids, *, before_request=None, budget_seconds=30):
+    """Fetch specific messages again, e.g. ones whose earlier download failed."""
+    batch=FetchBatch()
+    budget=RequestBudget(budget_seconds)
+    guard=before_request or nullcontext
+    for msg_id in message_ids:
+        if budget.remaining() < 0.05:
+            batch.deferred=True
+            break
+        batch.scanned+=1
+        try:
+            batch.emails.append(_fetch_message(service,msg_id,budget,guard))
+        except WorkCancelled:
+            raise
+        except MessageParseError as error:
+            batch.failures.append({'code':error.code,'email_id':msg_id})
+        except Exception as error:
+            log_event('gmail_message_fetch_failed',error=error)
+            batch.failures.append({'code':fetch_failure_code(error),'email_id':msg_id})
+    return batch
+
+
+def list_recent_inbox_ids(service, *, days=2, max_results=50, before_request=None, budget_seconds=10):
+    """IDs of INBOX messages received in the last `days` days (read or unread).
+
+    Used as a safety net next to history sync. Returns None if listing fails.
+    """
+    guard=before_request or nullcontext
+    budget=RequestBudget(budget_seconds)
+    try:
+        with guard():
+            result=execute_gmail(service.users().messages().list(
+                userId='me',labelIds=['INBOX'],q=f'newer_than:{int(days)}d',
+                maxResults=max_results),budget)
+    except WorkCancelled:
+        raise
+    except Exception as error:
+        log_event('gmail_recent_list_failed',error=error)
+        return None
+    messages=result.get('messages',[]) if isinstance(result,dict) else []
+    if not isinstance(messages,list):
+        return None
+    return [item['id'] for item in messages[:max_results]
+            if isinstance(item,dict) and isinstance(item.get('id'),str) and item['id']]
 
 
 def get_unread_emails(service, max_results=20, *, page_size=10, max_pages=3, page_token=None, before_request=None, exclude_ids=None, budget_seconds=30):

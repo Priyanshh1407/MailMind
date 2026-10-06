@@ -35,6 +35,23 @@ def provider_failure(error):
     return Failure('provider_failed', False)
 
 
+# Gmail unreachable (no internet, outage): check again after 5 s, 10 s, 20 s,
+# 40 s, then every 60 s, so recovery is noticed within a minute.
+UNREACHABLE_CODES = frozenset({'network_unavailable', 'gmail_temporarily_unavailable'})
+
+
+def offline_retry_delay(failures, *, base=5, cap=60):
+    return min(cap, base * 2 ** max(0, failures - 1))
+
+
+def worker_wait(status, failures, *, poll_seconds):
+    """Seconds until the next worker cycle, and the updated failure streak."""
+    if status == 'offline':
+        failures += 1
+        return max(poll_seconds, offline_retry_delay(failures)), failures
+    return poll_seconds, 0
+
+
 def retry_delay(attempt):
     return min(300, 5 * 2 ** min(max(attempt-1,0),6))
 

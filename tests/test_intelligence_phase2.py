@@ -158,10 +158,12 @@ class IntelligencePhaseTwoTests(unittest.TestCase):
             self.assertIsNone(event["input_tokens"])
             self.assertIsNone(event["output_tokens"])
             self.assertIsNone(event["total_tokens"])
+        # The events above are stamped with the real clock, so aggregate the
+        # month that contains "now" (a fixed date broke once that month ended).
         result = aggregate_token_usage(
             A, window="month", timezone_name="Asia/Kolkata",
-            now=__import__("datetime").datetime(
-                2026, 9, 27, tzinfo=__import__("datetime").timezone.utc
+            now=__import__("datetime").datetime.now(
+                __import__("datetime").timezone.utc
             ), db_path=self.settings.db_path,
         )
         gemini = next(

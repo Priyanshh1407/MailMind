@@ -50,6 +50,9 @@ class Settings:
     token_collection_enabled: bool = True
     token_analytics_visible: bool = False
     explanations_visible: bool = False
+    # The local model as a comparison-only shadow in normal mode. Off by default:
+    # it never decides, and costs a PyTorch process plus CPU per email.
+    shadow_model_enabled: bool = False
 
     def __post_init__(self):
         for name, low, high in (('poll_interval_seconds',5,86400), ('batch_size',1,200),
@@ -94,6 +97,11 @@ class Settings:
             raise ValueError('Invalid MAILMIND_GROQ_MODEL')
 
     @property
+    def shadow_active(self):
+        """Run the local model as a shadow beside the cloud (never in local-only mode, where it decides)."""
+        return self.shadow_model_enabled and not self.local_only
+
+    @property
     def legacy_token_path(self):
         return ROOT / "token.json" if self.data_dir == ROOT / "data" else self.data_dir / "legacy_token.json"
 
@@ -136,4 +144,5 @@ class Settings:
             token_collection_enabled=_environment_bool('MAILMIND_TOKEN_COLLECTION_ENABLED',True),
             token_analytics_visible=_environment_bool('MAILMIND_TOKEN_ANALYTICS_VISIBLE',False),
             explanations_visible=_environment_bool('MAILMIND_EXPLANATIONS_VISIBLE',False),
+            shadow_model_enabled=_environment_bool('MAILMIND_SHADOW_MODEL_ENABLED',False),
         )

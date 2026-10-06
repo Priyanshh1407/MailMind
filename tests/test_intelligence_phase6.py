@@ -67,6 +67,29 @@ class IntelligencePhaseSixTests(unittest.TestCase):
             extraction_source='system', db_path=self.settings.db_path,
         )
 
+    def test_email_listing_carries_the_decision_context(self):
+        """EXPLAIN-01: the card can tell the whole decision story."""
+        self.seed_email(A, 'context-mail')
+        application = create_app(
+            settings=self.settings,
+            model_factory=Mock(return_value=Mock(model_loaded=False, load_reason='missing_checkpoint')),
+            vector_factory=Mock(return_value=EmptyCollection()),
+            search_vector_factory=Mock(return_value=EmptyCollection()),
+        )
+        with TestClient(application, base_url='http://localhost') as client:
+            client.headers['Origin'] = ORIGIN
+            client.headers['X-CSRF-Token'] = client.post('/session').json()['csrf_token']
+            manager = application.state.accounts
+            context, _ = manager.session(client.cookies.get('mailmind_session'))
+            manager.finish_auth(manager.begin_auth(context), (A, '{}'))
+            listed = client.get('/emails').json()['emails']
+            single = client.get('/emails', params={'email_id': 'context-mail'}).json()['emails']
+        for email in (listed[0], single[0]):
+            decision = email['decision']
+            self.assertEqual((decision['decided_by'], decision['category'], decision['route']),
+                             ('model', 'IMPORTANT', 'local'))
+            self.assertIsNone(decision['second_opinion'])
+
     def test_due_soon_summary_is_distinct_from_overdue_and_closed_actions(self):
         for email_id in ('past', 'soon', 'later', 'closed'):
             self.seed_email(A, email_id)

@@ -1,7 +1,8 @@
 """Paused by default; durable steps replace Gmail unread status as the queue."""
 import time
 import schedule
-from .email_client import (refresh_gmail, get_unread_emails, get_new_emails,
+from .email_client import (refresh_gmail, GmailUnavailable, get_unread_emails, get_new_emails, get_messages_by_id,
+                           list_recent_inbox_ids,
                            get_gmail_history_id, mark_as_read, FetchBatch)
 from .llm_api import classify_email
 from .notifier import send_telegram_alert
@@ -14,7 +15,7 @@ from .account_state import AccountManager, WorkCancelled
 from .local_llm import DeferredMailMindModel, MailMindModel, predict_with_token_count
 from .retrieval_policy import load_policy
 from .vector_db import create_vector_collection, create_search_collection, VectorService
-from .feedback import reconcile_feedback, current_vector
+from .feedback import CurrentFeedback, reconcile_feedback, current_vector
 from .work_queue import (claim_cycle, fence, finish_cycle, ingest_email,
                          newest_due_tasks, excluded_messages,
                          record_ingestion_failure, reconcile_email_analysis,
@@ -28,6 +29,11 @@ _model_paths = None
 _collection = None
 _collection_path = None
 _FEEDBACK_RECONCILIATION_CALLS = BoundedCalls(1)
+# Safety-net sweep of recent INBOX mail (see _run_agent), per account.
+RECENT_SWEEP_SECONDS = 300
+FEEDBACK_RETRY_SECONDS = 300
+_LAST_FEEDBACK_RETRY = {}
+_LAST_RECENT_SWEEP = {}
 
 
 def shadow_evaluate_email(sender, subject, body, external_prediction, *,
@@ -73,9 +79,13 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
         # index on its own bounded worker so a stuck Chroma write cannot stop
         # Gmail ingestion or durable task processing.
         try:
+            # A few quick tries, then the stragglers again every 5 minutes.
+            slow_retry=time.monotonic()-_LAST_FEEDBACK_RETRY.get(context.account_id,-1e9)>=FEEDBACK_RETRY_SECONDS
+            if slow_retry:
+                _LAST_FEEDBACK_RETRY[context.account_id]=time.monotonic()
             _FEEDBACK_RECONCILIATION_CALLS.run(
                 lambda:reconcile_feedback(manager,context,collection_provider,
-                    max_attempts=config.max_processing_attempts),
+                    max_attempts=None if slow_retry else config.max_processing_attempts),
                 min(config.provider_timeout_seconds,2),
             )
         except WorkCancelled:
@@ -91,8 +101,12 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
                     service=refresh_gmail(manager,context)
             except WorkCancelled:
                 raise
-            except TimeoutError:
-                service=None
+            except (GmailUnavailable,TimeoutError) as unavailable:
+                # No internet or Gmail is down: stay connected, skip this cycle so
+                # emails don't spend their retries offline, and try again shortly.
+                error_code=getattr(unavailable,'code','network_unavailable')
+                log_event('gmail_unreachable')
+                return {'status':'offline','reason':error_code,'job_id':job_id}
             if service is None:
                 error_code='gmail_unavailable'
                 with manager.guard(context) as conn:
@@ -184,6 +198,56 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
                 with manager.guard(context) as conn:
                     fence(manager,context,token,conn)
                     save_live_ingestion_state(context.account_id,live,conn)
+            # Messages whose download or parse failed are not reached again by
+            # the history cursor, which has moved on. Fetch the due ones by ID;
+            # temporary failures keep retrying, permanent ones are quarantined.
+            if capacity:
+                with manager.guard(context) as conn:
+                    fence(manager,context,token,conn)
+                    retry_ids=[row[0] for row in conn.execute(
+                        """SELECT email_id FROM ingestion_failures
+                           WHERE account_id=? AND status='retry' AND next_retry_at<=?
+                           ORDER BY next_retry_at,email_id LIMIT ?""",
+                        (context.account_id,time.time(),min(config.batch_size,capacity)))]
+                if retry_ids:
+                    retried=get_messages_by_id(service,retry_ids,before_request=guard,
+                        budget_seconds=config.provider_timeout_seconds*2)
+                    for email in retried.emails:
+                        ingest_email(email,manager,context,token,source='live')
+                    for failure in retried.failures:
+                        record_ingestion_failure(failure,manager,context,token)
+                    excluded.update(email['id'] for email in retried.emails)
+                    pending_count+=len(retried.emails)
+                    capacity=max(0,config.max_pending_tasks-pending_count)
+            # Safety net: history sync is the fast path, but a cursor bug or a
+            # Gmail quirk must never lose mail silently. Every few minutes,
+            # compare recent INBOX IDs with saved mail and fetch what's missing.
+            now=time.monotonic()
+            if (capacity and not live.has_more and
+                    now-_LAST_RECENT_SWEEP.get(context.account_id,float('-inf'))>=RECENT_SWEEP_SECONDS):
+                _LAST_RECENT_SWEEP[context.account_id]=now
+                with cycle_external(manager,context,token):
+                    recent_ids=list_recent_inbox_ids(service,before_request=guard,
+                        budget_seconds=config.provider_timeout_seconds*2)
+                if recent_ids:
+                    with manager.guard(context) as conn:
+                        fence(manager,context,token,conn)
+                        candidates=[key for key in recent_ids if key not in excluded]
+                        saved={row[0] for row in conn.execute(
+                            'SELECT email_id FROM email_logs WHERE account_id=? AND email_id IN (%s)'
+                            % ','.join('?'*len(candidates)),(context.account_id,*candidates))} if candidates else set()
+                    missing=[key for key in candidates if key not in saved][:min(config.batch_size,capacity)]
+                    if missing:
+                        log_event('gmail_recent_sweep_recovered')
+                        recovered=get_messages_by_id(service,missing,before_request=guard,
+                            budget_seconds=config.provider_timeout_seconds*2)
+                        for email in recovered.emails:
+                            ingest_email(email,manager,context,token,source='live')
+                        for failure in recovered.failures:
+                            record_ingestion_failure(failure,manager,context,token)
+                        excluded.update(email['id'] for email in recovered.emails)
+                        pending_count+=len(recovered.emails)
+                        capacity=max(0,config.max_pending_tasks-pending_count)
             with manager.guard(context) as conn:
                 fence(manager,context,token,conn)
                 state=get_ingestion_state(context.account_id,conn)
@@ -224,7 +288,8 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
         if task_limit is not None and (type(task_limit) is not int or not 1 <= task_limit <= config.batch_size):
             raise ValueError('Invalid task limit')
         tasks=newest_due_tasks(manager,context,token,task_limit or config.batch_size)
-        if tasks and model is None:
+        # Normal mode with the shadow off needs no local model at all.
+        if tasks and model is None and (config.local_only or config.shadow_active):
             shadow_path = config.model_path if config.local_only else config.shadow_model_path
             paths=(shadow_path,config.data_dir,config.retrieval_policy_path,config.local_only,config.asset_manifest_path)
             with cycle_external(manager,context,token):
@@ -236,8 +301,24 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
                     _model_paths=paths
                 model=_model
         completed=0
+        index_key=(config.data_dir,config.local_only,config.asset_manifest_path)
+        # Classification looks up your corrections in the feedback index. Open it
+        # before the first email, not only when a new correction needs saving:
+        # otherwise, after every restart, lookups failed and corrections were
+        # silently ignored (FB-02). Bounded, so a slow Chroma start can't stall
+        # this cycle; the lookup then waits for the next one.
+        if tasks and collection is None and (_collection is None or _collection_path != index_key):
+            try:
+                _FEEDBACK_RECONCILIATION_CALLS.run(collection_provider,min(config.provider_timeout_seconds,2))
+            except WorkCancelled:
+                raise
+            except Exception as error:
+                log_event('feedback_index_unavailable',error=error)
         def cloud_collection_provider():
-            if _collection is None:
+            # Never opens Chroma inside an email's time budget (see above).
+            if collection is not None:
+                return collection
+            if _collection is None or _collection_path != index_key:
                 raise RuntimeError('retrieval_not_initialized')
             return _collection
         for task in tasks:
@@ -245,7 +326,8 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
             completed+=bool(process_task(task,manager,context,token,service,model,cloud_collection_provider,
                 classifier=classify_email,shadow=shadow_evaluate_email,notifier=send_telegram_alert,
                 marker=mark_as_read,logger=log_email_to_db,
-                validator=lambda metadata:current_vector(metadata,config.db_path),
+                # Validates retrieved corrections and finds their senders (your corrections win).
+                validator=CurrentFeedback(config.db_path,context.account_id),
                 job_id=job_id))
         reminder_result=None
         if config.action_reminders_enabled:

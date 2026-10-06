@@ -274,7 +274,8 @@ class Phase8WorkerTests(Phase8Base):
         self.assertEqual(tuple(backfill), ("complete", None))
         self.assertEqual(counts, {
             "email_analysis": 1,
-            "token_usage_events": 2,
+            # Only the cloud call is metered: the local shadow is off by default.
+            "token_usage_events": 1,
             "notification_outbox": 0,
             "action_reminders": 0,
         })

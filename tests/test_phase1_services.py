@@ -146,7 +146,8 @@ class ApiTests(unittest.TestCase):
         from api.app import create_app
         settings=Settings(data_dir=Path(self.temp.name),
                           model_path=Path(self.temp.name)/'legacy-binary',
-                          shadow_model_path=Path(self.temp.name)/'three-class-shadow')
+                          shadow_model_path=Path(self.temp.name)/'three-class-shadow',
+                          shadow_model_enabled=True)
         model=Mock(model_loaded=True,model_version='synthetic-three-class',
                    training_scope='private_user_approved_inbox',load_reason='ready')
         with patch('api.app.DeferredMailMindModel',return_value=model) as factory:

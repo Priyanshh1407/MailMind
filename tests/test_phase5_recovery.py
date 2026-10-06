@@ -276,13 +276,41 @@ class RecoveryTests(unittest.TestCase):
         self.run_cycle(delivery=Delivery('unknown','provider_timeout'))
         self.assertEqual(self.client.post('/tasks/synthetic-0/retry').status_code,409)
 
-    def test_notification_retries_are_bounded(self):
-        for _ in range(self.settings.max_processing_attempts):
+    def lookups_on_first_email(self, **cycle):
+        # A fresh worker process: nothing opened yet.
+        main._collection=None;main._collection_path=None
+        seen=[]
+        def cloud(*args,collection_provider=None,**kwargs):
+            try:seen.append(collection_provider())
+            except Exception as error:seen.append(error)
+            return Prediction(category='UPDATES',outcome='CLASSIFIED',source='gemini',model_version='v',elapsed_ms=1)
+        with patch.object(main,'refresh_gmail',return_value=self.service),patch.object(main,'classify_email',Mock(side_effect=cloud)):
+            main._run_agent(settings=self.settings,manager=self.manager,model=self.model,**cycle)
+        return seen
+
+    def test_first_email_after_a_restart_can_look_up_your_corrections(self):
+        # FB-02: the worker opened its feedback index only when it had a new
+        # correction to save, so after every restart the lookup raised
+        # 'retrieval_not_initialized' and your corrections were silently ignored.
+        opened=FakeCollection()
+        with patch.object(main,'create_vector_collection',return_value=opened):
+            self.assertEqual(self.lookups_on_first_email(),[opened])
+
+    def test_a_supplied_collection_is_used_for_the_lookup(self):
+        self.assertEqual(self.lookups_on_first_email(collection=self.collection),[self.collection])
+
+    def test_notification_retries_continue_until_telegram_recovers(self):
+        # RESILIENCE-C: a temporary Telegram failure retries past the old
+        # attempt limit, at most 5 minutes apart, until it is delivered.
+        for _ in range(self.settings.max_processing_attempts+3):
             self.due()
             self.run_cycle(delivery=Delivery('retry','notification_transient'))
-        self.assertEqual((self.task()['status'],self.outbox()['status']),('dead','dead'))
-        _,_,alert=self.run_cycle()
-        alert.assert_not_called()
+        self.assertEqual((self.task()['status'],self.outbox()['status']),('retry','retry'))
+        self.assertLessEqual(self.task()['next_retry_at']-time.time(),301)
+        self.due()
+        _,_,alert=self.run_cycle(delivery=Delivery('sent',message_id='m1'))
+        alert.assert_called_once()
+        self.assertEqual((self.task()['status'],self.outbox()['status']),('complete','sent'))
 
     def test_one_bad_classification_does_not_block_good_message(self):
         self.service=mailbox(2)
@@ -293,15 +321,24 @@ class RecoveryTests(unittest.TestCase):
             rows={row['email_id']:row['status'] for row in conn.execute('SELECT email_id,status FROM processing_tasks')}
         self.assertEqual(rows,{'synthetic-0':'complete','synthetic-1':'dead'})
 
-    def test_transient_classification_has_backoff_and_attempt_limit(self):
+    def test_transient_classification_keeps_retrying_with_capped_backoff(self):
+        # RESILIENCE-C: an AI outage never sends the email to Review; it waits
+        # (5 s, 10 s, ... at most 5 minutes) and finishes once the AI is back.
         cloud=Mock(return_value=Prediction(outcome='ERROR',reason='provider_transient'))
         self.run_cycle(classifier=cloud)
         self.assertGreater(self.task()['next_retry_at'],time.time())
-        for _ in range(2):
+        for _ in range(7):
             self.due()
             self.run_cycle(classifier=cloud)
-        self.assertEqual(self.task()['status'],'dead')
-        self.assertEqual(self.task()['attempt_count'],3)
+        self.assertEqual((self.task()['status'],self.task()['attempt_count']),('retry',8))
+        self.assertLessEqual(self.task()['next_retry_at']-time.time(),301)
+        self.due()
+        self.run_cycle(category='UPDATES')
+        self.assertEqual(self.task()['status'],'complete')
+
+    def test_permanent_classification_failure_still_goes_to_review_at_once(self):
+        self.run_cycle(classifier=Mock(return_value=Prediction(outcome='ERROR',reason='provider_auth')))
+        self.assertEqual((self.task()['status'],self.task()['attempt_count']),('dead',1))
 
     def test_dead_classification_can_be_explicitly_retried(self):
         self.run_cycle(classifier=Mock(return_value=Prediction(outcome='ERROR',reason='invalid_provider_output')))

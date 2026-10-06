@@ -109,7 +109,7 @@ def manual_prediction(model, subject, body, account_id, settings,
                       usage_operation=TokenOperation.MANUAL_PREDICTION.value,
                       sender='[MANUAL]', source_timestamp=None):
     """The /predict sandbox: borrow the cloud only while the local model loads."""
-    if not settings.local_only and getattr(model, 'load_reason', None) == 'model_loading':
+    if not settings.local_only and getattr(model, 'load_reason', None) in ('model_loading', 'shadow_disabled'):
         return _cloud_prediction(
             classifier, subject, body, account_id, settings, collection_provider,
             validator, sender=sender, source_timestamp=source_timestamp,

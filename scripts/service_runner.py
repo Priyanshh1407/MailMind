@@ -52,12 +52,17 @@ def run(service):
                 get_client()
             except Exception:
                 pass
+        from src.provider_policy import worker_wait
+        offline_streak=0
         while not stop.is_set():
             # Keep live inbox discovery responsive even when cloud/local
             # classification is slow. Durable tasks drain across later cycles.
-            try:_run_agent(settings=config,stop_event=stop,task_limit=2,newest_first=True)
+            status=None
+            try:status=(_run_agent(settings=config,stop_event=stop,task_limit=2,newest_first=True) or {}).get('status')
             except Exception as error:log_event('agent_cycle_failed',error=error)
-            stop.wait(config.poll_interval_seconds)
+            # While Gmail is unreachable, back off exponentially (5, 10, 20, 40, 60 s).
+            wait,offline_streak=worker_wait(status,offline_streak,poll_seconds=config.poll_interval_seconds)
+            stop.wait(wait)
     else:
         from src.account_state import AccountManager, WorkCancelled, AccessDenied
         from src.email_search import reconcile_search_index
@@ -82,7 +87,7 @@ def run(service):
             if context is not None:
                 try:
                     result=reconcile_search_index(manager,context,collection_provider,limit=10,
-                        max_attempts=config.max_processing_attempts,bounded=False,require_connected=True)
+                        bounded=False,require_connected=True)
                 except (WorkCancelled,AccessDenied):
                     pass
                 except Exception as error:

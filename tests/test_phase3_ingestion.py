@@ -468,6 +468,9 @@ class WorkerTests(unittest.TestCase):
         return result,cloud
 
     def test_late_urgent_text_reaches_cloud_local_storage_and_feedback(self):
+        # This checks the local shadow sees the whole text, so switch it on.
+        self.settings=replace(self.settings,shadow_model_enabled=True)
+        self.manager.settings=self.settings
         body='Intro. '*70+'URGENT interview tomorrow.'
         service=Mailbox({'synthetic-long':{'payload':leaf(body)}})
         result,cloud=self.run_cycle(service)

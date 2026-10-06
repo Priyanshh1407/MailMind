@@ -97,16 +97,19 @@ def hybrid_rank(lexical_ids, semantic_rows):
         semantic_order.get(identity, 10**9), identity))
 
 
-def reconcile_search_index(manager, context, collection_provider, limit=10, *, max_attempts=3,
+def reconcile_search_index(manager, context, collection_provider, limit=10, *,
                            embedding_provider=None, bounded=True, require_connected=True):
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
         raise ValueError('Search indexing limit must be between 1 and 50')
     with manager.guard(context, connected=require_connected) as conn:
         rows = conn.execute('''SELECT i.*,e.sender,e.subject,e.body FROM email_search_index i
             JOIN email_logs e USING(account_id,email_id)
-            WHERE i.account_id=? AND i.indexing_state!='indexed' AND i.attempt_count<?
+            WHERE i.account_id=? AND i.indexing_state!='indexed'
+              -- After a failure, wait 5 s, 10 s, 20 s ... up to 5 minutes, forever.
+              AND (i.attempt_count=0 OR (julianday('now')-julianday(i.updated_at))*86400
+                   >= MIN(300, 5*(1<<MIN(i.attempt_count-1,6))))
             ORDER BY i.updated_at,i.email_id LIMIT ?''',
-            (context.account_id,max_attempts,limit)).fetchall()
+            (context.account_id,limit)).fetchall()
     if not rows:
         return {'indexed': 0, 'failed': 0}
     documents = [_search_document(row['sender'], row['subject'], row['body']) for row in rows]

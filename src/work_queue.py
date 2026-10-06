@@ -110,7 +110,11 @@ def record_ingestion_failure(failure, manager, context, token):
         fence(manager,context,token,conn)
         row=conn.execute('SELECT attempt_count FROM ingestion_failures WHERE account_id=? AND email_id=?',(context.account_id,identity)).fetchone()
         count=(row['attempt_count'] if row else 0)+1
-        status='dead' if count >= manager.settings.max_processing_attempts else 'retry'
+        # A temporary download failure (network, Gmail 5xx/429) retries until
+        # Gmail answers. A deleted message or unparseable content gets a few
+        # tries, then is quarantined and shown in the dashboard.
+        permanent=failure['code']!='message_fetch_failed'
+        status='dead' if permanent and count >= manager.settings.max_processing_attempts else 'retry'
         conn.execute("""INSERT INTO ingestion_failures(account_id,email_id,attempt_count,status,next_retry_at,error_code,updated_at)
             VALUES (?,?,?,?,?,?,?) ON CONFLICT(account_id,email_id) DO UPDATE SET attempt_count=excluded.attempt_count,
             status=excluded.status,next_retry_at=excluded.next_retry_at,error_code=excluded.error_code,updated_at=excluded.updated_at""",
@@ -239,10 +243,12 @@ def attempt(conn, context, identity, stage, outcome, code=None):
     conn.execute('INSERT INTO processing_attempts(account_id,email_id,stage,outcome,error_code,created_at) VALUES (?,?,?,?,?,?)',(context.account_id,identity,stage,outcome,code,utc_timestamp()))
 
 
-def task_retry(conn, context, task, stage, code, *, retryable=True, delay=None, max_attempts=3):
+def task_retry(conn, context, task, stage, code, *, retryable=True, delay=None):
+    # Temporary failures retry until the provider recovers (backoff capped at
+    # 5 minutes). Only permanent ones stop, and they go to Review with the reason.
     row=conn.execute('SELECT attempt_count FROM processing_tasks WHERE account_id=? AND email_id=?',(context.account_id,task['email_id'])).fetchone()
     count=row[0]+1
-    status='retry' if retryable and count < max_attempts else 'dead'
+    status='retry' if retryable else 'dead'
     conn.execute('UPDATE processing_tasks SET status=?,stage=?,attempt_count=?,next_retry_at=?,error_code=?,owner_token=NULL,updated_at=? WHERE account_id=? AND email_id=?',
         (status,stage,count,time.time()+(delay if delay is not None else retry_delay(count)),code,utc_timestamp(),context.account_id,task['email_id']))
     if task.get('intelligence_backfill'):
@@ -352,14 +358,11 @@ def process_due_reminders(manager, context, token, notifier, *, limit=20,
             target=delivery_status
             next_retry=0
             if target=='retry':
-                if attempts>=manager.settings.max_processing_attempts:
-                    target='dead'
-                    error_code='reminder_retry_exhausted'
-                else:
-                    delay=(retry_after if isinstance(retry_after,(int,float))
-                           and 0<retry_after<=86400
-                           else retry_delay(attempts))
-                    next_retry=epoch+delay
+                # Keep retrying a temporary failure (backoff capped at 5 minutes).
+                delay=(retry_after if isinstance(retry_after,(int,float))
+                       and 0<retry_after<=86400
+                       else retry_delay(attempts))
+                next_retry=epoch+delay
             conn.execute(
                 """UPDATE action_reminders SET status=?,attempt_count=?,
                           owner_token=NULL,next_retry_at=?,error_code=?,

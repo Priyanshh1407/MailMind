@@ -86,21 +86,26 @@ def process_task(task, manager, context, token, service, model, collection_provi
                         usage_recorder=usage_recorder,
                     )
                 decision=ensure_prediction_analysis(decision)
-                try:
-                    local=run_local(
-                        lambda:shadow(
-                            task['sender'],task['subject'],task['body'],
-                            decision,account_id=context.account_id,model=model),
-                        model=model,subject=task['subject'],body=task['body'],
-                        timeout=20,recorder=usage_recorder,key='local-shadow',
-                        operation=TokenOperation.LOCAL_SHADOW.value,
-                        guard=guard)
-                except WorkCancelled:
-                    raise
-                except Exception:
-                    # The shadow is evaluation only; it can never fail the task.
+                if not config.shadow_active:
+                    # The comparison-only shadow is switched off (the default).
                     local=ensure_prediction_analysis(Prediction(
-                        outcome='ERROR',reason='shadow_inference_failed'))
+                        outcome='UNAVAILABLE',reason='shadow_disabled'))
+                else:
+                    try:
+                        local=run_local(
+                            lambda:shadow(
+                                task['sender'],task['subject'],task['body'],
+                                decision,account_id=context.account_id,model=model),
+                            model=model,subject=task['subject'],body=task['body'],
+                            timeout=20,recorder=usage_recorder,key='local-shadow',
+                            operation=TokenOperation.LOCAL_SHADOW.value,
+                            guard=guard)
+                    except WorkCancelled:
+                        raise
+                    except Exception:
+                        # The shadow is evaluation only; it can never fail the task.
+                        local=ensure_prediction_analysis(Prediction(
+                            outcome='ERROR',reason='shadow_inference_failed'))
             with manager.guard(context) as conn:
                 fence(manager,context,token,conn)
                 logger(identity,task['sender'],task['subject'],task['body'],decision,local,
@@ -152,7 +157,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
                 if decision.outcome != 'CLASSIFIED':
                     code=decision.reason or 'classification_unavailable'
                     retryable=code not in PERMANENT_CLASSIFICATION_FAILURES
-                    task_retry(conn,context,task,'classify',code,retryable=retryable,max_attempts=config.max_processing_attempts)
+                    task_retry(conn,context,task,'classify',code,retryable=retryable)
                     return False
                 if intelligence_backfill:
                     stamp=utc_timestamp()
@@ -187,7 +192,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
             failure=provider_failure(error)
             with manager.guard(context) as conn:
                 fence(manager,context,token,conn)
-                task_retry(conn,context,task,'classify',failure.code,retryable=failure.retryable,max_attempts=config.max_processing_attempts)
+                task_retry(conn,context,task,'classify',failure.code,retryable=failure.retryable)
             return False
     if stage == 'notify':
         if config.local_only:
@@ -199,7 +204,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
                     code='delivery_unknown' if ambiguous else 'notification_disabled_local_only'
                     if not ambiguous:
                         conn.execute("UPDATE notification_outbox SET status='blocked',error_code=? WHERE account_id=? AND email_id=?",(code,context.account_id,identity))
-                    task_retry(conn,context,task,'notify',code,retryable=False,max_attempts=config.max_processing_attempts)
+                    task_retry(conn,context,task,'notify',code,retryable=False)
                     return False
         with manager.guard(context) as conn:
             fence(manager,context,token,conn)
@@ -207,7 +212,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
             if outbox['status'] == 'sent':
                 stage='mark_read'
             elif outbox['status'] in ('unknown','sending'):
-                task_retry(conn,context,task,'notify','delivery_unknown',retryable=False,max_attempts=config.max_processing_attempts)
+                task_retry(conn,context,task,'notify','delivery_unknown',retryable=False)
                 return False
             elif outbox['next_retry_at'] > time.time():
                 conn.execute("UPDATE processing_tasks SET status='retry',next_retry_at=?,owner_token=NULL WHERE account_id=? AND email_id=?",(outbox['next_retry_at'],context.account_id,identity))
@@ -245,9 +250,9 @@ def process_task(task, manager, context, token, service, model, collection_provi
                 fence(manager,context,token,conn)
                 count=conn.execute('SELECT attempt_count FROM notification_outbox WHERE account_id=? AND email_id=?',(context.account_id,identity)).fetchone()[0]
                 delay=max(retry_delay(count),delivery.retry_after or 0)
+                # A temporary failure keeps retrying; 'unknown' (maybe sent) and
+                # 'blocked' (rejected) stop so an alert is never duplicated.
                 state=delivery.status
-                if state == 'retry' and count >= config.max_processing_attempts:
-                    state='dead'
                 stamp=utc_timestamp()
                 conn.execute('UPDATE notification_outbox SET status=?,error_code=?,provider_message_id=?,next_retry_at=?,updated_at=? WHERE account_id=? AND email_id=?',
                     (state,delivery.code,delivery.message_id,time.time()+delay,stamp,context.account_id,identity))
@@ -255,7 +260,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
                     (context.account_id,identity,'sent' if state == 'sent' else 'unknown' if state == 'unknown' else 'failed',count,stamp,stamp))
                 attempt(conn,context,identity,'notify',state,delivery.code)
                 if state != 'sent':
-                    task_retry(conn,context,task,'notify',delivery.code or 'delivery_failed',retryable=state in ('retry','blocked'),delay=delay,max_attempts=config.max_processing_attempts)
+                    task_retry(conn,context,task,'notify',delivery.code or 'delivery_failed',retryable=state=='retry',delay=delay)
                     return False
                 stage='mark_read'
                 conn.execute("UPDATE processing_tasks SET stage='mark_read',attempt_count=0,error_code=NULL WHERE account_id=? AND email_id=?",(context.account_id,identity))
@@ -271,7 +276,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
             with manager.guard(context) as conn:
                 fence(manager,context,token,conn)
                 if not success:
-                    task_retry(conn,context,task,'mark_read','mark_read_failed',max_attempts=config.max_processing_attempts)
+                    task_retry(conn,context,task,'mark_read','mark_read_failed')
                     return False
                 attempt(conn,context,identity,'mark_read','complete')
         with manager.guard(context) as conn:
