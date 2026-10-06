@@ -175,7 +175,9 @@ class SecurityTests(unittest.TestCase):
         credential=self.manager.credential_path(A)
         self.assertEqual(self.client.post('/logout').status_code,200)
         self.assertIsNone(self.manager.worker_context())
-        self.assertTrue(credential.exists())
+        # AUTH-03: the login is parked (kept 24 h for a silent reconnect), not in use.
+        self.assertFalse(credential.exists())
+        self.assertTrue(self.manager.parked_credential_path(A).exists())
         self.assertIsNotNone(get_email('same',account_id=A,db_path=self.settings.db_path))
         with self.assertRaises(WorkCancelled):
             with AccountManager(self.settings).guard(old):
@@ -248,8 +250,8 @@ class SecurityTests(unittest.TestCase):
         with connection(self.settings.db_path) as conn:
             self.assertIsNone(conn.execute("SELECT name FROM sqlite_master WHERE name='email_logs_legacy_v0'").fetchone())
 
-    def test_restart_revokes_sessions_and_pauses_without_deleting_data(self):
-        self.connect()
+    def test_restart_revokes_sessions_and_fences_old_work_but_keeps_google_connected(self):
+        before=self.connect()
         token=self.client.cookies.get('mailmind_session')
         self.seed(A)
         with connection(self.settings.db_path) as conn:
@@ -258,7 +260,14 @@ class SecurityTests(unittest.TestCase):
         self.manager.restart()
         with self.assertRaises(AccessDenied):
             self.manager.session(token)
-        self.assertIsNone(self.manager.worker_context())
+        # RESILIENCE-A: a restart no longer forces Connect Google again. Work from
+        # before the restart is still fenced out by the new generation.
+        after=self.manager.worker_context()
+        self.assertIsNotNone(after)
+        self.assertEqual((after.account_id,after.generation),(before.account_id,before.generation+1))
+        with self.assertRaises(WorkCancelled):
+            with self.manager.guard(before):
+                pass
         self.assertIsNotNone(get_email('same',account_id=A,db_path=self.settings.db_path))
         with connection(self.settings.db_path) as conn:
             health=conn.execute('SELECT last_error_at,last_error_code FROM worker_health WHERE account_id=?',(A,)).fetchone()
@@ -324,8 +333,11 @@ class SecurityTests(unittest.TestCase):
         creds=Mock(valid=False,expired=True,refresh_token='synthetic')
         with patch.object(email_client.Credentials,'from_authorized_user_file',return_value=creds), \
              patch.object(email_client.GMAIL_CREDENTIAL_CALLS,'run',side_effect=TimeoutError) as bounded, \
-             patch.object(email_client,'build_gmail') as build, self.assertLogs('mailmind',level='ERROR'):
-            self.assertIsNone(email_client.refresh_gmail(self.manager,context))
+             patch.object(email_client,'build_gmail') as build, self.assertLogs('mailmind',level='ERROR'), \
+             self.assertRaises(email_client.GmailUnavailable) as unavailable:
+            email_client.refresh_gmail(self.manager,context)
+        # A refresh that times out is a network problem, not a rejected login (NET-01).
+        self.assertEqual(unavailable.exception.code,'network_unavailable')
         bounded.assert_called_once()
         self.assertEqual(bounded.call_args.args[1],self.settings.provider_timeout_seconds)
         build.assert_not_called()

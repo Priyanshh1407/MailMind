@@ -9,6 +9,7 @@ import time
 
 from .config import LEGACY_ACCOUNT
 from .database import connection, utc_timestamp
+from .file_utils import replace_retrying
 from .vector_lock import vector_write_lock
 
 
@@ -30,6 +31,11 @@ class AccountContext:
     generation: int
     session_hash: str | None = None
     restore_connected: bool = False
+
+
+# After Disconnect or Sign out the saved Google login is "parked" for this
+# long, so Connect Google can renew it silently. Then it is deleted.
+PARKED_LOGIN_SECONDS = 24 * 3600
 
 
 class AccountManager:
@@ -59,10 +65,23 @@ class AccountManager:
             conn.execute("DELETE FROM local_sessions")
             # Transient health belongs to the previous process lifetime. Durable
             # worker_jobs still retain its audited failures for troubleshooting.
-            conn.execute("UPDATE worker_health SET last_error_at=NULL,last_error_code=NULL WHERE account_id=(SELECT account_id FROM runtime_state WHERE singleton=1)")
-            conn.execute("""UPDATE runtime_state SET generation=generation+1,connected=0,
-                auth_in_progress=0,is_polling=0,last_error_at=NULL,last_error_code=NULL""")
+            # A rejected sign-in is kept: it still needs renewing after the restart
+            # (and keeps saved mail readable meanwhile).
+            state = self.state(conn)
+            conn.execute("""UPDATE worker_health SET last_error_at=NULL,last_error_code=NULL
+                WHERE account_id=(SELECT account_id FROM runtime_state WHERE singleton=1)
+                AND NOT (? = 0 AND last_error_code IS 'gmail_unavailable')""", (int(state['connected']),))
+            # Stay connected across a restart (crash or manual) when the saved
+            # Google login still exists, so work resumes without Connect Google.
+            # The new generation still fences out anything from the old process.
+            keep = bool(state['connected'] and not state['purge_pending']
+                        and not state['auth_in_progress']
+                        and state['account_id'] and state['account_id'] != LEGACY_ACCOUNT
+                        and self.credential_path(state['account_id']).exists())
+            conn.execute("""UPDATE runtime_state SET generation=generation+1,connected=?,
+                auth_in_progress=0,is_polling=0,last_error_at=NULL,last_error_code=NULL""", (int(keep),))
             self._cancel(conn)
+        self.expire_parked_logins()
 
     def open_session(self):
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
@@ -101,9 +120,28 @@ class AccountManager:
                 row = conn.execute("SELECT expires_at FROM local_sessions WHERE token_hash=? AND generation=?", (context.session_hash, context.generation)).fetchone()
                 if not row or row[0] <= time.time():
                     raise AccessDenied()
-            if connected and (not state['connected'] or state['purge_pending'] or state['auth_in_progress']):
+            if connected == 'read':
+                # Reads also work while Google sign-in needs renewing.
+                if not self._active(state) and not self.read_only(conn, state):
+                    raise WorkCancelled()
+            elif connected and not self._active(state):
                 raise WorkCancelled()
             yield conn
+
+    @staticmethod
+    def _active(state):
+        return bool(state['connected'] and not state['purge_pending'] and not state['auth_in_progress'])
+
+    def read_only(self, conn, state=None):
+        """True while Google rejected the saved sign-in: saved mail stays
+        readable, but nothing is written and Gmail is not contacted."""
+        state = state or self.state(conn)
+        if (state['connected'] or state['auth_in_progress'] or state['purge_pending']
+                or not state['account_id'] or state['account_id'] == LEGACY_ACCOUNT):
+            return False
+        row = conn.execute('SELECT last_error_code FROM worker_health WHERE account_id=?',
+                           (state['account_id'],)).fetchone()
+        return bool(row and row['last_error_code'] == 'gmail_unavailable')
 
     def worker_context(self):
         with self.transaction() as conn:
@@ -151,6 +189,7 @@ class AccountManager:
 
     def logout(self, context):
         self._transition(context, keep_session=False)
+        self._park_login(context.account_id)
 
     def pause(self, context):
         # A background credential failure pauses Google work without signing
@@ -159,6 +198,39 @@ class AccountManager:
             conn.execute('UPDATE runtime_state SET generation=generation+1,connected=0,is_polling=0')
             conn.execute('UPDATE local_sessions SET generation=generation+1')
             self._cancel(conn)
+
+    def parked_credential_path(self, account_id):
+        return self.credential_path(account_id).with_name(self.digest(account_id) + '.parked.json')
+
+    def _park_login(self, account_id):
+        """Stop using the saved login but keep it for a silent reconnect."""
+        if not account_id or account_id == LEGACY_ACCOUNT:
+            return
+        live, parked = self.credential_path(account_id), self.parked_credential_path(account_id)
+        if live.exists():
+            replace_retrying(live, parked)
+            os.utime(parked, None)   # the 24 h start now, not at the last token write
+
+    def expire_parked_logins(self, now=None):
+        folder = self.settings.data_dir / 'oauth'
+        now = time.time() if now is None else now
+        for path in folder.glob('*.parked.json') if folder.exists() else ():
+            try:
+                if now - path.stat().st_mtime >= PARKED_LOGIN_SECONDS:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def saved_login(self, account_id):
+        """A login Connect Google may renew silently: parked (under 24 h old)
+        or still in place after a pause. None means Google's page is needed."""
+        if not account_id or account_id == LEGACY_ACCOUNT:
+            return None
+        self.expire_parked_logins()
+        for path in (self.parked_credential_path(account_id), self.credential_path(account_id)):
+            if path.exists():
+                return path
+        return None
 
     def credential_path(self, account_id):
         if not account_id or account_id == LEGACY_ACCOUNT:
@@ -173,15 +245,19 @@ class AccountManager:
             descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
                 stream.write(value)
-            os.replace(temporary, path)
+            replace_retrying(temporary, path)
         finally:
             temporary.unlink(missing_ok=True)
 
     def disconnect(self, context):
         context = self._transition(context)
-        with self.guard(context, connected=False):
+        with self.guard(context, connected=False) as conn:
             if context.account_id:
-                self.credential_path(context.account_id).unlink(missing_ok=True)
+                # Kept 24 h for a silent reconnect; never used while disconnected.
+                self._park_login(context.account_id)
+                # A deliberate disconnect is not a rejected login.
+                conn.execute('UPDATE worker_health SET last_error_at=NULL,last_error_code=NULL WHERE account_id=?',
+                             (context.account_id,))
         return context
 
     def begin_auth(self, context):
@@ -202,6 +278,10 @@ class AccountManager:
             self.write_credentials(new_context, credential_json)
             conn.execute("INSERT INTO accounts(account_id) VALUES (?) ON CONFLICT DO NOTHING", (account_id,))
             conn.execute("UPDATE runtime_state SET account_id=?,connected=1,auth_in_progress=0", (account_id,))
+            self.parked_credential_path(account_id).unlink(missing_ok=True)
+            # The new sign-in resolves any earlier rejected-login error.
+            conn.execute('UPDATE worker_health SET last_error_at=NULL,last_error_code=NULL WHERE account_id=?',
+                         (account_id,))
             return new_context
 
     def fail_auth(self, context):
@@ -241,6 +321,7 @@ class AccountManager:
                 'DELETE FROM intelligence_backfill_items WHERE account_id=?',
                 (context.account_id,))
             self.credential_path(context.account_id).unlink(missing_ok=True)
+            self.parked_credential_path(context.account_id).unlink(missing_ok=True)
             conn.execute("UPDATE runtime_state SET purge_pending=0")
         return context
 

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from src.background_jobs import BackgroundJobs
 from src.database import utc_timestamp
 from src.work_queue import enqueue_cycle
-from src.provider_policy import SEARCH_CALLS
+from src.provider_policy import SEARCH_CALLS, UNREACHABLE_CODES, offline_retry_delay
 from typing import Literal
 from fastapi import FastAPI, Request, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,9 +33,9 @@ from src.logging_utils import log_event
 from src.privacy import provider_email_text
 from src import vector_db
 from src.prediction import Category, Prediction
-from src.email_analysis import ensure_prediction_analysis, save_analysis_result
+from src.email_analysis import decision_context, ensure_prediction_analysis, save_analysis_result
 from src.retrieval_policy import load_policy
-from src.feedback import reconcile_feedback, current_vector
+from src.feedback import CurrentFeedback, reconcile_feedback, current_vector
 from src.email_search import (MIN_SEMANTIC_QUERY, SEARCH_QUERY_TIMEOUT_SECONDS,
                               semantic_candidates, hybrid_rank)
 from src.vector_lock import vector_write_lock
@@ -123,13 +123,33 @@ class IntelligenceBackfillRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=100)
 
 
+# The dashboard loads older mail automatically, one page at a time, so each
+# authorization stays small and never floods the classification queue.
+OLDER_MAIL_BATCH = 20
+
+
+class FetchNextRequest(BaseModel):
+    limit: int = Field(default=OLDER_MAIL_BATCH, ge=1, le=100)
+
+
 class LegacyDeleteRequest(BaseModel):
     confirmation: Literal['DELETE_UNASSIGNED_DATA']
 
 
+class ShadowDisabled:
+    """Stands in for the local model when the normal-mode shadow is switched off."""
+    model_loaded = False
+    load_reason = 'shadow_disabled'
+    model_version = None
+    training_scope = None
+
+    def close(self):
+        pass
+
+
 def create_app(*, settings=None, model_factory=MailMindModel,
                vector_factory=vector_db.create_vector_collection, search_vector_factory=None,
-               oauth_factory=None):
+               oauth_factory=None, silent_login=None):
     vector_lock, auth_lock = Lock(), Lock()
 
     @asynccontextmanager
@@ -148,7 +168,10 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                              'vector_service': vector_db.VectorService(collection, lambda metadata: current_vector(metadata, config.db_path),policy=load_policy(config.retrieval_policy_path))}
             if model_factory is MailMindModel:
                 model_options['settings'] = config
-            if model_factory is MailMindModel and not config.local_only:
+            if model_factory is MailMindModel and not config.local_only and not config.shadow_active:
+                # The comparison-only shadow is off (the default): no PyTorch process.
+                application.state.model = ShadowDisabled()
+            elif model_factory is MailMindModel and not config.local_only:
                 # Normal mode evaluates the trained three-class checkpoint in
                 # shadow mode. The legacy binary checkpoint cannot represent
                 # UPDATES and must never be advertised as the active model.
@@ -215,6 +238,14 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 application.state.search_collection = factory(application.state.settings.data_dir / 'search_chroma_db',**options)
             return application.state.search_collection
 
+    def with_decisions(rows):
+        # "Why this category?" tells the whole decision, built from what was
+        # saved with it; shown under the same switch as explanations.
+        if application.state.settings.explanations_visible:
+            for row in rows:
+                row['decision']=decision_context(row,application.state.settings.gemini_models)
+        return rows
+
     def allowed_origin(request):
         if request.headers.get('origin') not in application.state.settings.frontend_origins:
             raise HTTPException(403, 'Use the local MailMind page for this action.')
@@ -246,7 +277,9 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         with application.state.accounts.guard(context, connected=False) as conn:
             state = application.state.accounts.state(conn)
             return {'csrf_token': csrf, 'email': state['account_id'], 'connected': bool(state['connected']),
-                    'purge_pending': bool(state['purge_pending']), 'generation': state['generation']}
+                    'purge_pending': bool(state['purge_pending']), 'generation': state['generation'],
+                    # Google sign-in needs renewing: saved mail can be read, not changed.
+                    'read_only': application.state.accounts.read_only(conn, state)}
 
     @application.get('/emails')
     def emails(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0, le=1000000),
@@ -254,7 +287,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                email_id: str | None = Query(None, min_length=1, max_length=256),
                context=Depends(session)):
         if email_id is not None:
-            with application.state.accounts.guard(context) as conn:
+            with application.state.accounts.guard(context, connected='read') as conn:
                 exists = get_email(
                     email_id, account_id=context.account_id, db_conn=conn)
                 index_counts = {
@@ -262,11 +295,11 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                         'SELECT indexing_state,COUNT(*) AS count FROM email_search_index WHERE account_id=? GROUP BY indexing_state',
                         (context.account_id,))
                 }
-                rows = get_recent_emails(
+                rows = with_decisions(get_recent_emails(
                     limit, account_id=context.account_id, db_conn=conn,
                     offset=offset, ranked_ids=[email_id] if exists else [],
                     include_analysis=application.state.settings.explanations_visible,
-                )
+                ))
             total = 1 if exists else 0
             return {
                 'emails': rows, 'total': total, 'limit': limit,
@@ -282,7 +315,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         query=search.strip()
         search_mode='text'
         semantic_available=False
-        with application.state.accounts.guard(context) as conn:
+        with application.state.accounts.guard(context, connected='read') as conn:
             lexical=lexical_search_ids(context.account_id,conn,query,category) if len(query) >= MIN_SEMANTIC_QUERY else None
             index_counts={row['indexing_state']:row['count'] for row in conn.execute(
                 'SELECT indexing_state,COUNT(*) AS count FROM email_search_index WHERE account_id=? GROUP BY indexing_state',
@@ -342,7 +375,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                         measurement=query_measurement,
                     )
                 log_event('semantic_search_fallback',error=error)
-        with application.state.accounts.guard(context) as conn:
+        with application.state.accounts.guard(context, connected='read') as conn:
             if lexical is not None:
                 allowed_semantic=filter_ranked_ids(context.account_id,conn,
                     [identity for identity,_distance in semantic],category)
@@ -355,11 +388,11 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 context.account_id,conn,search=query,category=category)
             if semantic:
                 search_mode='hybrid'
-            rows=get_recent_emails(
+            rows=with_decisions(get_recent_emails(
                 limit,account_id=context.account_id,db_conn=conn,offset=offset,
                 search=query,category=category,ranked_ids=ranked_ids,
                 include_analysis=application.state.settings.explanations_visible,
-            )
+            ))
         return {'emails':rows,'total':total,'limit':limit,'offset':offset,'has_more':offset+limit<total,
                 'status':'success','account_id':context.account_id,'generation':context.generation,
                 'search_mode':search_mode,'semantic_available':semantic_available,
@@ -367,7 +400,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
 
     @application.get('/emails/{email_id}/history')
     def email_history(email_id: str, context=Depends(session)):
-        with application.state.accounts.guard(context) as conn:
+        with application.state.accounts.guard(context, connected='read') as conn:
             if not get_email(email_id,account_id=context.account_id,db_conn=conn):
                 raise HTTPException(404,'This email does not belong to the connected account.')
             response={'account_id':context.account_id,'generation':context.generation,
@@ -420,7 +453,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             version=getattr(model,'model_version',None)
             return {'account_id':context.account_id,'generation':context.generation,'totals':totals,
                     'classification_timing':{'mean_ms':sum(samples)/len(samples) if samples else None,'sample_count':len(samples),'window':'latest_50_attempts'},
-                    'local_model':{'ready':bool(model.model_loaded),'status':'ready' if model.model_loaded else 'loading' if getattr(model,'load_reason',None) == 'model_loading' else 'unavailable',
+                    'local_model':{'ready':bool(model.model_loaded),'status':'ready' if model.model_loaded else 'off' if getattr(model,'load_reason',None) == 'shadow_disabled' else 'loading' if getattr(model,'load_reason',None) == 'model_loading' else 'unavailable',
                                    'version':version if isinstance(version,str) else None,
                                    'evaluation_scope':getattr(model,'training_scope',None) if isinstance(getattr(model,'training_scope',None),str) else None},
                     'mode':{'local_only':application.state.settings.local_only,'external_notifications':'disabled' if application.state.settings.local_only else 'configured_unverified','gmail':'disabled' if application.state.settings.local_only else 'network_required'},
@@ -443,8 +476,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 result = manual_prediction(
                     application.state.model, payload.subject, payload.body,
                     context.account_id, application.state.settings, collection,
-                    lambda metadata: current_vector(
-                        metadata, application.state.settings.db_path),
+                    CurrentFeedback(application.state.settings.db_path, context.account_id),
                     usage_recorder=usage_recorder,
                 )
             except TimeoutError:
@@ -497,7 +529,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             context=Depends(session)):
         require_actions()
         try:
-            with application.state.accounts.guard(context) as conn:
+            with application.state.accounts.guard(context, connected='read') as conn:
                 rows=list_actions(
                     context.account_id,status=status,due_from=due_from,
                     due_to=due_to,email_id=email_id,action_type=action_type,limit=limit,
@@ -516,7 +548,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     @application.get('/actions/summary')
     def actions_summary(context=Depends(session)):
         require_actions()
-        with application.state.accounts.guard(context) as conn:
+        with application.state.accounts.guard(context, connected='read') as conn:
             result=action_summary(context.account_id,db_conn=conn)
         return {
             'account_id':context.account_id,
@@ -641,8 +673,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 result=authoritative_prediction(
                     application.state.model,stored['subject'],stored['body'],
                     context.account_id,config,collection,
-                    lambda metadata:current_vector(
-                        metadata,config.db_path),
+                    CurrentFeedback(config.db_path,context.account_id),
                     usage_recorder=recorder,
                     usage_operation=TokenOperation.ACTION_REANALYSIS.value,
                     sender=stored['sender'],
@@ -658,7 +689,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         # Like the worker, keep a shadow comparison beside the cloud decision.
         # The shadow is bounded and cannot fail or change the saved result.
         shadow=Prediction()
-        if not config.local_only:
+        if config.shadow_active:
             with application.state.accounts.external(context):
                 shadow=shadow_prediction(
                     application.state.model,stored['subject'],stored['body'],
@@ -735,7 +766,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             context=Depends(session)):
         if not application.state.settings.token_analytics_visible:
             raise HTTPException(404, 'Token analytics are disabled.')
-        with application.state.accounts.guard(context) as conn:
+        with application.state.accounts.guard(context, connected='read') as conn:
             result=aggregate_token_usage(
                 context.account_id, window=window,
                 timezone_name=application.state.settings.default_timezone,
@@ -862,7 +893,10 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 (context.account_id,))}
             backlog_pending=pending_by_source.get('backlog',0)
             live_pending=pending_by_source.get('live',0)
-            batch_target=application.state.settings.max_pending_tasks
+            # The first sign-in admits up to max_pending_tasks; after that, older
+            # mail is loaded automatically one page (OLDER_MAIL_BATCH) at a time.
+            batch_target=(OLDER_MAIL_BATCH if ingestion and ingestion['initial_batch_complete']
+                          else application.state.settings.max_pending_tasks)
             batch_remaining=min(batch_target,ingestion['backlog_remaining']) if ingestion else batch_target
             batch_admitted=max(0,batch_target-batch_remaining)
             workflow_total=sum(processing_counts.values())
@@ -873,7 +907,26 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                                       and ingestion['has_more']
                                       and not ingestion['backlog_authorized']
                                       and backlog_pending == 0)
+            # How long Gmail has been unreachable, and when the worker checks again
+            # (same backoff as the worker: 5, 10, 20, 40, then 60 s).
+            recent_codes=[row[0] for row in conn.execute(
+                'SELECT error_code FROM worker_jobs WHERE account_id=? ORDER BY job_id DESC LIMIT 30',
+                (context.account_id,))]
+            failed_checks=0
+            for code in recent_codes:
+                if code not in UNREACHABLE_CODES:
+                    break
+                failed_checks+=1
+            retry_in=None
+            health_row=conn.execute('SELECT last_error_at FROM worker_health WHERE account_id=?',
+                                    (context.account_id,)).fetchone()
+            if failed_checks and health_row and health_row['last_error_at']:
+                last=datetime.fromisoformat(health_row['last_error_at'].replace('Z','+00:00')).timestamp()
+                retry_in=max(0,math.ceil(last+offline_retry_delay(failed_checks)-time.time()))
+            connectivity={'gmail':'unreachable' if failed_checks else 'ok',
+                          'failed_checks':failed_checks,'retry_in_seconds':retry_in}
             return {**{key: bool(state[key]) for key in ('connected', 'is_polling', 'auth_in_progress', 'purge_pending')},
+                    'connectivity':connectivity,
                     'generation': state['generation'], 'account_id':context.account_id, 'ingestion':ingestion,
                     'ingestion_paused':ingestion_paused,
                     'active_pending_tasks':active_pending,
@@ -908,14 +961,14 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     @application.post('/logout')
     def logout(context=Depends(session)):
         application.state.accounts.logout(context)
-        response = JSONResponse({'message': 'Signed out. Processing stopped. Saved mail and Google credentials are kept.'})
+        response = JSONResponse({'message': 'Signed out. Processing stopped. Saved mail is kept; your Google sign-in is kept for 24 hours so reconnecting needs no Google page.'})
         response.delete_cookie(COOKIE, path='/')
         return response
 
     @application.post('/disconnect')
     def disconnect(context=Depends(session)):
         application.state.accounts.disconnect(context)
-        return {'message': 'Processing stopped. Local Google credentials removed. Saved mail is kept. Google permission is not revoked.'}
+        return {'message': 'Processing stopped. Saved mail is kept. Your Google sign-in is kept for 24 hours (unused) so Connect Google can reconnect silently, then deleted. Google permission is not revoked.'}
 
     @application.delete('/account-data')
     def purge(context=Depends(session)):
@@ -960,7 +1013,8 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 'message':'Checking Gmail for new messages. New mail will receive live priority.'}
 
     @application.post('/ingestion/fetch-next',status_code=202)
-    def fetch_next_backlog(context=Depends(session)):
+    def fetch_next_backlog(payload: FetchNextRequest | None = None, context=Depends(session)):
+        limit=(payload or FetchNextRequest()).limit
         settings=application.state.settings
         if settings.local_only:
             raise HTTPException(403,'Gmail inbox extraction is disabled in local-only mode.')
@@ -976,13 +1030,13 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 """SELECT COUNT(*) FROM processing_tasks WHERE account_id=? AND source='backlog'
                    AND status IN ('queued','retry','running')""",(context.account_id,)).fetchone()[0]
             if pending:
-                raise HTTPException(409,'Finish the current backlog batch before fetching the next 100.')
+                raise HTTPException(409,'Older messages are still being processed. More will load next.')
             conn.execute("""UPDATE ingestion_state SET backlog_authorized=1,
                 backlog_remaining=?,status='empty' WHERE account_id=?""",
-                (settings.max_pending_tasks,context.account_id))
+                (min(limit,settings.max_pending_tasks),context.account_id))
         job_id=enqueue_cycle(application.state.accounts,context)
         return {'job_id':job_id,'status':'queued',
-                'message':'The next 100 older messages are authorized. New live mail still has priority.'}
+                'message':f'Loading the next {limit} older messages. New live mail still has priority.'}
 
     @application.get('/jobs/{job_id}')
     def job(job_id: str,context=Depends(session)):
@@ -1054,14 +1108,27 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         with manager.guard(attempt,connected=False) as conn:
             stamp=utc_timestamp()
             conn.execute("INSERT INTO auth_jobs(job_id,generation,session_hash,status,created_at,updated_at) VALUES (?,?,?,'running',?,?)",(job_id,attempt.generation,attempt.session_hash,stamp,stamp))
+        # Reconnecting (not switching accounts): try the saved login silently first.
+        saved=None if attempt.restore_connected else manager.saved_login(attempt.account_id)
         def finish_sign_in():
             try:
-                with manager.external(attempt,connected=False):
-                    if oauth_factory is None:
-                        from src.email_client import authenticate_gmail
-                        candidate=authenticate_gmail()
-                    else:
-                        candidate=oauth_factory()
+                candidate=None
+                if saved is not None:
+                    with manager.external(attempt,connected=False):
+                        if silent_login is None:
+                            from src.email_client import renew_saved_login
+                            candidate=renew_saved_login(saved,attempt.account_id,
+                                                        timeout=application.state.settings.provider_timeout_seconds)
+                        else:
+                            candidate=silent_login(saved,attempt.account_id)
+                if candidate is None:
+                    # No saved login, or Google refused it: open Google's sign-in page.
+                    with manager.external(attempt,connected=False):
+                        if oauth_factory is None:
+                            from src.email_client import authenticate_gmail
+                            candidate=authenticate_gmail()
+                        else:
+                            candidate=oauth_factory()
                 if candidate is None:
                     raise ValueError('Sign-in did not complete')
                 connected=manager.finish_auth(attempt,candidate)
@@ -1079,7 +1146,9 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 except (WorkCancelled,AccessDenied):
                     pass
         application.state.auth_futures[job_id]=application.state.auth_executor.submit(finish_sign_in)
-        return {'job_id':job_id,'status':'running','message':'Google sign-in started. Finish it in the browser. Inbox work runs separately.'}
+        message=('Reconnecting with your saved Google sign-in. If Google asks, finish it in the browser.'
+                 if saved is not None else 'Google sign-in started. Finish it in the browser. Inbox work runs separately.')
+        return {'job_id':job_id,'status':'running','message':message}
 
     origins = (settings or Settings()).frontend_origins
     application.add_middleware(CORSMiddleware, allow_origins=list(origins), allow_credentials=True,
