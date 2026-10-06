@@ -5,11 +5,20 @@ from pathlib import Path
 from urllib.request import Request,urlopen
 import psutil
 
+from src.file_utils import replace_retrying
+
 ROOT=Path(__file__).resolve().parents[1]
 INDEXER_READY_TIMEOUT_SECONDS=180
-RECOVERABLE_SERVICES=frozenset({'indexer','worker','frontend'})
-SERVICE_RESTART_LIMIT=3
-SERVICE_RESTART_WINDOW_SECONDS=60
+# Every owned service is restarted when it exits, with backoff, forever. Only a
+# startup crash loop (CRASH_LOOP_LIMIT crashes in a row, each within
+# FAST_EXIT_SECONDS of starting) is treated as impossible to recover: the user
+# is warned, restarts continue for SHUTDOWN_GRACE_SECONDS, and only then does
+# the supervisor stop.
+RECOVERABLE_SERVICES=frozenset({'indexer','api','worker','frontend'})
+FAST_EXIT_SECONDS=10
+CRASH_LOOP_LIMIT=5
+SHUTDOWN_GRACE_SECONDS=60
+RESTART_DELAY_CAP_SECONDS=60
 
 
 def check_ports(ports=(8000,5173)):
@@ -76,19 +85,144 @@ def wait_log_ready(process,path,marker,timeout=60):
     raise RuntimeError('Service readiness timed out; dependent services were not started')
 
 
-def restart_times_within_window(history, now):
-    recent=[stamp for stamp in history if now-stamp <= SERVICE_RESTART_WINDOW_SECONDS]
-    if len(recent) >= SERVICE_RESTART_LIMIT:
-        return None
-    return [*recent,now]
+def restart_delay(attempt):
+    """Seconds before restarting a service: 1, 2, 4, 8, 16, 32, then 60."""
+    return min(RESTART_DELAY_CAP_SECONDS, 2 ** max(0, attempt - 1))
 
 
-def exited_service(services):
-    for name,service in services.items():
-        code=service['process'].poll()
-        if code is not None:
-            return name,service,code
-    return None
+class ServiceWatch:
+    """Restart bookkeeping for one owned service (no processes in here)."""
+
+    def __init__(self, name, *, now):
+        self.name = name
+        self.started_at = now
+        self.fast_failures = 0      # crashes in a row, each soon after starting
+        self.restarts = 0
+        self.restart_at = None      # when the next restart is due, if waiting
+        self.last_exit_code = None
+
+    def exited(self, *, now, code):
+        self.fast_failures = self.fast_failures + 1 if now - self.started_at < FAST_EXIT_SECONDS else 0
+        self.restarts += 1
+        self.last_exit_code = code
+        self.restart_at = now + restart_delay(max(1, self.fast_failures))
+
+    def started(self, *, now):
+        self.started_at = now
+        self.restart_at = None
+
+    def check_stable(self, *, now):
+        """Running for FAST_EXIT_SECONDS proves the service recovered."""
+        if self.restart_at is None and now - self.started_at >= FAST_EXIT_SECONDS:
+            self.fast_failures = 0
+
+    @property
+    def crash_loop(self):
+        return self.fast_failures >= CRASH_LOOP_LIMIT
+
+    def state(self):
+        if self.crash_loop:
+            return 'crash_loop'
+        return 'restarting' if self.restart_at is not None else 'running'
+
+
+def shutdown_plan(watches, *, now, deadline):
+    """(shutdown deadline, message): warn first, stop only if nothing recovers."""
+    looping = [watch for watch in watches if watch.crash_loop]
+    if not looping:
+        return None, None
+    watch = looping[0]
+    message = (f"MailMind's {watch.name} keeps failing right after it starts "
+               f'(exit code {watch.last_exit_code}, {watch.fast_failures} times in a row). '
+               f'It keeps retrying; if it does not recover, MailMind will shut down. '
+               f'See .run/{watch.name}.log.')
+    return (deadline if deadline is not None else now + SHUTDOWN_GRACE_SECONDS), message
+
+
+_LAST_STATUS = {}
+
+
+def write_status(path, watches, *, now, deadline, message):
+    """Service states for the dashboard; never contains the stop token.
+
+    Best effort, never raises: returns False when the file could not be
+    updated. On Windows the rename fails with "Access is denied" while the
+    dashboard server or antivirus has the file open, so it retries briefly,
+    and it only rewrites the file when the content changed."""
+    payload = {
+        'schema': 1,
+        'services': {watch.name: {
+            'state': watch.state(),
+            'restarts': watch.restarts,
+            'last_exit_code': watch.last_exit_code,
+            'retry_in_seconds': None if watch.restart_at is None else max(0, round(watch.restart_at - now)),
+        } for watch in watches},
+        'shutdown_in_seconds': None if deadline is None else max(0, round(deadline - now)),
+        'message': message,
+    }
+    path = Path(path)
+    text = json.dumps(payload)
+    if _LAST_STATUS.get(str(path)) == text and path.exists():
+        return True
+    temporary = path.with_suffix('.tmp')
+    try:
+        temporary.write_text(text, encoding='utf-8')
+        replace_retrying(temporary, path)
+    except OSError:
+        return False   # still locked: the next update tries again
+    _LAST_STATUS[str(path)] = text
+    return True
+
+
+def supervise(services, spawn, status_path, *, stop, clock=time.monotonic, say=None):
+    """Keep every owned service running until stop(seconds) returns True.
+
+    An exited service is restarted after its backoff. A startup crash loop
+    gets a warning (terminal and dashboard) and a grace period; only if it
+    never recovers does this raise, which shuts MailMind down."""
+    say=say or (lambda text:print(text,flush=True))
+    now=clock()
+    watches={name:ServiceWatch(name,now=now) for name in services}
+    deadline=None;warned=None;status_failed=False
+    def publish(**state):
+        # The dashboard's status file must never be able to stop MailMind.
+        nonlocal status_failed
+        written=write_status(status_path,watches.values(),now=now,**state)
+        if not written and not status_failed:
+            say(json.dumps({'event':'status_file_unavailable','detail':'status file locked; will retry next update'}))
+        status_failed=not written
+    publish(deadline=None,message=None)
+    while not stop(.25):
+        now=clock()
+        for name,watch in watches.items():
+            service=services[name]
+            if watch.restart_at is not None:
+                # Waiting out the backoff, then start it again.
+                if now>=watch.restart_at:
+                    spawn(name,service['command'],append=True)
+                    watch.started(now=now)
+                    say(json.dumps({'event':'owned_service_restarted','service':name,'restarts':watch.restarts}))
+                continue
+            code=service['process'].poll()
+            if code is None:
+                watch.check_stable(now=now)
+                continue
+            service['log'].close()
+            watch.exited(now=now,code=code)
+            say(json.dumps({'event':'owned_service_exited','service':name,'exit_code':code,
+                            'fast_failures':watch.fast_failures,
+                            'restart_in_seconds':round(watch.restart_at-now)}))
+        deadline,message=shutdown_plan(watches.values(),now=now,deadline=deadline)
+        if message and message!=warned:
+            # Inform first: the dashboard shows this too, with the countdown.
+            say('WARNING: '+message+f' Shutting down in {round(deadline-now)} s unless it recovers.')
+            warned=message
+        elif warned and not message:
+            say('MailMind recovered; the scheduled shutdown is cancelled.')
+            warned=None
+        publish(deadline=deadline,message=message)
+        if deadline is not None and now>=deadline:
+            raise RuntimeError('Stopping: '+message)
 
 
 def shutdown(children,grace=60):
@@ -130,14 +264,18 @@ def start(state_dir):
     with os.fdopen(descriptor,'w',encoding='utf-8') as stream:json.dump(entry,stream)
     control=threading.Thread(target=server.serve_forever,daemon=True);control.start()
     children=[];logs=[];services={};forced=0
-    def spawn(name,command,*,append=False,restarts=None):
+    status_path=state_dir/'supervisor-status.json'
+    # The frontend server publishes this file so the dashboard can warn the user
+    # even while the API itself is down.
+    child_env={**os.environ,'MAILMIND_SUPERVISOR_STATUS':str(status_path)}
+    def spawn(name,command,*,append=False):
         log_path=state_dir/(name+'.log')
         mode=os.O_CREAT|os.O_WRONLY|(os.O_APPEND if append else os.O_TRUNC)
         descriptor=os.open(log_path,mode,0o600);log=os.fdopen(descriptor,'ab' if append else 'wb');logs.append(log)
         flags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0
-        process=subprocess.Popen(command,cwd=ROOT,stdin=subprocess.PIPE,stdout=log,stderr=subprocess.STDOUT,creationflags=flags)
+        process=subprocess.Popen(command,cwd=ROOT,stdin=subprocess.PIPE,stdout=log,stderr=subprocess.STDOUT,creationflags=flags,env=child_env)
         children.append(process)
-        services[name]={'process':process,'command':command,'log':log,'restarts':restarts or []}
+        services[name]={'process':process,'command':command,'log':log}
         return process
     try:
         indexer=spawn('indexer',[sys.executable,'-m','scripts.service_runner','indexer'])
@@ -151,27 +289,13 @@ def start(state_dir):
         ui=spawn('frontend',[node,str(ROOT/'frontend/serve.mjs')])
         wait_ready(ui,'http://127.0.0.1:5173/')
         print('MailMind ready at http://127.0.0.1:5173. The local browser session opens automatically. Keep this supervisor running; use stop or Ctrl+C.',flush=True)
-        while not event.wait(.25):
-            failed=exited_service(services)
-            if failed is None:
-                continue
-            name,service,code=failed
-            if name not in RECOVERABLE_SERVICES:
-                raise RuntimeError(f'Owned service {name} exited with code {code}; shutting down the remaining owned services')
-            restarts=restart_times_within_window(service['restarts'],time.monotonic())
-            if restarts is None:
-                raise RuntimeError(f'Owned service {name} exceeded its restart limit after exit code {code}')
-            service['log'].close()
-            print(json.dumps({'event':'owned_service_restarting','service':name,
-                              'exit_code':code,'attempt':len(restarts)}),flush=True)
-            replacement=spawn(name,service['command'],append=True,restarts=restarts)
-            if name=='frontend':
-                wait_ready(replacement,'http://127.0.0.1:5173/')
+        supervise(services,spawn,status_path,stop=event.wait)
     except KeyboardInterrupt:event.set()
     finally:
         forced=shutdown(children);server.shutdown();server.server_close()
         for log in logs:log.close()
         journal.unlink(missing_ok=True)
+        (state_dir/'supervisor-status.json').unlink(missing_ok=True)
         print(json.dumps({'status':'stopped','owned_services':len(children),'forced_terminations':forced}),flush=True)
 
 

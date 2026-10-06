@@ -9,6 +9,17 @@ const server=http.createServer((request,response)=>{
   if(!['GET','HEAD'].includes(request.method)){response.writeHead(405);response.end();return;}
   let pathname;
   try{pathname=decodeURIComponent(new URL(request.url,'http://localhost').pathname);}catch{response.writeHead(400);response.end();return;}
+  // Supervisor status (service restarts, crash-loop warning) for the dashboard,
+  // available even while the API is down. Contains no secrets.
+  if(pathname==='/mailmind-supervisor.json'){
+    const statusPath=process.env.MAILMIND_SUPERVISOR_STATUS;
+    fs.readFile(statusPath||'',(error,buffer)=>{
+      if(error||!statusPath){response.writeHead(404,{'Cache-Control':'no-store'});response.end();return;}
+      response.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+      response.end(request.method==='HEAD'?undefined:buffer);
+    });
+    return;
+  }
   let target=path.resolve(root,'.'+pathname);
   if(target!==root&&!target.startsWith(root+path.sep)){response.writeHead(403);response.end();return;}
   if(!fs.existsSync(target)||!fs.statSync(target).isFile())target=path.join(root,'index.html');

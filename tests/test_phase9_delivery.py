@@ -49,19 +49,10 @@ class DeliveryTests(unittest.TestCase):
     def test_unresponsive_owned_child_has_bounded_fallback(self):
         process=Mock();process.poll.return_value=None
         self.assertEqual(launch.shutdown([process],grace=0),1);process.terminate.assert_called_once()
-    def test_supervisor_identifies_the_exited_service(self):
-        api=Mock();api.poll.return_value=None
-        worker=Mock();worker.poll.return_value=-1073741819
-        failed=launch.exited_service({'api':{'process':api},'worker':{'process':worker}})
-        self.assertEqual((failed[0],failed[2]),('worker',-1073741819))
-    def test_service_restart_budget_is_bounded_to_a_recent_window(self):
-        window=launch.SERVICE_RESTART_WINDOW_SECONDS
-        history=[1,2,3]
-        self.assertEqual(launch.restart_times_within_window(history,window+10),[window+10])
-        recent=[100,101,102]
-        self.assertIsNone(launch.restart_times_within_window(recent,103))
-        self.assertIn('worker',launch.RECOVERABLE_SERVICES)
-        self.assertNotIn('api',launch.RECOVERABLE_SERVICES)
+    def test_every_owned_service_is_restarted_with_backoff(self):
+        # RESILIENCE-B: all four services, the API included, are restarted.
+        self.assertEqual(launch.RECOVERABLE_SERVICES,frozenset({'indexer','api','worker','frontend'}))
+        self.assertEqual([launch.restart_delay(n) for n in range(1,9)],[1,2,4,8,16,32,60,60])
     def test_snapshot_build_allowlist_excludes_private_roots(self):
         text=Path('.dockerignore').read_text();self.assertTrue(text.splitlines()[2]=='**')
         for path in ['!data/','!models/','!.env','!credentials.json','!token.json','!venv/']:self.assertNotIn(path,text)
