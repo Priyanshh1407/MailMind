@@ -112,7 +112,10 @@ class CloudEvaluationTests(unittest.TestCase):
         self.assertNotIn('human_label', contents)
         self.assertNotIn(ROWS[0]['human_label'], contents)
         self.assertEqual(payload['data_trust'], 'untrusted_email_and_precedents')
-        self.assertEqual(payload['email']['received_at'], evaluate_cloud.RECEIVED_AT)
+        # TZ-01: the same instant, shown in the user's zone.
+        from datetime import datetime
+        self.assertEqual(datetime.fromisoformat(payload['email']['received_at']),
+                         datetime.fromisoformat(evaluate_cloud.RECEIVED_AT))
         self.assertTrue(evidence_source.startswith('[SENDER]\n'))
 
 

@@ -208,11 +208,30 @@ class DashboardTests(unittest.TestCase):
         self.assertTrue(before['fetch_next_available'])
         response=self.client.post('/ingestion/fetch-next')
         self.assertEqual(response.status_code,202)
-        self.assertIn('next 100',response.json()['message'])
+        self.assertIn('older messages',response.json()['message'])
         after=self.client.get('/status').json()
         self.assertFalse(after['fetch_next_available'])
-        self.assertEqual(after['ingestion']['backlog_remaining'],100)
+        self.assertEqual(after['ingestion']['backlog_remaining'],20)
         self.assertEqual(self.client.post('/ingestion/fetch-next').status_code,409)
+
+    def test_automatic_older_mail_loads_in_small_batches(self):
+        with self.manager.transaction() as conn:
+            ensure_ingestion_state(A,conn,batch_limit=100)
+            conn.execute("""UPDATE ingestion_state SET initial_batch_complete=1,
+                backlog_authorized=0,backlog_remaining=0,has_more=1 WHERE account_id=?""",(A,))
+        # Default (the dashboard's automatic load) is one page: 20 messages.
+        response=self.client.post('/ingestion/fetch-next')
+        self.assertEqual(response.status_code,202)
+        self.assertIn('next 20',response.json()['message'])
+        self.assertEqual(self.client.get('/status').json()['ingestion']['backlog_remaining'],20)
+        with self.manager.transaction() as conn:
+            conn.execute('UPDATE ingestion_state SET backlog_authorized=0,backlog_remaining=0 WHERE account_id=?',(A,))
+        # An explicit size is honoured and bounded.
+        self.assertEqual(self.client.post('/ingestion/fetch-next',json={'limit':5}).status_code,202)
+        self.assertEqual(self.client.get('/status').json()['ingestion']['backlog_remaining'],5)
+        for bad in (0,101,'many'):
+            with self.subTest(limit=bad):
+                self.assertEqual(self.client.post('/ingestion/fetch-next',json={'limit':bad}).status_code,422)
 
     def test_status_reports_visible_batch_and_workflow_progress(self):
         self.mail('progress-complete')

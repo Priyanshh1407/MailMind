@@ -27,7 +27,7 @@ SYSTEM_REASON_MESSAGES = {
     'queued': 'Waiting for classification.',
     'running': 'Classification is currently in progress.',
     'retry': 'Classification will retry after a temporary failure.',
-    'dead': 'Classification stopped after repeated failures.',
+    'dead': 'Classification stopped: the AI rejected this email or could not give a valid answer.',
     'low_confidence': 'The model was not confident enough to choose a category.',
     'category_tie': 'The two most likely categories were too close to choose safely.',
     'provider_timeout': 'The classification provider took too long to respond.',
@@ -273,3 +273,45 @@ def get_email_analysis(account_id, email_id, *, db_path=None, db_conn=None):
         result["signals"] = json.loads(result.pop("signals_json"))
         result["retrieval_used"] = bool(result["retrieval_used"])
         return result
+
+
+def decision_context(item, gemini_models):
+    """The whole story of one email's category, from data saved with the
+    decision (no extra model call): who decided, whether a fallback answered,
+    the user's past corrections given as examples, the local model's second
+    opinion, the user's own label and the time taken."""
+    latest = item.get('latest_prediction') if isinstance(item, dict) else None
+    if not isinstance(latest, dict) or latest.get('category') not in CATEGORIES:
+        return None
+    source, version = latest.get('source'), latest.get('model_version')
+    models = tuple(gemini_models or ())
+    if source == 'gemini':
+        route = ('primary' if models and version == models[0]
+                 else 'fallback' if version in models else 'gemini')
+    elif source in ('groq', 'local'):
+        route = source
+    else:
+        route = 'unknown'
+    support = latest.get('support')
+    used = support if type(support) is int and support > 0 else 0
+    status = latest.get('retrieval_status')
+    lookup = ('used' if used else 'unavailable' if status == 'unavailable'
+              else 'not_applicable' if status == 'rejected' or route == 'local'
+              else 'none_close_enough')
+    local = latest.get('local')
+    second = None
+    if route != 'local' and isinstance(local, dict) and local.get('category') in CATEGORIES:
+        second = {'category': local['category'], 'agrees': local['category'] == latest['category']}
+    elapsed = latest.get('elapsed_ms')
+    human = item.get('human_label') if item.get('human_label') in CATEGORIES else None
+    return {
+        'decided_by': 'you' if human else 'model',
+        'category': latest['category'],
+        'route': route,
+        'provider': source,
+        'model_version': version,
+        'precedents': {'used': used, 'lookup': lookup},
+        'second_opinion': second,
+        'elapsed_ms': float(elapsed) if isinstance(elapsed, (int, float)) and elapsed >= 0 else None,
+        'your_label': human,
+    }

@@ -20,6 +20,25 @@ def current_vector(metadata, db_path):
             (metadata.get('account_id'), metadata.get('email_id'))).fetchone()
         return bool(row and row['label'] is not None and row['indexing_state'] == 'indexed' and row['revision_id'] == metadata.get('revision_id') and row['label'] == metadata.get('label'))
 
+
+class CurrentFeedback:
+    """Checks that a retrieved correction is still your current label, and
+    finds who sent the corrected email. Both read SQLite, the source of truth,
+    so retrieved vector text alone can never act as a correction."""
+
+    def __init__(self, db_path, account_id):
+        self.db_path = db_path
+        self.account_id = account_id
+
+    def __call__(self, metadata):
+        return current_vector(metadata, self.db_path)
+
+    def sender_of(self, email_id):
+        with connection(self.db_path) as conn:
+            row = conn.execute('SELECT sender FROM email_logs WHERE account_id=? AND email_id=?',
+                               (self.account_id, email_id)).fetchone()
+        return row['sender'] if row else None
+
 def reconcile_feedback(manager, context, collection_provider, limit=20, *, max_attempts=None):
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
         raise ValueError('Reconciliation limit must be between 1 and 50')

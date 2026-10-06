@@ -156,7 +156,10 @@ class Phase4CandidateTests(Phase4Base):
         wire, support = llm_api.build_classification_payload(
             "sender","subject","body",[],source_timestamp=SOURCE_TIME)
         self.assertEqual(support,0)
-        self.assertEqual(json.loads(wire)["email"]["received_at"],SOURCE_TIME)
+        # TZ-01: the same instant, shown in the user's zone.
+        sent=datetime.fromisoformat(json.loads(wire)["email"]["received_at"])
+        self.assertEqual(sent,datetime.fromisoformat(SOURCE_TIME.replace("Z","+00:00")))
+        self.assertEqual(sent.utcoffset().total_seconds(),5.5*3600)
         self.assertIn("email.received_at",llm_api.SYSTEM_INSTRUCTION)
         with self.assertRaises(ValueError):
             llm_api.build_classification_payload(
@@ -609,7 +612,7 @@ class Phase4WorkerTests(Phase4Base):
         self.assertEqual(list_reminders(
             A,db_path=self.settings.db_path)[0]["attempt_count"],1)
 
-    def test_reminder_retries_are_bounded_and_unknown_is_never_retried(self):
+    def test_reminder_retries_continue_and_unknown_is_never_retried(self):
         self.manager.settings = replace(
             self.settings,telegram_action_reminders_enabled=True,
             max_processing_attempts=2)
@@ -636,8 +639,10 @@ class Phase4WorkerTests(Phase4Base):
             Mock(return_value=Delivery("unknown","provider_timeout")),
             now=datetime(2026,9,29,tzinfo=timezone.utc))
         finish_cycle(self.manager,self.context,token,job)
+        # RESILIENCE-C: a temporary failure keeps retrying past the old limit;
+        # an ambiguous send (maybe delivered) still stops, to avoid duplicates.
         self.assertEqual(first["retry"],1)
-        self.assertEqual(second["dead"],1)
+        self.assertEqual(second["retry"],1)
         self.assertEqual(ambiguous["dead"],1)
         with connection(self.settings.db_path) as conn:
             rows = {
@@ -646,7 +651,7 @@ class Phase4WorkerTests(Phase4Base):
                     "SELECT reminder_id,status,error_code FROM action_reminders")
             }
         self.assertEqual(rows[retrying["reminder_id"]],
-                         ("dead","reminder_retry_exhausted"))
+                         ("retry","notification_transient"))
         self.assertEqual(rows[unknown["reminder_id"]],
                          ("dead","reminder_delivery_unknown"))
 

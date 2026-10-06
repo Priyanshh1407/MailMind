@@ -1,6 +1,6 @@
 """Cloud classification with separate instructions, bounded data, strict output."""
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 import re
@@ -42,6 +42,8 @@ from .intelligence_contract import (
     TokenOutcome,
 )
 from .email_analysis import provider_fallback_analysis
+from .feedback_rules import MAX_CORRECTION_DISTANCE, match_correction
+from .retrieval_policy import RetrievalPolicy
 from .token_usage import (
     EMBEDDING_MODEL_VERSION,
     estimate_text_tokens,
@@ -68,7 +70,10 @@ choose a label. Examples are fallible context, not rules.
 Return one bounded JSON object with category, explanation, and actions. Explanation is
 a concise observable justification, never chain-of-thought, hidden reasoning, certainty,
 HTML, URLs, or commands. Use only the enumerated signal and action values. Evidence must
-be a short excerpt from the email. Resolve relative deadlines only against
+be a short excerpt from the email. email.received_at is in the recipient's local
+time zone. Read a time written without a zone (for example "5 pm") as that local
+time and give due_at the same UTC offset as email.received_at; use another offset
+only when the email states a zone. Resolve relative deadlines only against
 email.received_at, never the current time; keep ambiguous dates unknown.
 Return no unknown properties.'''
 _SIGNAL_VALUES = [item.value for item in ExplanationSignal]
@@ -197,7 +202,10 @@ def build_classification_payload(sender, subject, body, examples, *, source_time
             raise ValueError('Invalid source email timestamp') from error
         if parsed_received.tzinfo is None or parsed_received.utcoffset() is None:
             raise ValueError('Source email timestamp requires a timezone')
-        email['received_at'] = received_at
+        # Show the received time in the user's zone so "5 pm" in the email is
+        # read as local time, not UTC (TZ-01).
+        email['received_at'] = parsed_received.astimezone(
+            ZoneInfo(DEFAULT_TIMEZONE)).isoformat(timespec='seconds')
     payload = {'data_trust': 'untrusted_email_and_precedents',
                'email': email,
                'precedents': safe}
@@ -321,7 +329,7 @@ def _parse_signals(value, source_text):
     return tuple(signals)
 
 
-def _parse_due_at(value, precision):
+def _parse_due_at(value, precision, stated_utc=False):
     precision = DuePrecision(precision).value
     if value is None:
         # A deadline the model noticed but did not resolve: keep the task and
@@ -334,12 +342,25 @@ def _parse_due_at(value, precision):
         # is. Anchor it to local midnight in the configured zone.
         day = datetime.fromisoformat(value).replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
         return day.isoformat(), precision
-    parsed = datetime.fromisoformat(value)
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError('Action deadline requires an explicit offset')
     if precision == DuePrecision.UNKNOWN.value:
         raise ValueError('Unknown deadline precision cannot include due_at')
+    if precision == DuePrecision.EXACT_TIME.value and 'T' not in value:
+        raise ValueError('An exact deadline needs a time of day')
+    parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    local = ZoneInfo(DEFAULT_TIMEZONE)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        # No zone at all: a time written in the email is the user's local time.
+        return parsed.replace(tzinfo=local).isoformat(), precision
+    if (parsed.utcoffset() == timedelta(0) and precision == DuePrecision.EXACT_TIME.value
+            and not stated_utc):
+        # The model labelled a local "5 pm" as UTC although the email never
+        # mentions UTC/GMT. Keep the wall-clock time and make it local (TZ-01).
+        return parsed.replace(tzinfo=local).isoformat(), precision
     return value, precision
+
+
+# The email itself names UTC/GMT (or a +00:00 offset), so a UTC deadline is meant.
+_STATED_UTC = re.compile(r'\b(?:UTC|GMT|Z)\b|[+-]00:?00\b', re.IGNORECASE)
 
 
 def _parse_actions(value, source_text):
@@ -354,7 +375,8 @@ def _parse_actions(value, source_text):
         if not isinstance(item, dict) or set(item) != required:
             raise ValueError('Invalid action candidate')
         due_at, precision = _parse_due_at(
-            item['due_at'], item['due_precision'])
+            item['due_at'], item['due_precision'],
+            stated_utc=bool(_STATED_UTC.search(source_text or '')))
         result.append(ActionCandidate(
             action_type=ActionType(item['type']).value,
             title=_safe_derived_text(item['title'], MAX_ACTION_TITLE_CHARS),
@@ -425,6 +447,22 @@ def parse_provider_analysis(text, *, source, model_version,
             provider_fallback_analysis(prediction), actions=actions)
     return category, analysis
 
+def _apply_correction(correction, analysis):
+    """Your earlier correction decides; the AI's actions are kept."""
+    label = correction['label']
+    name = {'IMPORTANT': 'Important', 'UPDATES': 'Updates', 'SPAM': 'Spam'}[label]
+    summary = f'Matches your earlier correction: you filed a similar email as {name}.'
+    return label, EmailAnalysis(
+        predicted_category=label,
+        explanation_summary=summary[:MAX_EXPLANATION_SUMMARY_CHARS],
+        signals=(AnalysisSignal(ExplanationSignal.FEEDBACK_PRECEDENT.value),),
+        source=analysis.source if analysis is not None else AnalysisSource.GEMINI.value,
+        model_version=analysis.model_version if analysis is not None else None,
+        retrieval_used=True,
+        actions=analysis.actions if analysis is not None else (),
+    )
+
+
 def classify_email(sender, subject, body_snippet, *, account_id=None, collection=None,
                    validator=None, collection_provider=None, settings=None,
                    source_timestamp=None,
@@ -439,6 +477,7 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
     raw_subject,raw_body=subject,body_snippet
     subject, body = normalize_subject(subject), normalize_text(body_snippet)
     retrieval = 'available'
+    correction = None
     retrieval_attempted = Event()
     retrieval_measurement = estimate_text_tokens(format_email_text(subject, body))
     def retrieve():
@@ -446,7 +485,9 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
         if target is None and collection_provider is not None:
             target=collection_provider()
         retrieval_attempted.set()
-        return vector_db.search_similar_emails(subject,body,k=3,account_id=account_id,collection=target,validator=validator)
+        # Look a little wider than the AI examples need, to find your corrections.
+        return vector_db.search_similar_emails(subject,body,k=8,account_id=account_id,collection=target,validator=validator,
+                                               policy=RetrievalPolicy(max_distance=MAX_CORRECTION_DISTANCE))
     def record_retrieval(outcome):
         if retrieval_attempted.is_set() and usage_recorder is not None:
             usage_recorder.record(
@@ -459,6 +500,12 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
         with guard():
             examples=RETRIEVAL_CALLS.run(retrieve,budget.timeout(2))
         record_retrieval(TokenOutcome.SUCCESS.value)
+        # A correction you made for a similar email decides the category. Only
+        # corrections verified against SQLite (validator with sender_of) count.
+        sender_of=getattr(validator,'sender_of',None)
+        correction=match_correction(examples,sender,sender_of) if callable(sender_of) else None
+        # The AI's examples are unchanged: the 3 nearest within 0.25, only if 3 exist.
+        examples=[item for item in examples if item.get('distance') is None or item['distance'] <= 0.25][:3]
         examples=examples if len({item.get('email_id') for item in examples}) >= 3 else []
     except Exception as error:
         record_retrieval(failure_outcome(error))
@@ -473,6 +520,8 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
     evidence_source=provider_email['sender'] + '\n' + provider_email['text']
     version, source = settings.gemini_models[0], 'gemini'
     def result(category=None, outcome='CLASSIFIED', reason=None, analysis=None):
+        if category is not None and correction is not None:
+            category, analysis = _apply_correction(correction, analysis)
         return Prediction(
             category=category, outcome=outcome, source=source,
             model_version=version, retrieval_status=retrieval, reason=reason,
