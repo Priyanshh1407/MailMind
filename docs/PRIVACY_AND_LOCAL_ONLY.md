@@ -48,8 +48,8 @@ MailMind has no automatic expiry policy.
 
 | Action | Local effect |
 | --- | --- |
-| Stop processing | Pauses work and ends the local session; mail and credentials remain |
-| Disconnect Google | Removes the selected account’s local OAuth credential; saved mail and feedback remain |
+| Stop processing | Pauses work and ends the local session; mail remains, and the OAuth credential is parked unused for 24 hours, then deleted |
+| Disconnect Google | Parks the selected account’s OAuth credential unused for 24 hours (so Connect Google can reconnect silently), then deletes it; saved mail and feedback remain. Delete account data removes it at once |
 | Delete this account data | Removes that account’s managed mail, jobs, histories, vectors, and credentials |
 | Delete old unassigned data | Separately removes explicit legacy and unassigned storage |
 

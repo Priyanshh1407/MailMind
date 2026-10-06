@@ -37,15 +37,21 @@ MailMind does not read or process account mail before the Google connection succ
 
 ### Header
 
-- **Systems healthy** opens current model, provider, worker, classification, and refresh information.
+- **Systems healthy** opens current model, provider, worker, classification, and refresh information. **Local model: Off** means the optional comparison shadow is switched off (the default); set `MAILMIND_SHADOW_MODEL_ENABLED=true` to turn it on.
 - The account menu provides connect, switch, disconnect, deletion, and stop-processing controls.
 
-### KPIs
+### Navigation and overview
+
+**Inbox**, **Action Center** and **Usage** sit in the top navbar, so you can switch sections from anywhere. On narrow screens they move to their own row under the logo. Opening **Action Center** or **Usage** scrolls the page so that section starts just below the navbar; opening **Inbox** returns to the top, where the overview is.
+
+Below the navbar, one overview of eight cards in the same design covers the whole account:
 
 - **Saved emails** counts locally stored mail for the selected account.
 - **Processed** counts messages that completed the workflow.
 - **Feedback** separates confirmations and corrections.
-- **Average classification** uses measured samples; it does not invent a value when none exist.
+- **Average classification** uses measured samples, shown in seconds with one decimal, rounded up; it does not invent a value when none exist.
+- **Open actions**, **Due soon** (next 7 days) and **Overdue** summarise the Action Center.
+- **Tokens today** counts cloud and local token usage since midnight.
 
 ### Inbox work progress
 
@@ -54,7 +60,7 @@ The progress panel distinguishes saved work, waiting tasks, active classificatio
 ### Inbox intake
 
 - **Sync new messages** queues a durable, rate-limited live Gmail check.
-- **Fetch next 100** authorizes another historical page only after the current older batch is eligible.
+- Older mail: Older mail loads automatically, 20 at a time, when you reach the last two pages of your unfiltered inbox. The next 20 load once the previous 20 have been processed, so the classification queue never floods.
 - **Analyze up to 20 saved emails** explicitly enriches eligible saved mail after Action Center extraction is enabled.
 - Active, live-pending, historical-pending, and last-live-sync values are separate.
 
@@ -64,13 +70,25 @@ These controls are not equivalent. Sync never grants more historical backlog. Sa
 
 ### Inbox explanations
 
-Each email card has a **Why this category?** section under the email text (it needs `MAILMIND_EXPLANATIONS_VISIBLE=true`). It shows a short reason, the signals behind it, each with the quoted words from the email, and the source model. Explanations summarize decision signals; they are not hidden chain-of-thought. A quote that can't be matched to the email is omitted, but the rest of the explanation is kept. A correction changes the effective category but preserves the original analysis for audit.
+Each email card has a **Why this category?** section under the email text (it needs `MAILMIND_EXPLANATIONS_VISIBLE=true`). It shows a short reason, the signals behind it, each with the quoted words from the email, and then the whole decision:
+
+- **Decision:** which model chose the category and how long it took, including when the main model was unavailable and a backup model or provider answered;
+- **What the category means:** the definition the classifier works from;
+- **Your past corrections:** how many similar emails you corrected were shown to the model as examples, or that none were close enough;
+- **Second opinion:** whether the local model agreed (shown only when the optional local shadow is switched on);
+- **Your label:** when you confirmed or changed the category, your label is the one the dashboard uses.
+
+This is built from what was saved when the email was classified, so it costs no extra model calls. Explanations summarize decision signals; they are not hidden chain-of-thought. A quote that can't be matched to the email is omitted, but the rest of the explanation is kept. A correction changes the effective category but preserves the original analysis for audit.
 
 Mail classified before explanations were enabled says *No explanation was recorded for this email*. Use **Analyze up to 20 saved emails** (Inbox tab) to generate explanations for it. Each email is a real provider request.
 
 ### Action Center
 
-The Action Center lists extracted replies, tasks, approvals, payments, meetings, and deadlines. Filters include open, due soon, overdue, snoozed, and completed, plus a **Type** filter that lists only the action types this account actually has, with counts (for example *Payment · 3*). You can complete, dismiss, reopen, or snooze an action, and navigate to its account-owned source email; **Clear source email** beside the search hint returns to the full inbox.
+The Action Center lists extracted replies, tasks, approvals, payments, meetings, and deadlines. Filters include open, due soon, overdue, snoozed, and completed, plus a **Type** filter that lists only the action types this account actually has, with counts (for example *Payment · 3*). You can complete, dismiss, reopen, or snooze an action. **Open source** shows the originating email in a pop-up without leaving the Action Center: sender, date, category and the full text, with the sentence the action was based on highlighted. Close it with **Esc**, the close button, or a click outside it. **Open in inbox** jumps to the email in the Inbox instead; **Clear source email** beside the search hint then returns to the full inbox.
+
+Deadlines are shown in your local time. A time written in an email without a time zone ("by 5 pm") is read as your local time; if the email states a zone (for example "5 pm EDT"), that zone is respected.
+
+Cards don't show a confidence label: the AI rates its own certainty "high" for almost every task, so the label told you nothing. Instead, the rare task it was unsure about carries an amber **Double-check this** badge, so check that one against its source email. Tasks it was very unsure about are never saved, and only confident ones get automatic reminders.
 
 Automatic dashboard reminders require explicit configuration. Telegram action reminders require a separate opt-in. Ambiguous, past-due, low-confidence, or date-unknown candidates do not silently create automatic reminders.
 
@@ -123,6 +141,8 @@ Confirms that the displayed category is correct.
 
 Selects a corrected category. The change is saved to SQLite immediately and becomes the effective dashboard category. Derived feedback indexing continues asynchronously.
 
+Your correction also applies to **similar future mail**: a new email from the same sender with similar content, or a near-identical email from anyone, gets your category automatically. Its "Why this category?" panel says *Matches your earlier correction*. If you gave similar emails different labels, the closest one decides. Corrections apply to mail that arrives after you make them; they don't relabel older emails.
+
 ### Undo
 
 Withdraws the latest feedback revision and restores the latest valid prediction without deleting history.
@@ -130,6 +150,23 @@ Withdraws the latest feedback revision and restores the latest valid prediction 
 ### History
 
 Shows saved feedback and processing events. The dashboard does not fabricate provider or delivery history.
+
+## Connection problems
+
+MailMind tells you when something is wrong instead of going blank:
+
+- **You're offline:** your computer lost its network. Your saved mail stays on screen and you stay signed in; there is no need to reconnect Google.
+- **Can't reach Gmail:** your computer is online but MailMind's Gmail checks are failing. The alert shows a countdown: MailMind retries after 5 s, then 10 s, 20 s, 40 s, and every 60 s after that.
+- **You're back online:** shown for a few seconds when the connection returns; new mail syncs on the next check.
+
+- **Restarting a MailMind service:** one part of MailMind stopped unexpectedly and is being restarted automatically; your saved mail stays on screen.
+- **MailMind may need to stop:** a service keeps failing right after it starts. MailMind is still retrying and shows a countdown; if the service recovers, the shutdown is cancelled and you see **Everything is running again**. If it doesn't, MailMind stops cleanly; the alert names the log file to check.
+
+Temporary problems (Gemini or Groq outages and quota limits, Gmail or Telegram errors) never send an email to Review: it waits in Processing and retries, at most 5 minutes apart, until it succeeds. Review is only for permanent problems, such as a request the AI rejects or an answer it can't give in the expected form.
+
+**Reconnecting within 24 hours is silent.** After **Disconnect Google** or **Stop processing**, MailMind keeps your Google sign-in unused for 24 hours. Clicking **Connect Google** in that time reconnects straight away, without Google's page, as long as Google still accepts the saved sign-in and it is the same account. After 24 hours it is deleted and Google's page opens as usual. **Switch Google account** always opens Google's page.
+
+Only a real login problem (for example, access revoked in your Google account) asks you to connect Google again. Restarting MailMind doesn't. In that case the dashboard says **Google sign-in needs renewing** instead of the plain "Google is disconnected": click **Connect Google** and sign in; your saved mail and settings are kept. Until you do, the dashboard stays in **read-only** mode: you can browse, search and page through saved mail, open history and source emails, and view actions and usage, but labels, action changes, retries and syncing are disabled. If MailMind's own local service stops responding, the dashboard keeps the last data, pauses email actions, and keeps retrying with the same growing wait.
 
 ## Recovery controls
 
@@ -202,7 +239,7 @@ Lexical search remains available. Keep MailMind connected and running while the 
 
 ### Historical backlog remains
 
-Wait for the admitted batch to finish, then choose **Fetch next 100**. It stays disabled while any older-mail task is still queued, retrying, or running. Live mail continues to receive priority.
+Page towards the end of your inbox (with no search or filter). When the previous older batch has been processed, the next 20 load automatically and the pagination line shows "Loading older emails from Gmail…". Live mail continues to receive priority.
 
 ### Saved-mail analysis is unavailable
 

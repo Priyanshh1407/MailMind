@@ -72,7 +72,7 @@ Relevant implementation: <code>src/account_state.py</code>, <code>src/main.py</c
 
 MailMind never asks for a Gmail password. Google OAuth credentials are stored in account-specific local files. Credential refresh has its own bounded-call capacity.
 
-Disconnect deletes only the selected account’s local credential. Google-side revocation remains a separate operator action.
+Disconnect and Stop processing park only the selected account’s local credential: it is never used for background work, can be renewed silently by Connect Google for 24 hours (only for the same account, and only while Google still accepts it), and is then deleted. Delete account data removes it at once. Google-side revocation remains a separate operator action.
 
 The desktop loopback flow is not presented as a hosted OAuth design.
 
@@ -170,7 +170,7 @@ The boundary is enforced by application routing. It is not a replacement for an 
 
 The supervisor records and controls exact child processes. It checks port availability but does not terminate existing listeners. Stop is authenticated over loopback and signals only owned children.
 
-The indexer, worker, and frontend have a bounded restart budget. API exit shuts down the set.
+Every owned service is restarted with backoff and no limit; only a startup crash loop warns, retries for 60 s, then shuts the set down. Its status file contains no secrets (see [Self-recovery](SELF_RECOVERY.md)).
 
 ## 14. Safe diagnostics
 

@@ -55,9 +55,9 @@ New messages discovered from the Gmail history cursor receive priority over olde
 ### User controls
 
 - **Sync new messages** queues a durable, rate-limited live check.
-- **Fetch next 100** authorizes another older batch only when the current historical state allows it.
+- **Older mail** loads automatically, 20 emails at a time, when you page towards the end of your inbox and the previous older batch has been processed (`/ingestion/fetch-next`, ≤ 100 per request).
 
-Sync must not authorize old backlog. Fetch Next 100 must not disable or delay live monitoring.
+Sync must not authorize old backlog. Loading older mail must not disable or delay live monitoring.
 
 ## Classification
 
@@ -111,8 +111,8 @@ Telegram is optional. Missing configuration is not successful delivery.
 
 | Action | Processing effect | Data effect |
 | --- | --- | --- |
-| Stop processing | Ends the local session and pauses active work | Retains mail, feedback, credentials, and derived data |
-| Disconnect Google | Fences work and prevents Gmail access | Removes selected account’s local OAuth credential; retains saved data |
+| Stop processing | Ends the local session and pauses active work | Retains mail, feedback, and derived data; parks the OAuth credential for 24 h (silent reconnect), then deletes it |
+| Disconnect Google | Fences work and prevents Gmail access | Parks the selected account’s OAuth credential unused for 24 h (silent reconnect), then deletes it; retains saved data |
 | Switch Google account | Cancels old context and completes OAuth for the new selection | Loads only the selected account’s isolated records |
 | Delete this account data | Pauses/fences work and runs managed purge | Removes selected account mail, histories, jobs, vectors, and credentials |
 | Delete old unassigned data | No ordinary account transition | Removes only explicitly selected legacy/unassigned state |
@@ -123,7 +123,7 @@ Deleting local credentials does not revoke Google permission. Account purge does
 
 The native supervisor owns four processes: indexer, API, worker, and frontend.
 
-The indexer, worker, and frontend can be restarted within the bounded restart budget. API exit shuts down the owned set. Stop and fallback termination target only exact owned children.
+Every owned service, the API included, is restarted with backoff (1 → 60 s) and no limit. Only a startup crash loop (5 exits in a row, each within 10 s of starting) warns the user, keeps retrying for 60 s, and then shuts down the owned set (see [Self-recovery](SELF_RECOVERY.md)). Stop and fallback termination target only exact owned children.
 
 Do not use global process-name or port-based termination.
 

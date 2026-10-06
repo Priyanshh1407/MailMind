@@ -12,7 +12,7 @@ The React dashboard combines live Gmail intake, recoverable background processin
 - Google OAuth with automatic completion-page close and safe dashboard fallback.
 - Strict account isolation with generation fencing during logout, disconnect, deletion, and account switching.
 - Durable SQLite jobs with bounded retries, expiring worker leases, and auditable processing history.
-- Three-category classification through Gemini and Groq fallback, plus a local three-class shadow model.
+- Three-category classification through Gemini and Groq fallback, plus an optional local three-class shadow model (off by default).
 - `NEEDS_REVIEW` as a system outcome—not a fourth model-generated category.
 - Conservative feedback retrieval that abstains unless current, account-owned examples provide sufficient independent support.
 - Live hybrid search across sender, subject, and body, with exact lexical matches ranked before semantic matches.
@@ -88,7 +88,7 @@ MailMind deliberately separates three kinds of work:
 | Workflow | Purpose | User control |
 | --- | --- | --- |
 | Live sync | Discover messages arriving after the saved Gmail history cursor | **Sync new messages** forces a rate-limited live check |
-| Historical backlog | Admit older inbox mail in bounded batches | **Fetch next 100** becomes available after the current older batch finishes |
+| Historical backlog | Admit older inbox mail in small batches | Automatic: the first sign-in admits 100; after that, the next 20 load as you page towards the end of your inbox |
 | Intelligence backfill | Add explanations/actions to already saved eligible mail | **Analyze up to 20 saved emails** is explicit and available only after Action Center extraction is enabled |
 | Semantic indexing | Build local derived search embeddings for saved mail | Runs automatically after Google is connected |
 
@@ -98,7 +98,7 @@ Key rules:
 - The first connection admits at most the first 100 older messages.
 - New live mail uses freed capacity and is processed before old backlog.
 - **Sync new messages** never authorizes another historical page.
-- **Fetch next 100** controls only older backlog.
+- Older mail loads automatically in batches of 20 while you browse the end of the unfiltered inbox; a search or filter never triggers it.
 - The Gmail worker processes small, newest-first slices to preserve responsiveness.
 - Intelligence backfill reuses the durable queue, is capacity-limited, and never sends historical alerts, marks messages read, or creates automatic reminders.
 - Semantic documents are capped at 6,000 characters; the stored source email is not shortened by that search-specific limit.
@@ -122,9 +122,11 @@ A failed route never ends the chain by itself. Each failure is classified by wha
 
 An email fails only after every route has been tried. It is retried later if any route failed temporarily; otherwise it goes to Needs Review. Invalid output never silently becomes Spam. All 18 fault × scope combinations are tested and rendered in [the resilience matrix](docs/RESILIENCE.md).
 
-The local model is a three-category **shadow**: in normal mode it runs beside the cloud decision for comparison, is metered separately, and never decides — including on manual re-analysis. In local-only mode it is the authoritative classifier and receives the same sender-aware input it was trained on.
+The local model is a three-category **shadow**: in normal mode it can run beside the cloud decision for comparison, is metered separately, and never decides — including on manual re-analysis. Because it never decides, it is **off by default** (`MAILMIND_SHADOW_MODEL_ENABLED=false`): MailMind then starts no PyTorch process and spends no CPU on it per email. Set it to `true` to collect shadow comparisons again. In local-only mode it is the authoritative classifier and receives the same sender-aware input it was trained on.
 
 Feedback is committed to SQLite first. The dashboard immediately uses the corrected label, while the derived feedback vector is reconciled asynchronously. A vector-store delay cannot block the user’s correction. Original predictions and revision history remain available for audit and undo.
+
+**Your corrections win for similar mail.** When a new email is close to one you corrected (from the same sender and within cosine distance 0.40, or a near-copy from anyone within 0.20), your category is applied. The AI still runs for the explanation and actions, but cannot overrule you, and "Why this category?" says *Matches your earlier correction*. Only corrections verified against your current labels in SQLite count, so text inside an email can never act as one. On the owner's inbox, a leave-one-out check over 83 labelled emails matched the owner's own label 95% of the time where the rule applied (`src/feedback_rules.py`).
 
 ## Hybrid search
 
@@ -150,12 +152,12 @@ The trusted local dashboard opens its loopback session automatically. There is n
 | --- | --- |
 | Connect Google | Authorizes Gmail and enables account mail access and processing |
 | Switch Google account | Cancels/fences old work, completes OAuth for the new account, and loads only its data |
-| Stop processing | Ends the local session and pauses work; saved mail and credentials remain |
-| Disconnect Google | Stops Gmail access and removes the selected account’s local OAuth credential; saved local records remain |
+| Stop processing | Ends the local session and pauses work; saved mail remains. The saved Google login is parked unused for 24 hours so Connect Google can reconnect silently, then deleted |
+| Disconnect Google | Stops Gmail access; saved local records remain. The saved Google login is parked unused for 24 hours so Connect Google can reconnect silently, then deleted |
 | Delete this account data | Removes that account’s managed mail, jobs, feedback, vectors, and credentials |
 | Delete old unassigned data | Separately removes explicit legacy/unassigned state |
 
-Restarting invalidates the active local browser session and pauses account work until the trusted dashboard opens a fresh session and Google is reconnected as required. Late operations cannot commit across an account-generation change.
+Restarting invalidates the active local browser session; the trusted dashboard opens a fresh one automatically. If your saved Google login is still valid, Gmail work resumes on its own, with no Connect Google click. Late operations cannot commit across an account-generation change.
 
 Read [Security policy](SECURITY.md) and [Privacy and local-only policy](docs/PRIVACY_AND_LOCAL_ONLY.md) before using real mail.
 
@@ -163,7 +165,7 @@ Read [Security policy](SECURITY.md) and [Privacy and local-only policy](docs/PRI
 
 The dashboard provides:
 
-- Account-wide saved, processed, feedback, and measured-latency KPIs
+- One overview of eight KPI cards: saved, processed, feedback, average classification time, open actions, due soon, overdue, and tokens today
 - Live work progress and bounded-queue counts
 - Separate live-sync and historical-backlog controls
 - Worker, model, provider, and refresh health
@@ -171,9 +173,11 @@ The dashboard provides:
 - Live sender/subject/body/meaning search and category filters
 - Classification details, confirmation, correction, undo, and history
 - Explicit retry/recovery controls for unfinished processing and ambiguous notifications
-- Inbox, Action Center, and Usage tabs with source-labelled explanations and bounded action lifecycle controls
-- A "Why this category?" explanation inside each email card: a summary, the signals, and the quoted evidence that grounds them
-- Action Center filters by status and by action type (only the types the account actually has, with counts)
+- Gmail-style system alerts (offline, can't reach Gmail, service restarting, back online) with exponential-backoff retries; a network drop or service crash never signs you out or blanks the dashboard
+- Temporary failures (AI outage or quota, Gmail or Telegram errors) retry until they succeed; only permanent ones stop, with the reason
+- Inbox, Action Center, and Usage sections in the top navbar, with source-labelled explanations and bounded action lifecycle controls
+- A "Why this category?" explanation inside each email card: a summary, the signals, the quoted evidence that grounds them, and the whole decision (which model decided and whether a backup answered, what the category means, past corrections used as examples, the local second opinion, your own label, and the time taken)
+- Action Center filters by status and by action type (only the types the account actually has, with counts), and **Open source** shows the original email in a pop-up with the quoted sentence highlighted (Esc closes it)
 - Day, week, and month token charts that separate provider-billed from locally processed usage, with ranked per-provider and per-operation breakdowns
 - An explicit, observable saved-mail intelligence backfill control
 - A power-on sequence when the dashboard comes up: blocks roll up one after another, then the numbers spool up
@@ -243,7 +247,7 @@ Stop only MailMind-owned services:
 .\venv\Scripts\python.exe -m scripts.launch stop
 ```
 
-The supervisor refuses conflicting ports instead of terminating unrelated processes. It restarts the indexer, worker, or frontend within a bounded restart budget; an API exit or exhausted restart budget shuts down the owned service set.
+The supervisor refuses conflicting ports instead of terminating unrelated processes. It restarts any owned service that stops (indexer, API, worker or frontend) with backoff (1, 2, 4, 8, 16, 32, then 60 s), for as long as it takes. The only exception is a startup crash loop, where a service fails within 10 s of starting 5 times in a row. MailMind then warns you in the terminal and the dashboard, keeps retrying for 60 s, and shuts down only if the service never recovers.
 
 ## Verification
 
@@ -265,9 +269,9 @@ npm run test:browser
 
 Latest local verification (30 September 2026):
 
-- Backend discovery: 526 tests passed, and each of the 25 test modules also passes when run alone (no test-order dependence).
+- Backend discovery: 590 tests passed, and each of the 25 test modules also passes when run alone (no test-order dependence).
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
-- Frontend unit suite: 48 passed. Playwright browser suite: 29 passed.
+- Frontend unit suite: 58 passed. Playwright browser suite: 37 passed.
 - Frontend lint and production build passed; initial JavaScript is 316 kB (101 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
@@ -299,9 +303,13 @@ A deliberate audit of this codebase found and fixed these defects. Each one was 
 | No label provenance | Retraining could learn from the local model's own outputs; 87% of labels were cloud decisions | Provenance tracked; local self-labels excluded |
 | Deadline contract mismatch (found by the evaluation) | The parser rejected plain calendar dates and unresolved deadlines, silently discarding 58% of Gemini's proposed actions | Date-only deadlines anchored to the local day; unresolved ones kept as "unknown": 25/60 → 60/60 on the same recordings |
 | Telegram wait shorter than the request | Slow but successful alerts were recorded as "delivery unknown", and a send that never started was too | The worker outlasts the request's own timeouts; "unknown" now means the alert may really have been delivered |
-| Text-typed retry times | Retry times stored as text never compared as due in SQLite, freezing the backlog and disabling "Fetch next 100" | Each worker cycle repairs non-numeric retry times |
+| History paging skipped new mail (found in use) | When 20+ new emails arrived between checks, the next history page was requested with `maxResults=0` (HTTP 400) and the cursor still jumped past the whole batch; failed downloads were also never retried | The cursor only advances past admitted mail; failed downloads are re-fetched; a 5-minute sweep of the last two days' INBOX catches anything history sync misses |
+| Text-typed retry times | Retry times stored as text never compared as due in SQLite, freezing the backlog so older mail stopped loading | Each worker cycle repairs non-numeric retry times |
 | One quote voided an explanation | A single quote not found byte-for-byte in the email discarded the whole explanation | Punctuation-tolerant grounding shared by explanations and actions; unverifiable quotes are dropped individually |
 | Misleading deletion error | An interrupted account deletion reported "no account to delete" while the data was still there | Only a missing account is a conflict; other failures say "retry" |
+| Deadlines 5 h 30 min late (found in use) | The model saw the received time in UTC, so "by 5 pm" was saved as 17:00 UTC and shown as 10:30 pm in India | The model sees the received time in the user's zone, and the parser treats a zoneless or wrongly-UTC time as local unless the email names UTC/GMT; 14 stored deadlines repaired after a backup (`src/llm_api.py`) |
+| Corrections ignored for similar mail (found in use) | A correction reached the model only as one of ≥ 3 examples within distance 0.25, the model could still ignore it, and after every restart the worker never opened the feedback index | A verified-correction rule: same sender ≤ 0.40, or near-copy ≤ 0.20 (95% agreement with the owner's own labels); the index opens before the first email (`src/feedback_rules.py`, `src/main.py`) |
+| Status file crashed MailMind (found in use) | On Windows, renaming over a file another process had open raised "Access is denied", and the uncaught error shut every service down | Status writes only on change, retry briefly, then skip, and never raise; credential saves retry the same way (`scripts/launch.py`, `src/file_utils.py`) |
 
 Live evaluation also found that the previously configured fallback model (`gemini-1.5-flash`) is retired (HTTP 404), which is exactly the case the first fix handles.
 

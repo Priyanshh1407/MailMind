@@ -10,7 +10,7 @@ The current interface follows a dark, compact dashboard design with:
 
 - local MailMind logo and favicon assets;
 - Lucide React icons;
-- account-wide KPI cards;
+- section tabs in the top navbar and one overview of eight KPI cards;
 - inbox progress and intake panels;
 - non-sticky search and category controls;
 - four responsive category lanes;
@@ -29,6 +29,7 @@ Animations use [Framer Motion](https://motion.dev) (the `motion` package). They 
 | --- | --- | --- |
 | Power-on (once per sign-in or page load) | The logo flares and a power line sweeps the header; then every block rises into place with a brief glow, top to bottom; numbers spool up and the progress bar charges; the header status lights up last | The system visibly comes alive |
 | Section tabs | The selected-tab pill slides to the new tab; the panel fades up | Shows which section you moved to |
+| Switching sections | Action Center and Usage scroll smoothly to their start under the navbar; Inbox returns to the top | You land on the section you chose, not on the overview above it |
 | Email lanes | Cards fade up in a short stagger; a relabelled email glides to its new lane | Makes a correction visibly land where it went |
 | Action Center | Items fade in; completed, snoozed or dismissed items shrink out and the rest close the gap | Confirms the item left this view |
 | KPI and usage numbers | Values count from the previous number to the new one | Draws the eye to a number that changed |
@@ -62,7 +63,7 @@ flowchart LR
 
 - <code>src/api.js</code> owns request timeouts, credentials, CSRF headers, and response validation.
 - <code>src/dashboard.js</code> coordinates account-consistent reads and presentation helpers.
-- <code>src/hooks/useDashboard.js</code> owns completion-based polling, cancellation, stale-response rejection, and serialized mutations.
+- <code>src/hooks/useDashboard.js</code> owns completion-based polling, cancellation, stale-response rejection, and serialized mutations. After a failed refresh it keeps the last data on screen and backs off (5, 10, 20, 40, then 60 s; <code>backoffDelay</code> in <code>src/polling.js</code>), resetting on success.
 - Components render all server/email text through React. No raw-HTML rendering sink is used.
 
 The integrated intelligence snapshot loads bounded action summary/page and
@@ -77,16 +78,18 @@ section-local, while a session/account mismatch cancels the complete snapshot.
 | <code>AppHeader</code> | Brand, system health, connected-account controls |
 | <code>HealthPopover</code> | Model, provider, worker, prediction, and refresh state |
 | <code>AccountControls</code> | Connect, switch, disconnect, delete, and stop-processing actions |
-| <code>DashboardStats</code> | Account-wide saved, processed, feedback, and latency KPIs |
+| <code>DashboardStats</code> | The overview: eight KPI cards in one design (saved, processed, feedback, classification time, open actions, due soon, overdue, tokens today) |
+| <code>SectionTabs</code> | Inbox / Action Center / Usage tablist rendered in the header navbar |
+| <code>SourceEmailDialog</code> | Action Center pop-up showing an action's source email with the evidence highlighted; closes on Esc, the close button or a click outside |
 | <code>InboxProgress</code> | Current admitted batch and durable workflow counts |
 | <code>InboxIntake</code> | Live sync, bounded historical backlog, and explicit saved-mail intelligence backfill |
 | <code>SearchFilters</code> | Debounced hybrid query, category filter, semantic progress, and the source-email hint with its clear action |
 | <code>EmailBoard</code> | Important, Updates, Spam, and Review lanes |
-| <code>EmailCard</code> | The "Why this category?" explanation, classification details, feedback, history, and recovery |
-| <code>Pagination</code> | Stable 20-message pages |
+| <code>EmailCard</code> | The "Why this category?" explanation (with the full decision story from `describeDecision` in `intelligence.js`), classification details, feedback, history, and recovery |
+| <code>Pagination</code> | Stable 20-message pages; paging towards the end loads the next 20 older emails automatically |
 | <code>AppFeedback</code> | Persistent outages and timed action notices |
-| <code>ActionSummary</code> | Open, due-soon, overdue, and tokens-today KPIs |
-| <code>ActionCenter</code> | Status filters, a type filter built from the account's type counts, lifecycle controls, snoozing, and source navigation |
+| <code>ConnectivityBanner</code> | Gmail-style system alerts, one at a time: crash-loop warning with a shutdown countdown, offline, service restarting, "Can't reach Gmail" with a retry countdown, then "back online" / "running again". Service alerts come from the supervisor status file via <code>useSupervisorStatus</code>, so they work while the API is down |
+| <code>ActionCenter</code> | Status filters, a type filter built from the account's type counts, lifecycle controls, snoozing, and source navigation. Cards show no confidence row; tasks the AI was unsure about get a "Double-check this" badge (<code>needsDoubleCheck</code>) |
 | <code>ClassificationExplanation</code> | Rendered inside each email card: validated rationale, signals with quoted evidence, source, and model |
 | <code>TokenUsagePanel</code> | Daily bar chart (Recharts, loaded on first visit), cloud/local split, and ranked provider/operation share bars |
 | <code>ui/AnimatedCount</code> | Counts a number from its previous value to the new one; shows the final value at once under reduced motion |
@@ -107,10 +110,10 @@ Search input is debounced by approximately 300 ms.
 
 The trusted loopback browser session opens automatically. There is no pairing-code UI.
 
-Mail data is rendered only while Google is connected. Account actions have deliberately different meanings:
+Mail data is rendered only while Google is connected, or read-only while a rejected sign-in needs renewing. Account actions have deliberately different meanings:
 
-- stop processing retains mail and credentials;
-- disconnect removes the local Google credential but retains saved data;
+- stop processing and disconnect retain saved mail; the Google credential is parked unused for 24 hours so Connect Google can reconnect silently, then deleted;
+- while Google sign-in needs renewing, saved mail stays visible read-only;
 - delete removes managed data for the selected account;
 - switch performs a fenced account transition.
 

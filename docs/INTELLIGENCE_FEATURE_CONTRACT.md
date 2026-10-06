@@ -88,7 +88,11 @@ displayed as measured probability or certainty.
 
 The wire precisions are `exact_time`, `date_only`, `relative`, and `unknown`.
 
-- All provider timestamps must include an explicit offset.
+- The provider sees `email.received_at` in the configured timezone. A provider
+  deadline without an offset is that local time; an exact-time deadline marked
+  UTC is read as local unless the email itself mentions UTC/GMT or +00:00. An
+  offset the email states (for example EDT) is kept. A bare date cannot be an
+  exact time.
 - Relative dates resolve against the source email timestamp in the configured
   timezone, never against the worker's current wall clock alone.
 - Ambiguous expressions such as “sometime next week” become `unknown` with no

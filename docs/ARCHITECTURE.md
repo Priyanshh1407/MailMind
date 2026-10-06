@@ -38,8 +38,8 @@ flowchart LR
 - starts the API and waits for its health response;
 - starts the worker and built frontend;
 - monitors every owned child;
-- restarts the indexer, worker, or frontend within a bounded recent-window budget;
-- shuts down the owned set if the API exits or a restart budget is exhausted;
+- restarts any owned service that exits, the API included, with backoff (1, 2, 4, 8, 16, 32, then 60 s) and no restart limit;
+- treats only a startup crash loop (5 exits in a row, each within 10 s of starting) as unrecoverable: it warns in the terminal and, through `.run/supervisor-status.json` served by the frontend server as `/mailmind-supervisor.json`, in the dashboard, keeps retrying for 60 s, and shuts the owned set down only if the service never stays up. The status file is rewritten only when it changes, and a rename blocked by Windows ("Access is denied" while the dashboard server or antivirus has it open) is retried briefly, then skipped; it can never stop MailMind. Credential saves use the same retrying rename (`src/file_utils.py`), but still raise if the file stays locked;
 - accepts authenticated loopback stop requests; and
 - never kills unrelated processes by name or port.
 
@@ -124,13 +124,20 @@ SQLite remains the source of truth. Vector writes are account-namespaced, revisi
 
 A saved Gmail history cursor supports partial synchronization. Live changes are checked automatically and can be forced with **Sync new messages**. The forced action is durable and rate-limited.
 
+The cursor only advances after the messages it covers have been admitted. A full batch stops paging (the rest is read from the same cursor next cycle), and a failed history call keeps the old cursor.
+
+Two backstops make sure mail is never lost silently:
+
+- a message whose download failed is fetched again by ID when its retry is due. Temporary failures (network, Gmail 5xx/429) retry until Gmail answers; a deleted or unparseable message is quarantined after the attempt limit;
+- every five minutes the worker lists INBOX messages from the last two days and fetches any it has not saved, within the normal queue capacity.
+
 ### Historical backlog
 
 Older mail is deliberately bounded:
 
 - the initial connection admits at most 100 items;
 - older pages pause after the admitted batch;
-- **Fetch next 100** authorizes another historical batch only when allowed; and
+- after that, the dashboard authorizes the next 20 automatically when the user reaches the last two pages of the unfiltered inbox, and only after the previous older batch has been processed (`POST /ingestion/fetch-next`, limit 1–100, default 20); and
 - historical work cannot consume capacity reserved by the global active-task cap.
 
 ### Saved-mail intelligence backfill
@@ -148,6 +155,11 @@ New live mail is admitted and processed before older backlog, and ordinary backl
 ## Intelligence data flow
 
 Validated provider output can add a bounded explanation and action candidates to the authoritative classification. Explanations remain source-labelled and do not expose hidden reasoning. Action candidates pass strict type, confidence, evidence, date, and lifecycle checks before becoming account-owned Action Center rows.
+
+**Deadline time zone (TZ-01).**
+- The model sees `email.received_at` in the configured zone (`MAILMIND_DEFAULT_TIMEZONE`, default Asia/Kolkata, e.g. `…T17:00:00+05:30`), and is told that a time written without a zone ("5 pm") is local and must carry the same offset.
+- `_parse_due_at` backs this up in code: a deadline with no offset is local, and an exact-time deadline marked UTC is treated as local unless the email itself mentions UTC/GMT or a +00:00 offset. A zone the email states (e.g. EDT) is kept, and a bare date can't claim to be an exact time.
+- Before this fix the model saw the received time in UTC and returned "5 pm" as 17:00Z, which the browser showed as 22:30 in India. The 14 affected stored deadlines were repaired once (backup first, fingerprints recomputed, one pending reminder shifted).
 
 Token events contain counts and operational metadata, never email text or provider responses. Provider-billed and locally processed totals stay separate. Day, week, and month aggregation uses configured local-calendar boundaries.
 
@@ -180,7 +192,7 @@ An email fails only after every route is tried. It stays retryable if any route 
 
 All routing rules live in `src/classification_service.py`, shared by the worker and the API:
 
-- normal mode: the cloud decides and the local model only runs as a shadow, including on re-analysis;
+- normal mode: the cloud decides; the local model runs only as an optional shadow (off by default, `MAILMIND_SHADOW_MODEL_ENABLED`), including on re-analysis. When it is off, no model process starts and no shadow is recorded;
 - local-only mode: the local model decides, with the same sender-aware input it was trained on.
 
 Grounding uses one rule, `quote_in_source()` in `src/email_text.py`, for both explanation signals and action evidence. It checks against the same privacy-minimized text the provider saw, ignores differences in quote marks, dashes, ellipses and whitespace, and requires the words to match exactly.
@@ -188,6 +200,8 @@ Grounding uses one rule, `quote_in_source()` in `src/email_text.py`, for both ex
 Only `IMPORTANT`, `UPDATES`, and `SPAM` are model categories. `NEEDS_REVIEW` is a system presentation state for unavailable, ambiguous, or failed processing.
 
 Feedback retrieval may support a decision only when current account-owned examples are close enough, revision-valid, independently supported, and sufficiently dominant. Otherwise it abstains.
+
+**Correction rule (cloud mode).** `classify_email` retrieves up to 8 of the account's corrections within cosine distance 0.40, validated by `CurrentFeedback` (current label and revision in SQLite). `match_correction` (`src/feedback_rules.py`) picks the nearest correction that is either from the same sender address within 0.40 or a near-copy within 0.20. If one matches, the final category is the user's label: the AI's actions are kept, and the explanation becomes "Matches your earlier correction" with the `feedback_precedent` signal. The AI's own examples are unchanged (3 nearest within 0.25, only when 3 exist). Without the SQLite-backed hook, retrieved text can never force a label. Before classifying a cycle's first email, the worker opens the feedback index (bounded, for this data folder only). Before this, it opened only when a new correction needed saving, so after a restart every lookup failed with `retrieval_not_initialized` and corrections were silently ignored (FB-02). The thresholds come from a leave-one-out evaluation on the owner's 83 labelled emails: 55 covered, 52 matching the owner's label (95%); 0.45 dropped to 90%.
 
 ## Notification and read-state safety
 
@@ -215,6 +229,10 @@ If embedding or Chroma query work fails, the API logs a safe event and returns l
 - A poisoned message does not stop the batch.
 - An expired lease prevents a stale worker from committing.
 - A malformed (non-numeric) retry time cannot strand a task: each worker cycle repairs it, because SQLite ranks text above every number.
+- Temporary failures never give up. Classification (AI outage, quota, timeout), Telegram alerts, reminders and Gmail downloads keep retrying with backoff capped at 5 minutes; the search index retries on the same schedule, and feedback indexing gets a few quick tries, then retries every 5 minutes. Permanent failures stop at once with the reason: a rejected or invalid request, invalid model output, unconfigured Telegram, or an ambiguous send that might already have been delivered (never resent automatically).
+- Disconnect and Stop processing park the OAuth credential (`<digest>.parked.json`, timestamped) instead of using or deleting it. Background work only reads the live credential, so a parked one is never used. Connect Google while disconnected first tries `renew_saved_login`: it refreshes the parked (or paused) credential with a bounded timeout and checks the account matches. On success the account reconnects with no browser flow; otherwise the normal OAuth page opens. Parked credentials older than 24 h are deleted on restart and before each reconnect, and Delete account data removes them at once. Switching accounts while connected never uses the silent path.
+- An API restart keeps Google connected when the saved login file still exists and no deletion is pending. It still revokes browser sessions and bumps the generation, so work from before the restart is fenced out.
+- Losing the internet does not sign the user out. The per-cycle Gmail check separates a proven login problem (rejected refresh, 401/403, wrong account), which pauses the account, from network trouble or a Gmail outage, which keeps it connected. The cycle is skipped, so emails don't spend their retries while offline, and the worker backs off exponentially: 5, 10, 20, 40, then every 60 s. `/status` reports the failed-check streak and the seconds until the next check, and the dashboard shows Gmail-style connectivity alerts while keeping the saved mail on screen.
 - An interrupted intelligence backfill is recovered through the same lease/retry path without repeating historical side effects.
 - Unknown notification delivery requires explicit recovery.
 - Historical transient runtime errors are cleared after restart or a successful worker cycle.

@@ -18,6 +18,7 @@ This directory contains the current operational and technical documentation for 
 | [Controlled intelligence validation](CONTROLLED_INTELLIGENCE_VALIDATION.md) | Release operators | Privacy-safe live OAuth, Gmail, action, token, reminder, and backfill checklist |
 | [Intelligence feature contract](INTELLIGENCE_FEATURE_CONTRACT.md) | Developers and reviewers | Stable action, explanation, reminder, token, and rollout behavior |
 | [Classifier evaluation](EVALUATION.md) | Reviewers | Recorded, replayable route comparison on the CC0 benchmark |
+| [Self-recovery](SELF_RECOVERY.md) | Developers, reviewers and interviewers | How MailMind recovers from outages, crashes and restarts, and what still needs a human |
 | [Provider resilience](RESILIENCE.md) | Developers and reviewers | Tested outcome for every provider fault type, generated from tests |
 | [Performance](PERFORMANCE.md) | Developers | Measured list/search latency and bundle size, with decisions |
 | [Contributing](../CONTRIBUTING.md) | Contributors | Required tests, privacy gate, documentation rules, and pull-request expectations |

@@ -10,7 +10,7 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
-At the 30 September 2026 verification, all 526 discovered backend tests passed, and each of the 25 test modules also passes when run on its own.
+At the 6 October 2026 verification, all 590 discovered backend tests passed, and each of the 25 test modules also passes when run on its own.
 
 Regression and contract suites added after the audit:
 
@@ -30,7 +30,7 @@ The backend suite covers:
 - feedback revisions and conservative retrieval;
 - local-only routing and asset verification;
 - semantic search reconciliation and hybrid ranking;
-- supervisor ownership and restart limits;
+- supervisor ownership, unlimited restarts with backoff, and warn-before-stop on a startup crash loop;
 - prompt-injection and retrieval-poisoning boundaries; and
 - privacy-safe failure behavior; and
 - configuration errors that name the exact setting to change.
@@ -59,7 +59,7 @@ Set-Location ..
 Current verified result:
 
 - 42 Node unit tests passed;
-- 29 Playwright browser scenarios passed;
+- 37 Playwright browser scenarios passed;
 - lint passed;
 - production build passed.
 

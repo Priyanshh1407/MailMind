@@ -45,6 +45,7 @@ Never commit environment files, OAuth JSON, tokens, databases, launcher logs, ex
 | <code>MAILMIND_MAX_PENDING_TASKS</code> | <code>100</code> | Maximum active queued, running, and retry tasks |
 | <code>MAILMIND_RESUME_PENDING_TASKS</code> | <code>50</code> | Lower threshold used by bounded intake |
 | <code>MAILMIND_MODEL_PATH</code> | optional | Explicit local classifier path |
+| <code>MAILMIND_SHADOW_MODEL_ENABLED</code> | optional (default false) | Run the local model as a comparison-only shadow in normal mode; ignored in local-only mode |
 | <code>MAILMIND_SHADOW_MODEL_PATH</code> | optional | Normal-mode three-class shadow checkpoint |
 | <code>MAILMIND_ASSET_MANIFEST</code> | optional | Verified local-only asset manifest |
 | <code>MAILMIND_TOKEN_COLLECTION_ENABLED</code> | <code>true</code> | Record privacy-safe token events |
@@ -137,7 +138,16 @@ The authenticated loopback stop request applies only to the recorded supervisor 
 
 ## Restart behavior
 
-The supervisor can restart the indexer, worker, or frontend at most three times inside a 60-second window. An API exit or exhausted restart budget shuts down the owned service set.
+The supervisor restarts any owned service that exits (indexer, API, worker or frontend), waiting 1, 2, 4, 8, 16, 32, then 60 s between attempts, with no limit. A service that ran for at least 10 s before exiting starts the count again.
+
+The only case it treats as impossible is a startup crash loop: 5 exits in a row, each within 10 s of starting. The supervisor then:
+
+1. prints a `WARNING` in the terminal naming the service, its exit code and its log file;
+2. shows the same warning in the dashboard with a shutdown countdown;
+3. keeps restarting the service for 60 s;
+4. cancels the shutdown if the service recovers, or stops the owned service set if it does not.
+
+An API restart keeps Google connected when the saved login is still valid, so Gmail work resumes without reconnecting.
 
 Graceful shutdown uses child stdin. A bounded terminate/kill fallback applies only to the exact owned child objects.
 
@@ -194,7 +204,7 @@ Integration helpers:
 .\venv\Scripts\python.exe -m scripts.check_clean_release
 ~~~
 
-At the 30 September 2026 automated verification, all 526 backend tests, 48 frontend unit tests, 29 browser scenarios, frontend lint, and the production build passed.
+At the latest automated verification, all 590 backend tests, 58 frontend unit tests and 37 browser scenarios (6 October 2026), frontend lint, and the production build passed.
 
 ## Release checklist
 
