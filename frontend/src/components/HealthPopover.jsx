@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { localModelSummary } from '../dashboard';
 import { BrainCircuit, ChevronDown, Cloud, RefreshCw, Server, ShieldCheck, Sparkles } from 'lucide-react';
 import { formatTime, workerState } from '../dashboard';
 
@@ -29,11 +30,7 @@ export function HealthPopover({ snapshot, stale }) {
     };
   }, [open]);
 
-  const localValue = !local
-    ? 'Waiting for status'
-    : local.ready
-      ? local.evaluation_scope === 'synthetic_benchmark_only' ? 'Loaded · synthetic benchmark only' : 'Loaded · quality not yet evaluated'
-      : local.status === 'loading' ? 'Loading · cloud is handling requests' : 'Unavailable for three-category inference';
+  const localModel = localModelSummary(local);
   const providerName = value => value === 'disabled_local_only' ? 'Disabled' : value === 'unconfigured' ? 'Not configured' : 'Configured';
 
   return <div ref={container} className="health-menu-container">
@@ -49,7 +46,7 @@ export function HealthPopover({ snapshot, stale }) {
       </div>
       {telemetry?.mode?.local_only && <p className="health-callout">Local-only mode is active. Cloud, Gmail and external alerts are disabled.</p>}
       <div className="health-grid">
-        <HealthItem icon={BrainCircuit} title="Local model" value={localValue} note={local?.version || 'Version not reported'} />
+        <HealthItem icon={BrainCircuit} title="Local model" value={localModel.value} note={localModel.note} />
         <HealthItem icon={Cloud} title="Cloud providers" value={'Gemini: ' + providerName(telemetry?.providers?.gemini) + ' · Groq: ' + providerName(telemetry?.providers?.groq)} note="Independent provider fallbacks" />
         <HealthItem icon={Server} title="Worker" value={snapshot ? workerState(snapshot) : 'Waiting for status'} note={'Heartbeat ' + formatTime(status?.worker?.heartbeat_at)} />
         <HealthItem icon={Sparkles} title="Latest classification" value={telemetry?.latest_prediction ? telemetry.latest_prediction.source + ' - ' + telemetry.latest_prediction.outcome : 'Not recorded'} note={formatTime(telemetry?.latest_prediction?.created_at)} />

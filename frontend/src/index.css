@@ -2334,9 +2334,11 @@ select {
   border-radius: 6px;
 }
 
+/* One line when the card is wide enough; a button that doesn't fit (zoom,
+   narrow lanes) moves to the next line instead of spilling out of the card. */
 .email-actions {
   gap: 6px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   white-space: nowrap;
   margin-top: 12px;
   padding-top: 0;

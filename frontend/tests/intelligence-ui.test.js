@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { countLabel, formatDeadline } from '../src/intelligence.js';
+import { countLabel, describeDecision, formatDeadline, needsDoubleCheck, signalLabel } from '../src/intelligence.js';
 
 const options = { locale: 'en-GB', timeZone: 'Asia/Kolkata' };
 
@@ -49,4 +49,38 @@ test('summary type counts must be known types with integer counts', async () => 
   assert.equal(ok(summary({ payment_required: 2, meeting: 1 })), true);
   assert.equal(ok(summary({ urgent: 1 })), false);
   assert.equal(ok(summary({ meeting: 'one' })), false);
+});
+
+test('the decision story covers route, meaning, corrections, second opinion and your label', () => {
+  const base = { decided_by: 'model', category: 'IMPORTANT', route: 'primary', provider: 'gemini',
+    model_version: 'gemini-3.8-flash', precedents: { used: 0, lookup: 'none_close_enough' },
+    second_opinion: { category: 'IMPORTANT', agrees: true }, elapsed_ms: 1201, your_label: null };
+  const text = decision => Object.fromEntries(describeDecision(decision).map(part => [part.key, part.text]));
+  const primary = text(base);
+  assert.equal(primary.decision, 'Gemini (gemini-3.8-flash) chose Important in 1.3 s.');
+  assert.match(primary.meaning, /needs your action or attention/);
+  assert.match(primary.precedents, /judged on its own/);
+  assert.equal(primary.second, 'The local model also chose Important.');
+  assert.equal(primary.yours, undefined);
+  assert.match(text({ ...base, route: 'fallback' }).decision, /backup Gemini model answered/);
+  assert.match(text({ ...base, route: 'groq', provider: 'groq' }).decision, /backup provider answered/);
+  assert.equal(text({ ...base, precedents: { used: 3, lookup: 'used' } }).precedents,
+    '3 similar emails you corrected were shown to the model as examples.');
+  assert.match(text({ ...base, second_opinion: { category: 'SPAM', agrees: false } }).second, /would have chosen Spam/);
+  assert.match(text({ ...base, decided_by: 'you', your_label: 'UPDATES' }).yours, /changed this to Updates/);
+  const local = text({ ...base, route: 'local', provider: 'local', second_opinion: null, precedents: { used: 0, lookup: 'not_applicable' } });
+  assert.match(local.decision, /running entirely on this computer/);
+  assert.equal(local.precedents, undefined);
+  assert.deepEqual(describeDecision(null), []);
+});
+
+test('a decision made by your earlier correction is labelled in plain words', () => {
+  assert.equal(signalLabel('feedback_precedent'), 'Your earlier correction');
+  assert.equal(signalLabel('direct_request'), 'Direct Request');
+});
+
+test('only tasks the AI was unsure about ask for a double-check', () => {
+  assert.equal(needsDoubleCheck({ confidence: 'high' }), false);
+  assert.equal(needsDoubleCheck({ confidence: 'medium' }), true);
+  assert.equal(needsDoubleCheck({ confidence: 'low' }), true);
 });

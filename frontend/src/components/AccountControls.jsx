@@ -87,7 +87,7 @@ export function AccountControls({ snapshot, pending, mutate }) {
           <button disabled={busy} onClick={() => account('/logout')}>Stop processing</button>
         </div>
         {snapshot.status.purge_pending && <p className="purge-notice" role="status">Deletion is pending. Processing stays paused. Retry account deletion.</p>}
-        <p className="account-privacy"><LockKeyhole size={13} /> Logout keeps saved mail and credentials. Disconnect removes local Google credentials. Revoke Google permission separately in your Google account.</p>
+        <p className="account-privacy"><LockKeyhole size={13} /> Stop processing and Disconnect keep saved mail. Your Google sign-in is kept unused for 24 hours so Connect Google can reconnect without Google's page, then deleted. Delete account data removes it at once. Revoke Google permission separately in your Google account.</p>
       </div>}
     </div>
   </div>;

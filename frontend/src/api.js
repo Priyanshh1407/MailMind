@@ -60,6 +60,22 @@ const EXPLANATION_SIGNALS = [
   'credential_request', 'feedback_precedent', 'local_model_signal',
 ];
 
+const DECISION_CATEGORIES = ['IMPORTANT', 'UPDATES', 'SPAM'];
+function validDecision(decision) {
+  return decision === null || (record(decision)
+    && ['model', 'you'].includes(decision.decided_by)
+    && DECISION_CATEGORIES.includes(decision.category)
+    && ['primary', 'fallback', 'groq', 'gemini', 'local', 'unknown'].includes(decision.route)
+    && (decision.model_version === null || typeof decision.model_version === 'string')
+    && record(decision.precedents) && integer(decision.precedents.used)
+    && ['used', 'none_close_enough', 'unavailable', 'not_applicable'].includes(decision.precedents.lookup)
+    && (decision.second_opinion === null || (record(decision.second_opinion)
+      && DECISION_CATEGORIES.includes(decision.second_opinion.category)
+      && typeof decision.second_opinion.agrees === 'boolean'))
+    && (decision.elapsed_ms === null || (typeof decision.elapsed_ms === 'number' && decision.elapsed_ms >= 0))
+    && (decision.your_label === null || DECISION_CATEGORIES.includes(decision.your_label)));
+}
+
 function validAnalysis(analysis) {
   return analysis === null || (record(analysis)
     && typeof analysis.analysis_version === 'string'
@@ -113,11 +129,12 @@ function validDailyTrend(rows) {
 export function validateResponse(path, method, data) {
   const route = path.split('?')[0];
   let valid = record(data);
-  if (valid && route === '/session') valid = typeof data.csrf_token === 'string' && (method !== 'GET' || (integer(data.generation) && typeof data.connected === 'boolean' && (data.email === null || typeof data.email === 'string')));
+  if (valid && route === '/session') valid = typeof data.csrf_token === 'string' && (method !== 'GET' || (integer(data.generation) && typeof data.connected === 'boolean' && (data.email === null || typeof data.email === 'string') && (data.read_only === undefined || typeof data.read_only === 'boolean')));
+  if (valid && method === 'GET' && route === '/status' && data.connectivity !== undefined) valid = record(data.connectivity) && ['ok', 'unreachable'].includes(data.connectivity.gmail) && integer(data.connectivity.failed_checks) && (data.connectivity.retry_in_seconds === null || integer(data.connectivity.retry_in_seconds));
   if (valid && method === 'GET' && route === '/status') valid = identity(data) && ['connected','is_polling','auth_in_progress','purge_pending','auto_mark_read'].every(key => typeof data[key] === 'boolean') && record(data.processing_counts) && record(data.notification_counts) && Array.isArray(data.ingestion_failures);
   if (valid && method === 'GET' && route === '/status') valid = ['ingestion_paused','fetch_next_available','live_monitoring'].every(key => typeof data[key] === 'boolean') && ['active_pending_tasks','live_pending_tasks','backlog_pending_tasks','max_pending_tasks','resume_pending_tasks','current_batch_target_tasks','current_batch_admitted_tasks','workflow_total_tasks','workflow_finished_tasks'].every(key => integer(data[key]));
   if (valid && method === 'GET' && route === '/status') valid = record(data.intelligence_backfill) && typeof data.intelligence_backfill.enabled === 'boolean' && ['eligible','queued','running','retry','complete','dead'].every(key => integer(data.intelligence_backfill[key]));
-  if (valid && method === 'GET' && route === '/emails') valid = identity(data) && Array.isArray(data.emails) && data.emails.every(email => record(email) && typeof email.id === 'string' && typeof email.subject === 'string' && typeof email.sender === 'string' && typeof email.created_at === 'string' && [null,'IMPORTANT','UPDATES','SPAM'].includes(email.effective_category) && (email.review_reason === null || (record(email.review_reason) && typeof email.review_reason.code === 'string' && typeof email.review_reason.message === 'string')) && (email.analysis === undefined || validAnalysis(email.analysis))) && ['total','limit','offset'].every(key => integer(data[key])) && typeof data.has_more === 'boolean' && ['text','hybrid'].includes(data.search_mode) && typeof data.semantic_available === 'boolean' && record(data.semantic_index) && ['pending','indexed','failed'].every(key => integer(data.semantic_index[key]));
+  if (valid && method === 'GET' && route === '/emails') valid = identity(data) && Array.isArray(data.emails) && data.emails.every(email => record(email) && typeof email.id === 'string' && typeof email.subject === 'string' && typeof email.sender === 'string' && typeof email.created_at === 'string' && [null,'IMPORTANT','UPDATES','SPAM'].includes(email.effective_category) && (email.review_reason === null || (record(email.review_reason) && typeof email.review_reason.code === 'string' && typeof email.review_reason.message === 'string')) && (email.analysis === undefined || validAnalysis(email.analysis)) && (email.decision === undefined || validDecision(email.decision))) && ['total','limit','offset'].every(key => integer(data[key])) && typeof data.has_more === 'boolean' && ['text','hybrid'].includes(data.search_mode) && typeof data.semantic_available === 'boolean' && record(data.semantic_index) && ['pending','indexed','failed'].every(key => integer(data.semantic_index[key]));
   if (valid && method === 'GET' && route === '/telemetry') valid = identity(data) && record(data.totals) && ['saved','completed','labelled','corrected','confirmed','feedback_events','prediction_attempts'].every(key => integer(data.totals[key])) && record(data.local_model) && typeof data.local_model.ready === 'boolean' && record(data.providers) && record(data.classification_timing) && integer(data.classification_timing.sample_count) && (data.classification_timing.mean_ms === null || (typeof data.classification_timing.mean_ms === 'number' && Number.isFinite(data.classification_timing.mean_ms) && data.classification_timing.mean_ms >= 0));
   if (valid && method === 'GET' && route.endsWith('/history')) valid = identity(data) && Array.isArray(data.feedback) && Array.isArray(data.processing);
   if (valid && ((method === 'POST' && ['/authenticate','/inbox/sync','/ingestion/fetch-next','/intelligence/backfill'].includes(route)) || route.startsWith('/jobs/'))) valid = ['string','number'].includes(typeof data.job_id) && typeof data.status === 'string';

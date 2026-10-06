@@ -12,7 +12,8 @@ const spoolUp = t => (t < 0.5 ? 8 * t ** 4 : 1 - (-2 * t + 2) ** 4 / 2);
 // requestAnimationFrame loop (no animation engine in the first-load bundle).
 // While the dashboard boots, it waits for the blocks to land, then spools up.
 // Missing values show '-', and reduced motion shows the final number at once.
-export function AnimatedCount({ value, duration = 600 }) {
+// `format` turns the counted integer into text (e.g. tenths -> "1.3").
+export function AnimatedCount({ value, duration = 600, format = formatCount }) {
   const reduce = useReducedMotion();
   const booting = useBooting();
   const target = value == null ? null : Number(value);
@@ -46,5 +47,5 @@ export function AnimatedCount({ value, duration = 600 }) {
     };
   }, [target, reduce, duration, booting]);
 
-  return formatCount(display);
+  return format(display);
 }

@@ -1,7 +1,7 @@
 import { AccountControls } from './AccountControls';
 import { HealthPopover } from './HealthPopover';
 
-export function AppHeader({ snapshot, pending, mutate, loading, error }) {
+export function AppHeader({ snapshot, pending, mutate, loading, error, nav = null }) {
   const connected = Boolean(snapshot?.session.connected);
   const ingestion = snapshot?.status?.ingestion;
   const workPending = connected && ((snapshot?.status?.active_pending_tasks ?? 0) > 0 || Boolean(ingestion?.backlog_authorized));
@@ -22,6 +22,8 @@ export function AppHeader({ snapshot, pending, mutate, loading, error }) {
         <div className="brand-title-row"><h1>MailMind</h1><p>A calm, private workspace for a better inbox.</p></div>
       </div>
     </div>
+    {/* Inbox / Action Center / Usage: always one click away. */}
+    {nav && <div className="header-nav">{nav}</div>}
     <div className="header-actions">
       <span className={'connection-state ' + tone}>{label}</span>
       <HealthPopover snapshot={snapshot} stale={Boolean(error)} />

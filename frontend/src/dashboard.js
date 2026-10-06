@@ -6,6 +6,62 @@ export const MAX_PAGE_OFFSET = 1000000;
 export const MAX_ACTION_RANGE_DAYS = 366;
 const ACTION_STATUSES = ['open', 'completed', 'dismissed', 'snoozed'];
 const TOKEN_WINDOWS = ['day', 'week', 'month'];
+// Older mail is loaded automatically, one page at a time, as the user pages
+// towards the end of what's saved (like a mail client's infinite history).
+export const OLDER_MAIL_BATCH = EMAIL_PAGE_LIMIT;
+export function shouldLoadOlderMail(page, query, status) {
+  if (!page || !status || !status.connected || !status.live_monitoring) return false;
+  // Only while browsing the whole inbox: a search or filter near its end says
+  // nothing about wanting older mail.
+  if (query.search || query.category || query.emailId) return false;
+  if (!status.fetch_next_available) return false;
+  // On the last or second-to-last page, start loading before the user arrives.
+  return page.offset + 2 * page.limit >= page.total;
+}
+// Average classification time is shown in seconds with one decimal, always
+// rounded up (1201 ms -> 1.3 s). Counted in tenths so the number can animate.
+export function millisecondsToTenthsUp(ms) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return null;
+  return Math.ceil(ms / 100 - 1e-9); // tolerate float noise like 1200.0000001
+}
+export const formatTenthsAsSeconds = tenths => tenths == null ? '-' : (tenths / 10).toFixed(1);
+// What the health panel says about the local model.
+export function localModelSummary(local) {
+  if (!local) return { value: 'Waiting for status', note: 'Version not reported' };
+  if (local.status === 'off') return { value: 'Off · comparison shadow disabled', note: 'Enable with MAILMIND_SHADOW_MODEL_ENABLED=true' };
+  const note = local.version || 'Version not reported';
+  if (local.ready) return { value: local.evaluation_scope === 'synthetic_benchmark_only' ? 'Loaded · synthetic benchmark only' : 'Loaded · quality not yet evaluated', note };
+  return { value: local.status === 'loading' ? 'Loading · cloud is handling requests' : 'Unavailable for three-category inference', note };
+}
+// Which connectivity alert to show, like Gmail's "You're offline" bar.
+// 'offline': this device has no network (the browser knows instantly).
+// 'gmail': the device is online, but MailMind's checks can't reach Gmail.
+// The supervisor restarts any MailMind service that stops. It only shuts down
+// after a startup crash loop, and warns first; this turns its status into one alert.
+const SERVICE_LABELS = { api: "MailMind's server", worker: 'the inbox worker', indexer: 'search indexing', frontend: 'the dashboard server' };
+export function supervisorAlert(status) {
+  const services = status && typeof status.services === 'object' && status.services ? Object.entries(status.services) : [];
+  const describe = ([service, info]) => ({ service, label: SERVICE_LABELS[service] || service, restarts: info.restarts ?? 0 });
+  const looping = services.find(([, info]) => info?.state === 'crash_loop');
+  if (looping) return { kind: 'crash_loop', ...describe(looping), shutdownIn: status.shutdown_in_seconds ?? null, message: status.message ?? null };
+  const restarting = services.find(([, info]) => info?.state === 'restarting');
+  if (restarting) return { kind: 'restarting', ...describe(restarting), retryIn: restarting[1].retry_in_seconds ?? null };
+  return null;
+}
+
+// Why Google is disconnected: 'login_rejected' when the worker paused because
+// Google stopped accepting the saved sign-in; null for a deliberate disconnect.
+export function disconnectReason(snapshot) {
+  if (!snapshot || snapshot.session?.connected || snapshot.status?.auth_in_progress) return null;
+  return snapshot.session?.read_only === true || snapshot.status?.worker?.last_error_code === 'gmail_unavailable' ? 'login_rejected' : null;
+}
+
+const UNREACHABLE = ['network_unavailable', 'gmail_temporarily_unavailable'];
+export function connectivityProblem({ browserOnline, connected, workerErrorCode, gmail }) {
+  if (!browserOnline) return 'offline';
+  if (connected && (gmail === 'unreachable' || UNREACHABLE.includes(workerErrorCode))) return 'gmail';
+  return null;
+}
 export const categoryName = category => ({ IMPORTANT: 'Important', UPDATES: 'Updates', SPAM: 'Spam', NEEDS_REVIEW: 'Needs Review' })[category] || category;
 export const effectiveCategory = email => CATEGORIES.includes(email.effective_category) ? email.effective_category : 'NEEDS_REVIEW';
 export function assertAccount(session, ...responses) {
@@ -115,6 +171,8 @@ async function readDashboard(api, query, signal, jobId, clock) {
     session = await api.request('/session', { signal });
   }
   const queries = dashboardQueries(query);
+  // Saved data is readable while connected, or read-only while sign-in needs renewing.
+  const readable = session.connected || session.read_only === true;
   const scoped = async path => {
     const data = await api.request(path, { signal });
     assertAccount(session, data);
@@ -125,7 +183,7 @@ async function readDashboard(api, query, signal, jobId, clock) {
   const emptyPage = emptyActionPage(session, actionOffset);
   const emptyTokens = emptyTokenSummary(session, queries.tokenWindow);
   const emptyTodayTokens = emptyTokenSummary(session, 'day');
-  const selectedTokens = session.connected
+  const selectedTokens = readable
     ? optionalRead(
       () => scoped('/analytics/tokens?window=' + encodeURIComponent(queries.tokenWindow)),
       emptyTokens,
@@ -133,7 +191,7 @@ async function readDashboard(api, query, signal, jobId, clock) {
     : Promise.resolve(unavailable(emptyTokens));
   const todayTokens = queries.tokenWindow === 'day'
     ? selectedTokens
-    : session.connected
+    : readable
       ? optionalRead(
         () => scoped('/analytics/tokens?window=day'),
         emptyTodayTokens,
@@ -141,9 +199,9 @@ async function readDashboard(api, query, signal, jobId, clock) {
       : Promise.resolve(unavailable(emptyTodayTokens));
   const [status, telemetry, page, actionSummary, actionPage, tokenUsage, tokenToday] = await Promise.all([
     scoped('/status'), scoped('/telemetry'),
-    session.connected ? scoped('/emails?' + queries.email) : Promise.resolve(null),
-    session.connected ? optionalRead(() => scoped('/actions/summary'), emptySummary) : Promise.resolve(unavailable(emptySummary)),
-    session.connected ? optionalRead(() => scoped('/actions?' + queries.actions), emptyPage) : Promise.resolve(unavailable(emptyPage)),
+    readable ? scoped('/emails?' + queries.email) : Promise.resolve(null),
+    readable ? optionalRead(() => scoped('/actions/summary'), emptySummary) : Promise.resolve(unavailable(emptySummary)),
+    readable ? optionalRead(() => scoped('/actions?' + queries.actions), emptyPage) : Promise.resolve(unavailable(emptyPage)),
     selectedTokens,
     todayTokens,
   ]);

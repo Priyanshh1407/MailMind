@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { ChevronDown, Sparkles } from 'lucide-react';
 import { AnimatePresence, m } from 'motion/react';
 import { EASE_OUT } from '../motion';
-import { signalLabel, sourceLabel } from '../intelligence';
+import { describeDecision, signalLabel, sourceLabel } from '../intelligence';
 
-export function ClassificationExplanation({ analysis }) {
+export function ClassificationExplanation({ analysis, decision = null }) {
   const [open, setOpen] = useState(false);
   if (!analysis) return null;
   // <details> keeps native keyboard and screen-reader behaviour; the content is
@@ -20,11 +20,18 @@ export function ClassificationExplanation({ analysis }) {
           {item.evidence && <q className='signal-evidence'>{item.evidence}</q>}
         </li>)}
       </ul>}
-      <p className='explanation-source'>
+      {/* The whole decision, from what was saved with it. */}
+      {decision && <dl className='decision-story' aria-label='How this category was chosen'>
+        {describeDecision(decision).map(part => <div key={part.key} className={'decision-part ' + part.key}>
+          <dt>{part.title}</dt><dd>{part.text}</dd>
+        </div>)}
+      </dl>}
+      {/* The decision story already names the model and your corrections. */}
+      {!decision && <p className='explanation-source'>
         Source: {sourceLabel(analysis.source)}
         {analysis.model_version ? ' - ' + analysis.model_version : ''}
         {analysis.retrieval_used ? ' - used your feedback precedent' : ''}
-      </p>
+      </p>}
       {analysis.source === 'system' && <p className='system-explanation'>This is a system state explanation, not a model classification.</p>}
     </div>
     </m.div>}</AnimatePresence>

@@ -12,7 +12,7 @@ export function AppFeedback({ error, actionError, notice, snapshot, pending, ref
   return <div className="app-feedback" aria-live="polite"><AnimatePresence initial={false}>
     {error && <m.div key="refresh-error" {...TOAST_MOTION} role="alert" className="toast error-toast">
       <CircleAlert size={17} />
-      <div><strong>Refresh needs attention</strong><p>{error.message}</p>{snapshot && <small>Showing last known data. Email actions are paused until refresh succeeds.</small>}</div>
+      <div><strong>Refresh needs attention</strong><p>{error.message}</p>{snapshot && <small>Showing last known data. Email actions are paused until refresh succeeds; MailMind keeps retrying automatically.</small>}</div>
       <button className="toast-action" onClick={refresh} disabled={Boolean(pending.account)}><RefreshCw size={14} />Retry refresh</button>
     </m.div>}
     {!error && actionError && <m.div key="action-error" {...TOAST_MOTION} role="alert" className="toast error-toast">

@@ -6,7 +6,7 @@ import { Surface, SectionTitle } from './ui/Surface';
 import { enterTransition, fadeUp, spring } from '../motion';
 
 export function ActionCenter({
-  snapshot, query, setQuery, loading, disabled, pending, mutate, openSource,
+  snapshot, query, setQuery, loading, disabled, readDisabled = disabled, pending, mutate, openSource, api,
 }) {
   const section = snapshot.actions;
   const actions = section.page.actions;
@@ -57,7 +57,7 @@ export function ActionCenter({
       {/* Completed, snoozed or dismissed items leave the view; the rest close the gap. */}
       <AnimatePresence mode='popLayout' initial={true}>
         {actions.map((action, index) => <m.div key={action.action_id} layout className='motion-item' initial={fadeUp.initial} animate={fadeUp.animate} exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }} transition={{ ...enterTransition(index), layout: spring }}>
-          <ActionCard action={action} busy={Boolean(pending['action:' + action.action_id])} disabled={disabled} mutate={mutate} openSource={openSource} />
+          <ActionCard action={action} busy={Boolean(pending['action:' + action.action_id])} disabled={disabled} readDisabled={readDisabled} mutate={mutate} openSource={openSource} api={api} generation={snapshot.session.generation} />
         </m.div>)}
       </AnimatePresence>
       {!actions.length && <p className='empty-state'>{shownEmptyMessage}</p>}

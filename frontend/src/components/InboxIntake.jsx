@@ -1,4 +1,4 @@
-import { Archive, RefreshCw, Sparkles, Wifi } from 'lucide-react';
+import { RefreshCw, Sparkles, Wifi } from 'lucide-react';
 import { formatEmailTime } from '../dashboard';
 import { SectionTitle, Surface } from './ui/Surface';
 
@@ -6,7 +6,6 @@ export function InboxIntake({ snapshot, loading, disabled, pending, mutate }) {
   const status = snapshot.status;
   const ingestion = status.ingestion;
   const offline = snapshot.telemetry?.mode?.local_only;
-  const fetchNextReady = Boolean(status.fetch_next_available);
   const backfill = status.intelligence_backfill;
   const backfillActive = Boolean(
     backfill && backfill.queued + backfill.running + backfill.retry > 0);
@@ -22,14 +21,11 @@ export function InboxIntake({ snapshot, loading, disabled, pending, mutate }) {
       <button className="button primary" disabled={loading || disabled || pending.sync || status.purge_pending || offline} onClick={() => mutate('sync', '/inbox/sync')}>
         <RefreshCw size={14} className={pending.sync ? 'spin-icon' : ''} />{pending.sync ? 'Checking Gmail...' : 'Sync new messages'}
       </button>
-      <button className="button secondary" disabled={loading || disabled || pending.extract || !fetchNextReady || offline} onClick={() => mutate('extract', '/ingestion/fetch-next')}>
-        <Archive size={14} />{pending.extract ? 'Authorizing...' : 'Fetch next 100'}
-      </button>
       <button className="button secondary" disabled={loading || disabled || pending.backfill || backfillActive || !backfill?.enabled || !backfill?.eligible || offline} onClick={() => mutate('backfill', '/intelligence/backfill', { body: { limit: 20 } })}>
         <Sparkles size={14} />{pending.backfill ? 'Queuing...' : 'Analyze up to 20 saved emails'}
       </button>
     </div>
-    {status.ingestion_paused && !fetchNextReady && <p className="panel-note">Older-mail intake is paused while this batch finishes. New mail still receives priority.</p>}
+    {ingestion?.has_more && <p className="panel-note">Older mail loads automatically, 20 at a time, as you page towards the end of your inbox. New mail always comes first.</p>}
     {backfill && <p className="panel-note">{backfill.enabled ? <>Intelligence backfill: {backfill.eligible} eligible / {backfill.queued + backfill.running + backfill.retry} active / {backfill.complete} complete. It never sends historical alerts, marks mail read, or creates automatic reminders.</> : <>Saved-mail analysis is unavailable until Action Center extraction is enabled.</>}</p>}
   </Surface>;
 }

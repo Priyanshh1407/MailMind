@@ -10,7 +10,7 @@ const LANE_STYLES = {
   NEEDS_REVIEW: { className: 'lane-review', badge: 'review', dot: 'review', label: 'Review', empty: 'Nothing needs review.' },
 };
 
-export function EmailBoard({ page, pending, disabled, mutate, api, generation }) {
+export function EmailBoard({ page, pending, disabled, readDisabled = disabled, mutate, api, generation }) {
   return <LayoutGroup><div id='emails' className='board'>{CATEGORIES.map(category => {
     const rows = page.emails.filter(email => effectiveCategory(email) === category);
     const style = LANE_STYLES[category];
@@ -24,7 +24,7 @@ export function EmailBoard({ page, pending, disabled, mutate, api, generation })
         {/* The wrapper owns the motion so the card keeps its own CSS hover lift.
             A shared layoutId lets a relabelled email glide to its new lane. */}
         {rows.map((email, index) => <m.div key={generation + ':' + email.id} layoutId={'email-' + generation + ':' + email.id} layout='position' className='motion-item' initial={fadeUp.initial} animate={fadeUp.animate} transition={{ ...enterTransition(index), layout: spring }}>
-          <EmailCard email={email} style={style} pending={Boolean(pending[email.id])} disabled={disabled} mutate={mutate} api={api} generation={generation} />
+          <EmailCard email={email} style={style} pending={Boolean(pending[email.id])} disabled={disabled} readDisabled={readDisabled} mutate={mutate} api={api} generation={generation} />
         </m.div>)}
         {!rows.length && <p className='lane-empty'>{style.empty}</p>}
       </div>

@@ -52,21 +52,24 @@ export function useDashboard(api, query) {
     return () => window.clearTimeout(timer);
   }, [actionError]);
   const refresh = useCallback(() => { setActionError(null); return poller.current?.refresh(); }, []);
-  const mutate = useCallback(async (key, path, options = {}, account = false) => {
+  // silent: background work the user didn't click (e.g. loading older mail).
+  // It shows no notice and no error toast; the next poll shows the result.
+  const mutate = useCallback(async (key, path, { silent = false, ...options } = {}, account = false) => {
     if (locks.current.has(key) || (!account && locks.current.has('account'))) return false;
     if (account) reset();
-    locks.current.add(key); setPending(previous => ({ ...previous, [key]: true })); setNotice(''); setActionError(null);
+    locks.current.add(key); setPending(previous => ({ ...previous, [key]: true }));
+    if (!silent) { setNotice(''); setActionError(null); }
     const version = epoch.current;
     const controller = new AbortController(); mutations.current.add(controller);
     try {
       const result = await api.request(path, { method: 'POST', ...options, signal: controller.signal, timeout: 60000 });
       if (version !== epoch.current || !mounted.current) return false;
-      setNotice(result.message || 'Saved.');
+      if (!silent) setNotice(result.message || 'Saved.');
       if (path === '/authenticate') authJob.current = result.job_id;
       if (path === '/logout') { api.setCsrf(''); authJob.current = null; }
       return true;
     } catch (failure) {
-      if (version === epoch.current && mounted.current && failure.name !== 'AbortError') {
+      if (version === epoch.current && mounted.current && failure.name !== 'AbortError' && !silent) {
         setActionError(failure);
         if (failure.status === 401) { setSnapshot(null); api.setCsrf(''); }
       }

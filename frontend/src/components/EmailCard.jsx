@@ -4,7 +4,8 @@ import { CATEGORIES, categoryName, formatTime, formatEmailTime, senderName } fro
 import { ClassificationExplanation } from './ClassificationExplanation';
 import { countLabel } from '../intelligence';
 
-export function EmailCard({ email, style, pending, disabled, mutate, api, generation }) {
+// `disabled` blocks changes; `readDisabled` only blocks reading (history).
+export function EmailCard({ email, style, pending, disabled, readDisabled = disabled, mutate, api, generation }) {
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(email.human_label || email.effective_category || 'IMPORTANT');
   const [history, setHistory] = useState(null);
@@ -83,7 +84,7 @@ export function EmailCard({ email, style, pending, disabled, mutate, api, genera
     </div>}
     {['retry', 'dead'].includes(email.processing?.status) && email.processing.stage !== 'notify' && <div className="recovery-actions"><button className="button secondary compact" disabled={blocked} onClick={() => recover('task')}>Retry unfinished step</button></div>}
     {/* The model's reason for the category, kept apart from the correction controls. */}
-    <ClassificationExplanation analysis={email.analysis} />
+    <ClassificationExplanation analysis={email.analysis} decision={email.decision} />
     <details className="technical-details">
       <summary>Classification details <ChevronDown size={13} /></summary>
       <div className="technical-content">
@@ -129,7 +130,7 @@ export function EmailCard({ email, style, pending, disabled, mutate, api, genera
       {email.human_label && <button className="button ghost compact" disabled={blocked} onClick={async () => {
         if (await mutate(email.id, '/feedback/' + encodeURIComponent(email.id) + '?expected_revision_id=' + email.feedback.revision_id, { method: 'DELETE' })) setHistory(null);
       }}><Undo2 size={13} />Undo</button>}
-      <button className="button ghost compact" disabled={historyBusy || disabled} aria-expanded={Boolean(history)} onClick={showHistory}><History size={13} />{historyBusy ? 'Loading...' : history ? 'Hide history' : 'History'}</button>
+      <button className="button ghost compact" disabled={historyBusy || readDisabled} aria-expanded={Boolean(history)} onClick={showHistory}><History size={13} />{historyBusy ? 'Loading...' : history ? 'Hide history' : 'History'}</button>
     </div>
     {pending && <p className="pending-line" role="status">Saving this action...</p>}
     {historyError && <p className="card-error" role="alert">{historyError}</p>}

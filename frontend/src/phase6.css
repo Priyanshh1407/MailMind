@@ -4,52 +4,16 @@ html {
   scroll-padding-top: 88px;
 }
 
-.intelligence-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.intelligence-kpi {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--card);
-  box-shadow: var(--shadow-panel);
-}
-
-.intelligence-kpi svg,
 .usage-metric svg {
   color: var(--primary);
 }
 
-.intelligence-kpi span,
 .usage-metric span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: .03em;
   text-transform: uppercase;
-}
-
-.intelligence-kpi svg {
-  width: 15px;
-  height: 15px;
-}
-
-.intelligence-kpi strong {
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -.02em;
-  font-feature-settings: 'tnum' 1;
-  font-variant-numeric: tabular-nums;
 }
 
 .dashboard-tabs {
@@ -399,6 +363,35 @@ html {
   font-style: italic;
 }
 
+/* "Why this category?": the whole decision, one labelled line per part. */
+.decision-story {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.decision-part {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+
+.decision-part dt {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.decision-part dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
 .signal-evidence,
 .explanation-source,
 .system-explanation {
@@ -580,7 +573,6 @@ html {
 }
 
 @media (max-width: 900px) {
-  .intelligence-summary,
   .usage-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -648,13 +640,8 @@ html {
     min-width: 0;
   }
 
-  .intelligence-summary,
   .usage-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .intelligence-kpi {
-    padding: 12px;
   }
 
   .usage-metric strong {
@@ -772,19 +759,19 @@ html {
   }
 }
 
-.booting :is(.intelligence-kpi, .dashboard-tabs, .stat, .work-grid > *, .ingestion-stack, .filters, .lane, .header-actions > *) {
+.booting :is(.header-nav .dashboard-tabs, .stat, .work-grid > *, .ingestion-stack, .filters, .lane, .header-actions > *) {
   animation: boot-rise .8s cubic-bezier(.16, 1, .3, 1) backwards, boot-glow 1.2s ease-out backwards;
   animation-delay: calc(200ms + var(--boot-i, 0) * 70ms);
 }
 
-.booting .intelligence-kpi:nth-child(2) { --boot-i: 1; }
-.booting .intelligence-kpi:nth-child(3) { --boot-i: 2; }
-.booting .intelligence-kpi:nth-child(4) { --boot-i: 3; }
-.booting .dashboard-tabs { --boot-i: 4; }
-.booting .stat:nth-child(1) { --boot-i: 5; }
-.booting .stat:nth-child(2) { --boot-i: 6; }
-.booting .stat:nth-child(3) { --boot-i: 7; }
-.booting .stat:nth-child(4) { --boot-i: 8; }
+/* The overview comes online card by card, row by row. */
+.booting .stat:nth-child(2) { --boot-i: 1; }
+.booting .stat:nth-child(3) { --boot-i: 2; }
+.booting .stat:nth-child(4) { --boot-i: 3; }
+.booting .stat:nth-child(5) { --boot-i: 4; }
+.booting .stat:nth-child(6) { --boot-i: 5; }
+.booting .stat:nth-child(7) { --boot-i: 6; }
+.booting .stat:nth-child(8) { --boot-i: 7; }
 .booting .work-grid > :nth-child(1) { --boot-i: 9; }
 .booting .work-grid > :nth-child(2) { --boot-i: 10; }
 .booting .ingestion-stack { --boot-i: 11; }
@@ -829,4 +816,330 @@ html {
 
 @keyframes boot-charge {
   from { transform: scaleX(0); }
+}
+
+/* ── Navbar sections and one overview ───────────────────────────
+   Inbox / Action Center / Usage live in the header between the brand and the
+   status/account controls. Below 1024px they move to their own full-width row. */
+.dashboard-header {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.header-nav {
+  display: flex;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.header-nav .dashboard-tabs {
+  margin: 0;
+  max-width: 100%;
+}
+
+/* Make room for the tabs: the tagline yields first. */
+@media (max-width: 1280px) {
+  .brand-title-row p {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .header-nav {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+
+  .header-nav .dashboard-tabs {
+    width: 100%;
+  }
+
+  .header-nav .dashboard-tabs button {
+    flex: 1 1 0;
+  }
+
+  /* The header is taller when the tabs wrap; keep focused items visible. */
+  html {
+    scroll-padding-top: 136px;
+  }
+}
+
+/* Switching to these sections scrolls them up under the navbar; a short
+   section still needs a screen of room below it for that to be possible. */
+#panel-actions,
+#panel-usage {
+  min-height: calc(100vh - 100px);
+}
+
+/* On phones the header is not sticky, so sections need no room above them. */
+@media (max-width: 680px) {
+  html {
+    scroll-padding-top: 12px;
+  }
+}
+
+/* All eight KPIs: one grid, one card design, two rows of four. */
+.overview-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+  .overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── Source email pop-up (Action Center → Open source) ───────── */
+.source-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(86vh, 900px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .55);
+  overflow: hidden;
+}
+
+.source-dialog[open] {
+  animation: popover-enter .22s cubic-bezier(.16, 1, .3, 1);
+}
+
+.source-dialog::backdrop {
+  background: rgba(4, 6, 10, .72);
+  backdrop-filter: blur(3px);
+}
+
+.source-dialog-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: min(86vh, 900px);
+  padding: 20px;
+}
+
+.source-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.source-dialog-title {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.source-dialog-title svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--primary);
+}
+
+.source-dialog-title h2 {
+  margin: 2px 0 0;
+  font-size: 17px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.source-dialog-close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.source-dialog-close:hover,
+.source-dialog-close:focus-visible {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.source-dialog-close:focus-visible {
+  outline: 3px solid var(--update);
+  outline-offset: 2px;
+}
+
+.source-dialog-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.source-dialog-meta dt {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.source-dialog-meta dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.source-dialog-quote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.source-dialog-quote q {
+  color: var(--ink);
+  font-style: italic;
+}
+
+.source-dialog-body {
+  flex: 1 1 auto;
+  min-height: 80px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.source-dialog-body mark {
+  padding: 1px 2px;
+  border-radius: 4px;
+  background: rgba(104, 117, 237, .3);
+  color: var(--ink);
+}
+
+.source-dialog-status {
+  margin: 0;
+  color: var(--muted);
+}
+
+.source-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .source-dialog-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .source-dialog[open] {
+    animation: none;
+  }
+}
+
+/* ── Connectivity alerts (Gmail-style "You're offline") ─────────
+   Bottom-left, so they stay visible while scrolling and never cover the
+   header or the toasts. */
+.connectivity-region {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 60;
+  max-width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.connectivity-banner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-strong);
+  border-left-width: 4px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .45);
+  pointer-events: auto;
+}
+
+.connectivity-banner.warning {
+  border-left-color: var(--important);
+}
+
+.connectivity-banner.warning > svg:first-child {
+  color: var(--important);
+}
+
+.connectivity-banner.success {
+  border-left-color: var(--success);
+}
+
+.connectivity-banner.success > svg:first-child {
+  color: var(--success);
+}
+
+.connectivity-banner strong {
+  display: block;
+  font-size: 13.5px;
+}
+
+.connectivity-banner p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.connectivity-retry {
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+@media (max-width: 680px) {
+  .connectivity-region {
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    max-width: none;
+  }
+}
+
+.connectivity-countdown {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.connectivity-banner.danger {
+  border-left-color: var(--spam);
+}
+
+.connectivity-banner.danger > svg:first-child {
+  color: var(--spam);
+}
+
+.action-check {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--important-soft);
+  color: var(--important);
+  font-size: 11.5px;
+  font-weight: 600;
 }
