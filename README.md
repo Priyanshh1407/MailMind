@@ -271,7 +271,7 @@ Latest local verification (30 September 2026):
 
 - Backend discovery: 590 tests passed, and each of the 25 test modules also passes when run alone (no test-order dependence).
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
-- Frontend unit suite: 58 passed. Playwright browser suite: 37 passed.
+- Frontend unit suite: 58 passed. Playwright browser suite: 39 passed.
 - Frontend lint and production build passed; initial JavaScript is 316 kB (101 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.

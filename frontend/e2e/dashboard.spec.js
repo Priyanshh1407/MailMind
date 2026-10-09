@@ -129,6 +129,36 @@ test('Phase 6 tabs, KPIs, action lifecycle and source navigation work together',
   await expect(page.getByRole('article',{name:'Synthetic email 0',exact:true})).toBeVisible();
   await expect(page.getByRole('article',{name:'Synthetic email 1',exact:true})).toHaveCount(0);
 });
+test('an empty Action Center is compact and the message spans the full width',async({page})=>{
+  await page.setViewportSize({width:1600,height:900});
+  const state=await setup(page);state.actions=[];
+  await page.getByRole('tab',{name:'Action Center'}).click();
+  const empty=page.locator('.action-empty');
+  await expect(empty).toBeVisible({timeout:8000});
+  await expect(empty).toContainText('No open actions');
+  const list=await page.locator('.action-list').boundingBox(), box=await empty.boundingBox();
+  expect(Math.abs(box.width-list.width)).toBeLessThan(2);          // both columns, not half
+  expect(box.height).toBeLessThan(220);                             // not stretched
+  const title=await page.locator('#panel-actions .section-title, #panel-actions .action-center > :first-child').first().boundingBox();
+  const toolbar=await page.locator('.action-toolbar').boundingBox();
+  expect(toolbar.y-(title.y+title.height)).toBeLessThan(48);        // no gap above the filters
+});
+
+test('the inbox search shows a single clear button',async({page})=>{
+  await setup(page);
+  const input=page.locator('#email-search');
+  await input.fill('synthetic');
+  await expect(page.getByRole('button',{name:'Clear search'})).toHaveCount(1);
+  // The browser's own clear (x) for type=search is hidden; ours resets the search too.
+  // (getComputedStyle can't read this pseudo-element, so check the loaded rule.)
+  const hidden=await page.evaluate(()=>[...document.styleSheets].some(sheet=>{
+    try{return [...sheet.cssRules].some(rule=>(rule.selectorText||'').includes('#email-search::-webkit-search-cancel-button')
+      && /none/.test(rule.style.getPropertyValue('appearance')||rule.style.getPropertyValue('-webkit-appearance')));}
+    catch{return false;}
+  }));
+  expect(hidden).toBe(true);
+});
+
 test('Action Center flags only the tasks the AI was unsure about',async({page})=>{
   const state=await setup(page);
   state.actions=[{...state.actions[0]},{...state.actions[0],action_id:8,fingerprint:'b'.repeat(64),title:'Unsure synthetic task',confidence:'medium'}];

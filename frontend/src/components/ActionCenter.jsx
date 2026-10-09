@@ -60,7 +60,12 @@ export function ActionCenter({
           <ActionCard action={action} busy={Boolean(pending['action:' + action.action_id])} disabled={disabled} readDisabled={readDisabled} mutate={mutate} openSource={openSource} api={api} generation={snapshot.session.generation} />
         </m.div>)}
       </AnimatePresence>
-      {!actions.length && <p className='empty-state'>{shownEmptyMessage}</p>}
+      {!actions.length && <div className='action-empty' role='status'>
+        <ClipboardCheck size={22} aria-hidden='true' />
+        <div><strong>{shownEmptyMessage}</strong>
+          {!activeType && active === 'open' && <p>Replies, payments, meetings and deadlines that MailMind finds in your email appear here.</p>}
+        </div>
+      </div>}
     </div>}
     {section.pageState === 'ready' && actions.length > 0 && <nav className='action-pagination' aria-label='Action pages'>
       <button className='button secondary compact' disabled={previousDisabled} onClick={() => setQuery(previous => ({ ...previous, actionOffset: Math.max(0, previous.actionOffset - section.page.limit) }))}>Previous</button>
