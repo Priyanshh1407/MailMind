@@ -341,7 +341,8 @@ npm run test:browser
 
 Latest local verification (20 October 2026):
 
-- Backend discovery: 686 tests passed in 33 modules; the 25 earlier modules were each verified alone on 30 September, and the eight new modules were each verified alone on 20 October.
+- Backend discovery: 687 tests passed in 34 modules; the 25 earlier modules were each verified alone on 30 September, and the new modules on 20 October.
+- Clean release (20 October 2026): a fresh copy with a newly installed environment passed every step: install, `pip check`, all 687 backend tests, the interview demo, frontend install, unit tests, build, lint and the 47 browser scenarios.
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
 - Frontend unit suite: 65 passed. Playwright browser suite: 47 passed.
 - Frontend lint and production build passed; initial JavaScript is 377 kB (119 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.

@@ -225,7 +225,7 @@ Each rewrites its report in `docs/`; `git status` should then show no change.
 .\venv\Scripts\python.exe -m scripts.check_clean_release
 ~~~
 
-At the latest automated verification (20 October 2026), all 686 backend tests, 65 frontend unit tests and 47 browser scenarios, frontend lint, and the production build passed; the no-mock live check (`npm run test:live`) passed 42 of 42 against a copy of real data. The clean-release check could not finish because its fresh dependency install timed out; rerun it on a good connection.
+At the latest automated verification (20 October 2026), all 687 backend tests, 65 frontend unit tests and 47 browser scenarios, frontend lint, and the production build passed; the no-mock live check (`npm run test:live`) passed 42 of 42 against a copy of real data. The clean-release check passed every step from a fresh copy and newly installed environment.
 
 ## Release checklist
 
