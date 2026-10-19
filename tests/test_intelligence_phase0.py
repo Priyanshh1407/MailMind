@@ -85,6 +85,8 @@ class IntelligencePhaseZeroTests(unittest.TestCase):
         self.assertEqual({item.value for item in TokenOperation}, {
             "classification_analysis", "local_shadow", "document_embedding",
             "query_embedding", "manual_prediction", "action_reanalysis",
+            # Added with the assistant features (schema 17 widens the SQL CHECK to match).
+            "ledger_extraction", "inbox_question", "follow_up_draft", "daily_brief",
         })
         self.assertEqual({item.value for item in TokenCountMethod}, {
             "provider_reported", "tokenizer_counted", "estimated", "unavailable",

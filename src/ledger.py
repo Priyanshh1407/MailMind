@@ -50,6 +50,7 @@ _ADVERT = re.compile(r'(?i)\b(?:up to \d+% off|\d+% off|sale ends|shop now|deal 
 _TOTAL_CUE = re.compile(r'(?i)\b(?:order total|grand total|total amount|total paid|amount paid|you paid|total|'
                         r'debited|charged|billed|paid|payment of|refund(?:ed)?(?: of)?|renews? (?:at|for)|bill amount|'
                         r'amount due|transaction of|spent)\b')
+_SUBTOTAL = re.compile(r'(?i)\b(?:sub ?-?total|item(?:s|\(s\))? total|cart total|item total)\b')
 _NOT_TOTAL = re.compile(r'(?i)\b(?:saved|you save|savings|discount|off|cashback|mrp|was|coupon|delivery fee waived|'
                         r'balance|available|limit|reward)\b')
 _RENEWAL = re.compile(r'(?i)\b(?:renews?|renewal|next (?:billing|payment|charge)|auto-?debit|will be charged)\b'
@@ -86,8 +87,9 @@ def find_amounts(text):
     """Every amount in the text, in order, with its currency and position."""
     found = []
     for match in _AMOUNT.finditer(text or ''):
-        symbol = (match.group(1) or match.group(5) or '').casefold().strip()
-        number = match.group(2) or match.group(4)
+        # Groups: currency before the number (1, 2) or after it (3, 4).
+        symbol = (match.group(1) or match.group(4) or '').casefold().strip()
+        number = match.group(2) or match.group(3)
         currency = _SYMBOL.get(symbol) or _SYMBOL.get(symbol.rstrip('.'))
         minor = parse_minor(number or '')
         if currency and minor:
@@ -123,9 +125,10 @@ def masked_text(subject, body):
 
 def merchant_from_sender(sender):
     name, address = parseaddr(sender or '')
-    name = re.sub(r'(?i)\b(?:no[- ]?reply|noreply|alerts?|notifications?|support|team|care|orders?|billing|'
-                  r'receipts?|mailer|info|via)\b', ' ', name or '')
-    name = re.sub(r'\s+', ' ', re.sub(r'[^\w&.\' -]', ' ', name)).strip(' .-')
+    name = re.sub(r'(?i)\b(?:no[- ]?reply|noreply|insta ?alerts?|alerts?|notifications?|support|team|care|orders?|'
+                  r'billing|receipts?|mailer|info|via)\b', ' ', name or '')
+    name = re.sub(r'(?i)\.(?:in|com|co\.in|net|org)\b', '', name)  # "Amazon.in" -> "Amazon"
+    name = re.sub(r'\s+', ' ', re.sub(r'[^\w&.\'+ -]', ' ', name)).strip(' .-')
     domain = domain_of(address)
     if name and len(name) >= 2:
         return name[:MAX_MERCHANT_CHARS]
@@ -147,26 +150,37 @@ def kind_by_rules(text):
     return 'purchase'
 
 
+def _line_around(text, amount):
+    """The amount's own line (or sentence), split at the amount."""
+    start = max(text.rfind('\n', 0, amount.start), text.rfind('|', 0, amount.start)) + 1
+    stops = [index for index in (text.find('\n', amount.end), text.find('|', amount.end)) if index != -1]
+    end = min(stops) if stops else len(text)
+    return text[start:amount.start], text[amount.end:end]
+
+
 def total_by_rules(text, amounts):
-    """The amount a cue word points at (closest after "total", "debited"...),
-    else the largest amount not described as a saving or a discount."""
+    """The amount the strongest cue on its own line points at ("order total",
+    "debited" beat a bare "total"; subtotals never count; on a tie the later
+    amount wins, since receipts end with the total). Otherwise the largest
+    amount not described as a saving, discount, balance or MRP."""
     best = None
-    for amount in amounts:
-        before = text[max(0, amount.start - 45):amount.start]
-        line_start = text.rfind('\n', 0, amount.start) + 1
-        context = text[line_start:amount.start]
-        cue = _TOTAL_CUE.search(before)
-        if _NOT_TOTAL.search(context[-30:]) or _NOT_TOTAL.search(text[amount.end:amount.end + 12]):
+    for index, amount in enumerate(amounts):
+        before, after = _line_around(text, amount)
+        near = before[-45:]
+        if _NOT_TOTAL.search(near) or _NOT_TOTAL.search(after[:20]) or _SUBTOTAL.search(near):
             continue
-        if cue:
-            distance = len(before) - cue.end()
-            rank = (0, distance)
-            if best is None or rank < best[0]:
-                best = (rank, amount)
+        cue = None
+        for match in _TOTAL_CUE.finditer(near):
+            cue = match
+        if cue is None:
+            continue
+        strength = 1 if cue.group(0).casefold() == 'total' else 0
+        rank = (strength, len(near) - cue.end(), -index)
+        if best is None or rank < best[0]:
+            best = (rank, amount)
     if best:
         return best[1]
-    candidates = [amount for amount in amounts
-                  if not _NOT_TOTAL.search(text[max(0, amount.start - 30):amount.start])]
+    candidates = [amount for amount in amounts if not _NOT_TOTAL.search(_line_around(text, amount)[0][-30:])]
     return max(candidates, key=lambda item: item.minor) if candidates else None
 
 
@@ -244,7 +258,7 @@ OUTPUT_SCHEMA = {
         'total_ref': {'type': ['string', 'null'], 'maxLength': 12},
         'merchant': {'type': ['string', 'null'], 'maxLength': MAX_MERCHANT_CHARS},
         'renews_on': {'type': ['string', 'null'], 'maxLength': 10},
-        'period': {'type': ['string', 'null'], 'enum': [None, *PERIODS]},
+        'period': {'type': 'string', 'enum': ['none', *PERIODS]},
         'evidence': {'type': ['string', 'null'], 'maxLength': MAX_EVIDENCE_CHARS},
     },
     'required': ['kind', 'total_ref', 'merchant', 'renews_on', 'period', 'evidence'],
@@ -285,6 +299,9 @@ def resolve_cloud_answer(answer, *, sender, masked, amounts, received, source):
     evidence = answer['evidence'] if isinstance(answer['evidence'], str) else ''
     if not evidence or not quote_in_source(evidence, masked):
         evidence = ''
+    # Shown and stored only here: put the real amounts back into the quote.
+    evidence = re.sub(r'\[(AMOUNT_\d+)\]', lambda match: by_key[match.group(1)].text
+                      if match.group(1) in by_key else match.group(0), evidence)
     renews_on = None
     if kind == 'subscription' and isinstance(answer['renews_on'], str):
         try:

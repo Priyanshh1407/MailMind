@@ -182,3 +182,76 @@ def migration_16(conn):
         FOREIGN KEY(account_id,email_id) REFERENCES email_logs(account_id,email_id) ON DELETE CASCADE
     )""")
     conn.execute('CREATE INDEX email_risk_band ON email_risk(account_id,band,reviewed_at)')
+
+
+def rebuild_check(conn, table, old, new):
+    """Change one CHECK clause of a table, keeping its rows and indexes.
+
+    SQLite cannot alter a constraint, so the table is recreated from its own
+    stored definition with `old` replaced by `new`, filled, and swapped in.
+    """
+    import re
+    sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()[0]
+    if new in sql:
+        return  # already rebuilt (for example a rewound test database)
+    if sql.count(old) != 1:
+        raise ValueError(f'Unexpected {table} definition')
+    indexes = [row[0] for row in conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL", (table,))]
+    created = re.sub(rf'^CREATE TABLE\s+"?{table}"?', f'CREATE TABLE {table}_rebuild', sql, count=1)
+    conn.execute(created.replace(old, new))
+    conn.execute(f'INSERT INTO {table}_rebuild SELECT * FROM {table}')
+    conn.execute(f'DROP TABLE {table}')
+    conn.execute(f'ALTER TABLE {table}_rebuild RENAME TO {table}')
+    for index in indexes:
+        conn.execute(index)
+
+
+def migration_17(conn):
+    # The assistant features (ledger, Ask, follow-ups, daily brief) meter their
+    # provider calls and rate-limit their user actions like earlier features.
+    rebuild_check(
+        conn, 'token_usage_events',
+        "operation IN ('classification_analysis','local_shadow','document_embedding','query_embedding','manual_prediction','action_reanalysis')",
+        "operation IN ('classification_analysis','local_shadow','document_embedding','query_embedding','manual_prediction','action_reanalysis','ledger_extraction','inbox_question','follow_up_draft','daily_brief')")
+    rebuild_check(
+        conn, 'intelligence_mutation_limits',
+        "scope IN ('reminder','reanalysis')",
+        "scope IN ('reminder','reanalysis','ledger_correction','question','follow_up','brief')")
+    conn.execute("""CREATE TABLE ledger_entries (
+        entry_id INTEGER PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        email_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK(kind IN ('purchase','subscription','refund','bill','debit')),
+        amount_minor INTEGER NOT NULL CHECK(typeof(amount_minor)='integer' AND amount_minor BETWEEN 1 AND 10000000000),
+        currency TEXT NOT NULL CHECK(currency IN ('INR','USD','EUR','GBP')),
+        merchant TEXT NOT NULL CHECK(length(merchant) BETWEEN 1 AND 80),
+        occurred_at TEXT NOT NULL,
+        renews_on TEXT CHECK(renews_on IS NULL OR (length(renews_on)=10 AND date(renews_on) IS NOT NULL)),
+        period TEXT CHECK(period IS NULL OR period IN ('weekly','monthly','quarterly','yearly')),
+        evidence TEXT NOT NULL DEFAULT '' CHECK(length(evidence)<=200),
+        source TEXT NOT NULL CHECK(source IN ('local','gemini','groq')),
+        extraction_version TEXT NOT NULL CHECK(length(extraction_version) BETWEEN 1 AND 40),
+        user_corrected INTEGER NOT NULL DEFAULT 0 CHECK(user_corrected IN (0,1)),
+        revision INTEGER NOT NULL DEFAULT 0 CHECK(typeof(revision)='integer' AND revision>=0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(account_id,email_id),
+        FOREIGN KEY(account_id,email_id) REFERENCES email_logs(account_id,email_id) ON DELETE CASCADE
+    )""")
+    conn.execute('CREATE INDEX ledger_entries_time ON ledger_entries(account_id,occurred_at,entry_id)')
+    conn.execute('CREATE INDEX ledger_entries_merchant ON ledger_entries(account_id,merchant)')
+    conn.execute("""CREATE TABLE ledger_scans (
+        account_id TEXT NOT NULL,
+        email_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('done','not_transaction','retry','failed')),
+        extraction_version TEXT NOT NULL CHECK(length(extraction_version) BETWEEN 1 AND 40),
+        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(typeof(attempt_count)='integer' AND attempt_count>=0),
+        next_retry_at REAL NOT NULL DEFAULT 0 CHECK(next_retry_at>=0),
+        error_code TEXT CHECK(error_code IS NULL OR length(error_code) BETWEEN 1 AND 80),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(account_id,email_id),
+        FOREIGN KEY(account_id,email_id) REFERENCES email_logs(account_id,email_id) ON DELETE CASCADE
+    )""")
+    conn.execute('CREATE INDEX ledger_scans_due ON ledger_scans(account_id,status,next_retry_at)')
+

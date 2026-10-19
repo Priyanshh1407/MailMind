@@ -39,7 +39,7 @@ export function useDashboard(api, query) {
   }, [
     query.offset, query.search, query.category, query.emailId,
     query.actionOffset, query.actionStatus, query.actionType, query.actionDueFrom,
-    query.actionDueTo, query.tokenWindow,
+    query.actionDueTo, query.tokenWindow, query.ledgerMonth, query.ledgerOffset,
   ]);
   useEffect(() => {
     if (!notice) return undefined;

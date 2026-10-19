@@ -28,7 +28,7 @@ async function setup(page) {
     if(path==='/session' && method==='POST'){state.paired=true;data={csrf_token:'synthetic-csrf'};}
     else if(!state.paired){status=401;data={detail:'Sign in to this local app first.'};}
     else if(path==='/session')data={email:identity.account_id,csrf_token:'synthetic-csrf',connected:state.connected,purge_pending:false,generation:state.generation,read_only:!state.connected&&state.workerError==='gmail_unavailable'};
-    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},intelligence_backfill:{enabled:true,eligible:2,queued:0,running:0,retry:0,complete:0,dead:0},signals:state.signals||{captured:20,eligible:4,queued:0,running:0,retry:0,complete:0,dead:0},risk:{enabled:true,high:1,medium:0,low:1,high_unreviewed:state.riskReviewed?0:1,unscored:22},poll_interval_seconds:60,worker_lease_seconds:90,worker:state.workerError?{heartbeat_at:stamp,last_success_at:stamp,last_error_at:stamp,last_error_code:state.workerError}:null,connectivity:state.workerError?{gmail:'unreachable',failed_checks:3,retry_in_seconds:20}:{gmail:'ok',failed_checks:0,retry_in_seconds:null},ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
+    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},intelligence_backfill:{enabled:true,eligible:2,queued:0,running:0,retry:0,complete:0,dead:0},signals:state.signals||{captured:20,eligible:4,queued:0,running:0,retry:0,complete:0,dead:0},risk:{enabled:true,high:1,medium:0,low:1,high_unreviewed:state.riskReviewed?0:1,unscored:22},ledger:{enabled:state.ledgerEnabled!==false},poll_interval_seconds:60,worker_lease_seconds:90,worker:state.workerError?{heartbeat_at:stamp,last_success_at:stamp,last_error_at:stamp,last_error_code:state.workerError}:null,connectivity:state.workerError?{gmail:'unreachable',failed_checks:3,retry_in_seconds:20}:{gmail:'ok',failed_checks:0,retry_in_seconds:null},ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
     else if(path==='/telemetry'){
       status=state.telemetryError||200;
       data=status!==200?{detail:'Synthetic telemetry outage.'}:{...identity,totals:{saved:24,completed:23,labelled:state.rows.filter(row=>row.human_label).length,corrected:state.rows.filter(row=>row.human_label&&row.human_label!==row.prediction).length,confirmed:state.rows.filter(row=>row.human_label&&row.human_label===row.prediction).length,feedback_events:state.revision,prediction_attempts:24},classification_timing:{mean_ms:1201,sample_count:24},local_model:{ready:state.localReady||false,version:'legacy-binary',evaluation_scope:state.evaluationScope||null},mode:{local_only:state.localOnly||false},providers:{gemini:state.localOnly?'disabled_local_only':'configured_unverified',groq:state.localOnly?'disabled_local_only':'unconfigured'}};
@@ -76,6 +76,10 @@ async function setup(page) {
     else if(path==='/logout'){state.paired=false;state.connected=false;state.generation++;data={message:'Signed out. Saved mail is kept.'};}
     else if(path==='/inbox/sync'){state.syncCalls++;status=202;data={job_id:43,status:'queued',message:'Checking Gmail for new messages.'};}
     else if(path==='/ingestion/fetch-next'){state.fetchCalls++;(state.fetchBodies||=[]).push(route.request().postDataJSON());status=202;data={job_id:44,status:'queued',message:'Loading the next 20 older messages.'};}
+    else if(path==='/ledger/summary'){const month=url.searchParams.get('month')||'2026-09';state.ledgerMonths=[...(state.ledgerMonths||[]),month];data={...identity,month,currency:'INR',totals:{INR:{spent_minor:state.ledgerSpent??152400,refunds_minor:49900,bills_minor:99900,count:5,net_minor:(state.ledgerSpent??152400)-49900}},trend:Array.from({length:12},(_,i)=>({month:'2026-'+String(i+1).padStart(2,'0'),spent_minor:i*10000,refunds_minor:0})),merchants:[{merchant:'Swiggy',currency:'INR',count:3,spent_minor:87600},{merchant:'Netflix',currency:'INR',count:1,spent_minor:64900}],scan:{done:6,not_transaction:18,retry:0,waiting:0}};}
+    else if(path==='/ledger/entries'&&method==='GET'){state.ledgerEntry||={entry_id:5,email_id:'synthetic-0',kind:'purchase',amount_minor:26500,currency:'INR',merchant:'Swiggy',occurred_at:stamp,renews_on:null,period:null,evidence:'Order total: Rs 265',source:'gemini',revision:0,user_corrected:false};data={...identity,entries:[state.ledgerEntry],total:1,limit:50,offset:0};}
+    else if(path.startsWith('/ledger/entries/')&&method==='PATCH'){const body=route.request().postDataJSON();state.ledgerPatch=body;state.ledgerEntry={...state.ledgerEntry,...body,expected_revision:undefined,revision:state.ledgerEntry.revision+1,user_corrected:true};delete state.ledgerEntry.expected_revision;state.ledgerSpent=152400-26500+body.amount_minor;data={...identity,entry:state.ledgerEntry,message:'Saved. Your correction is kept.'};}
+    else if(path==='/ledger/subscriptions'){data={...identity,subscriptions:[{merchant:'Netflix',currency:'INR',period:'monthly',amount_minor:64900,monthly_minor:64900,last_charged_at:stamp,renews_on:'2099-10-05',charges:3,category:'streaming',email_id:'synthetic-2',basis:'stated'},{merchant:'Spotify',currency:'INR',period:'monthly',amount_minor:11900,monthly_minor:11900,last_charged_at:stamp,renews_on:'2099-10-09',charges:3,category:'streaming',email_id:'synthetic-4',basis:'repeated charges'}],insights:[{kind:'overlap',category:'streaming',currency:'INR',merchants:['Netflix','Spotify'],monthly_minor:76800}]};}
     else if(path.endsWith('/risk/review')){state.riskReviewed=true;state.rows[1].risk.reviewed_at='2026-09-28T10:00:00.000000Z';data={email_id:'synthetic-1',reviewed_at:'2026-09-28T10:00:00.000000Z',message:'Marked as reviewed.'};}
     else if(path==='/signals/backfill'){(state.signalBodies||=[]).push(route.request().postDataJSON());state.signals={captured:20,eligible:0,queued:4,running:0,retry:0,complete:0,dead:0};status=202;data={job_id:46,status:'queued',admitted:4,eligible:0,message:'Capturing security signals for 4 saved emails. This only re-reads headers and links; nothing else changes.'};}
     else if(path==='/intelligence/backfill'){state.backfillCalls=(state.backfillCalls||0)+1;status=202;data={job_id:45,status:'queued',requested:20,admitted:2,eligible:2,capacity:99,message:'Queued 2 saved emails for analysis.'};}
@@ -111,8 +115,8 @@ test('Phase 6 tabs, KPIs, action lifecycle and source navigation work together',
   await setup(page);
   // One overview: inbox stats and follow-through KPIs share the same card design.
   const summary=page.getByRole('region',{name:'Overview'});
-  // Eight core cards, plus "Risky emails" because scam checks are on.
-  await expect(summary.locator('.stat')).toHaveCount(9);
+  // Eight core cards, plus "Risky emails" and "Spent this month" because those features are on.
+  await expect(summary.locator('.stat')).toHaveCount(10);
   await expect(summary).toContainText('Risky emails1');
   await expect(summary).toContainText('Open actions1');
   await expect(summary).toContainText('Due soon1');
@@ -299,6 +303,38 @@ test('scam check shows a badge, the evidence for each warning sign, and can be m
   await expect.poll(()=>state.riskReviewed||false).toBe(true);
   await expect(card.getByText('You marked this as reviewed.')).toBeVisible();
   await expect(page.locator('.stat').filter({hasText:'Risky emails'})).toContainText('0');
+});
+test('Money tab shows spending, subscriptions and corrections without amounts leaving the browser',async({page})=>{
+  const state=await setup(page);
+  const summary=page.getByRole('region',{name:'Overview'});
+  await expect(summary).toContainText('Spent this month₹1,524');
+  await page.getByRole('tab',{name:'Money'}).click();
+  const panel=page.locator('#panel-money');
+  await expect(panel.getByText('Amounts never leave this computer')).toBeVisible();
+  await expect(panel.locator('.money-metric').filter({hasText:'Spent'})).toContainText('₹1,524');
+  await expect(panel.locator('.money-metric').filter({hasText:'Subscriptions'})).toContainText('₹768 / month');
+  await expect(panel.getByText('You pay for 2 streaming services (Netflix, Spotify): ₹768 a month.')).toBeVisible();
+  await expect(panel.getByRole('img',{name:/Monthly spending/})).toBeVisible();
+  await panel.getByRole('button',{name:'Previous month'}).click();
+  await expect.poll(()=>state.ledgerMonths.includes('2026-08')).toBe(true);
+  await panel.getByRole('button',{name:'Next month'}).click();
+  const entry=panel.locator('.money-entry').first();
+  await expect(entry).toContainText('₹265');
+  await entry.getByRole('button',{name:'Correct'}).click();
+  await entry.getByLabel('Amount (INR)').fill('300');
+  await entry.getByRole('button',{name:'Save correction'}).click();
+  await expect.poll(()=>state.ledgerPatch).toEqual({expected_revision:0,amount_minor:30000});
+  await expect(panel.locator('.money-entry').first()).toContainText('corrected by you');
+  await expect(panel.locator('.money-entry').first()).toContainText('₹300');
+  await panel.locator('.money-entry').first().getByRole('button',{name:'Open source'}).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+});
+test('Money tab fits a narrow screen',async({page})=>{
+  await page.setViewportSize({width:375,height:812});await setup(page);
+  await page.getByRole('tab',{name:'Money'}).click();
+  await expect(page.locator('#panel-money .money-entry').first()).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
 test('account menu and feedback editor work with keyboard and Escape',async({page})=>{
   await setup(page);const trigger=page.getByRole('button',{name:'Account options'});

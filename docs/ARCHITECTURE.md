@@ -67,7 +67,7 @@ FastAPI owns:
 - explicit bounded saved-mail intelligence backfill; and
 - explicit recovery for unfinished tasks and ambiguous notification delivery.
 
-The API opens/migrates schema version 16 and lazily initializes heavy or optional services.
+The API opens/migrates schema version 17 and lazily initializes heavy or optional services.
 
 ### Gmail/classification worker
 
@@ -183,6 +183,21 @@ Each finding quotes its evidence. The score is a logistic model over the finding
 An email is scored inside its classification transaction, behind a savepoint so a scoring failure never undoes the classification. Each worker cycle then scores up to 50 more: unscored mail, mail scored by older rules, and mail whose signals arrived after it was scored (`content_only` becomes `full`). A high-risk Important alert is sent as "⚠ Possible scam: ..." The score never hides, moves or deletes mail.
 
 Routes: email rows carry `risk`; `GET /emails/{id}/risk` returns one report; `POST /emails/{id}/risk/review` marks it reviewed; `GET /status` reports `risk` counts.
+
+### Money and subscriptions
+
+With `MAILMIND_LEDGER_ENABLED=true`, each worker cycle scans up to 20 saved Important/Updates emails (newest first, Spam skipped) for money records (`src/ledger.py`, `src/ledger_store.py`):
+
+1. A local keyword gate skips mail that records no transaction (adverts with prices, offers, newsletters) without any provider call.
+2. Every amount is found in the original text and replaced by a numbered placeholder kept in a local map.
+3. If a provider is configured, at most one extraction runs per cycle and at most one every 10 seconds, through the assistant call slots (`call_structured` in `src/llm_api.py`: same failover rules as classification, separate capacity so it never slows live mail, its own request builder so classification requests and their recordings are unchanged). The provider answers which placeholder is the total, the kind (purchase, subscription, refund, bill, debit, or none), the merchant and any stated renewal; the answer is validated, the merchant and evidence must be quoted from the email, and the real amount is filled in locally.
+4. A temporary provider failure retries with backoff; after the attempt limit, on a permanent failure, or in local-only mode, local rules choose the total (the amount on the strongest cue's line: "order total", "debited", "amount paid" beat a bare "total"; subtotals, savings, MRP, balances and cashback never count).
+
+`ledger_entries` holds one row per email; `ledger_scans` records what was scanned and with which extraction version. A correction you make in the Money tab sets `user_corrected` and is never overwritten by a rescan. Subscriptions are derived at read time: a stated subscription, or two or more charges from one merchant about a month (±5 days) or a year (±10 days) apart; overlapping categories (for example two streaming services) are reported as insights.
+
+Migration 17 also rebuilds two CHECK constraints in place (`rebuild_check`, from each table's own stored definition) so token events and rate limits accept the assistant features' operations and scopes.
+
+Routes: `GET /ledger/summary?month=YYYY-MM`, `GET /ledger/entries`, `PATCH /ledger/entries/{id}` (revision-checked), `GET /ledger/subscriptions`.
 
 ## Intelligence data flow
 

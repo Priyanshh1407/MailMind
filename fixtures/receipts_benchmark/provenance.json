@@ -1,0 +1,15 @@
+{
+ "name": "MailMind synthetic receipts benchmark",
+ "license": "CC0-1.0",
+ "generator": "scripts/build_receipts_benchmark.py",
+ "cases": 125,
+ "kinds": {
+  "purchase": 49,
+  "debit": 14,
+  "refund": 8,
+  "bill": 9,
+  "subscription": 19,
+  "none": 26
+ },
+ "notes": "Synthetic receipts and adverts written for this project; merchant names appear as senders only."
+}

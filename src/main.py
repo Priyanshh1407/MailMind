@@ -23,6 +23,8 @@ from .work_queue import (claim_cycle, fence, finish_cycle, ingest_email,
 from .pipeline import process_task, cycle_external
 from .email_signals import process_signals_backfill
 from .email_risk import score_pending
+from .ledger_store import cloud_extractor, scan_ledger
+from .token_usage import TokenRecorder, usage_request_prefix
 from .provider_policy import BoundedCalls
 from .database import utc_timestamp
 
@@ -350,6 +352,20 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
                 raise
             except Exception as error:
                 log_event('risk_sweep_deferred',error=error)
+        if config.ledger_enabled:
+            # Money tab: a bounded scan step, one cloud extraction at most.
+            try:
+                scan_ledger(manager,context,token,fence=fence,
+                    guard=lambda:cycle_external(manager,context,token),
+                    extract=None if config.local_only else cloud_extractor(config),
+                    recorder_factory=lambda email_id,attempts:TokenRecorder(
+                        context.account_id,usage_request_prefix('ledger',context.account_id,email_id,attempts),
+                        email_id=email_id,job_id=job_id,db_path=config.db_path,
+                        enabled=config.token_collection_enabled))
+            except WorkCancelled:
+                raise
+            except Exception as error:
+                log_event('ledger_scan_deferred',error=error)
         reminder_result=None
         if config.action_reminders_enabled:
             try:

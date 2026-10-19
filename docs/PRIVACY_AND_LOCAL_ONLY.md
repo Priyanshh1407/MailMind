@@ -13,6 +13,7 @@ No account mail is accessed before successful Google OAuth connection. The seman
 | Google Gmail | OAuth, profile, message discovery/read, optional mark-read | OAuth requests, account/message identifiers, Gmail content, and optional read-state changes |
 | Gemini | Primary and fallback classification | Sender omitted or replaced; masked and bounded subject/body; optionally bounded masked feedback examples |
 | Groq | Provider fallback | The same minimized classification payload |
+| Gemini / Groq (Money tab, optional) | Which amount in a receipt is the total, its kind and merchant | The masked email text with **every amount replaced by a numbered placeholder** and the received date; the sender is omitted. Real amounts never leave the computer |
 | Telegram | Optional Important alerts | Minimized masked subject and short body snippet plus delivery identifiers |
 | Local API/browser | Dashboard and controls | Account-scoped saved data over loopback |
 | Embedded Chroma | Feedback retrieval and semantic search | Local account-scoped derived text and embeddings |
@@ -24,6 +25,8 @@ Provider keys are carried through configuration or authorization mechanisms, not
 The shared privacy policy in <code>src/privacy.py</code> applies best-effort masking before supported external classification, Telegram, and export flows. It targets email addresses, payment handles, phone and long numeric identifiers, supported currency-prefixed values, PAN-shaped identifiers, and web links.
 
 Sender identity is omitted from supported outgoing email payloads.
+
+The Money tab goes further for amounts: `src/ledger.py` finds every amount locally, replaces each with `[AMOUNT_1]`, `[AMOUNT_2]`, ... and keeps the values in a local map; the provider answers only which placeholder is the total, and the real number is filled in on this computer. The evaluation recorder asserts that no amount appears in any request (`scripts/evaluate_ledger.py`). Digits inside other text, such as a coupon code `TREAT150`, are not amounts and stay as written.
 
 Masking is minimization, not anonymization. Names inside subjects or bodies, addresses, short identifiers, attachments, unusual formats, and contextual clues can remain. Regex can also produce false positives. Review provider policies before using sensitive mail.
 

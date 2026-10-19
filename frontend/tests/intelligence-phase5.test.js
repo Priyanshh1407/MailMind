@@ -131,7 +131,10 @@ test('Phase 5 starts mail, status, telemetry, actions, and usage reads in parall
   const run = loadDashboard(api, { offset: 0, search: '' }, new AbortController().signal);
   await new Promise(resolve => setImmediate(resolve));
   const reads = calls.filter(path => path !== '/session');
-  assert.equal(reads.length, 6);
+  // Six core reads plus the Money tab's three (a 404 just marks it switched off).
+  assert.equal(reads.length, 9);
+  assert.ok(['/ledger/summary', '/ledger/subscriptions'].every(path => reads.includes(path)));
+  assert.ok(reads.some(path => path.startsWith('/ledger/entries?limit=50&offset=0')));
   assert.ok(reads.includes('/status'));
   assert.ok(reads.includes('/telemetry'));
   assert.ok(reads.some(path => path.startsWith('/emails?limit=20&offset=0')));

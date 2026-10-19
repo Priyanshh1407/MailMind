@@ -1,6 +1,7 @@
-import { Activity, CheckCircle2, CircleDot, ClockAlert, Coins, Database, ShieldAlert, Tag, TriangleAlert } from 'lucide-react';
+import { Activity, CheckCircle2, CircleDot, ClockAlert, Coins, Database, IndianRupee, ShieldAlert, Tag, TriangleAlert } from 'lucide-react';
 import { Surface } from './ui/Surface';
 import { formatCount, formatTenthsAsSeconds, millisecondsToTenthsUp } from '../dashboard';
+import { formatMoney } from '../money';
 import { AnimatedCount } from './ui/AnimatedCount';
 
 function Stat({ label, value, detail, icon: Icon }) {
@@ -21,6 +22,8 @@ export function DashboardStats({ snapshot }) {
   const actionsReady = actions?.summaryState === 'ready';
   const usage = snapshot?.tokenUsage;
   const risk = snapshot?.status?.risk;
+  const ledger = snapshot?.ledger;
+  const spent = ledger?.state === 'ready' ? ledger.summary.totals[ledger.summary.currency]?.spent_minor ?? 0 : null;
   const tenths = millisecondsToTenthsUp(timing?.mean_ms);
   const completionPct = totals?.saved ? ((totals.completed / totals.saved) * 100).toFixed(1) + '% workflow completion' : 'Messages that completed the workflow';
   const actionValue = value => actionsReady ? <AnimatedCount value={value} /> : '-';
@@ -34,5 +37,6 @@ export function DashboardStats({ snapshot }) {
     <Stat icon={TriangleAlert} label="Overdue" value={actionValue(summary?.overdue)} detail="Past their deadline" />
     <Stat icon={Coins} label="Tokens today" value={usage?.todayState === 'ready' ? <AnimatedCount value={usage.today.totals.total_tokens} /> : '-'} detail="Cloud and local, since midnight" />
     {risk?.enabled && <Stat icon={ShieldAlert} label="Risky emails" value={<AnimatedCount value={risk.high_unreviewed} />} detail={risk.medium + ' to check carefully' + (risk.unscored ? ' · ' + risk.unscored + ' not yet checked' : '')} />}
+    {snapshot?.status?.ledger?.enabled && <Stat icon={IndianRupee} label="Spent this month" value={spent == null ? '-' : formatMoney(spent, ledger.summary.currency)} detail="From your receipts; amounts stay local" />}
   </section>;
 }

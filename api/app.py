@@ -965,6 +965,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                     'intelligence_backfill':backfill,
                     'signals':signals,
                     'risk':risk,
+                    'ledger':{'enabled':bool(application.state.settings.ledger_enabled)},
                     'poll_interval_seconds':application.state.settings.poll_interval_seconds,
                     'worker_lease_seconds':application.state.settings.worker_lease_seconds,
                     'batch_size':application.state.settings.batch_size}
@@ -1167,9 +1168,10 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                  if saved is not None else 'Google sign-in started. Finish it in the browser. Inbox work runs separately.')
         return {'job_id':job_id,'status':'running','message':message}
 
-    from api import risk as risk_routes, signals as signal_routes
+    from api import ledger as ledger_routes, risk as risk_routes, signals as signal_routes
     signal_routes.register(application, session)
     risk_routes.register(application, session)
+    ledger_routes.register(application, session)
 
     origins = (settings or Settings()).frontend_origins
     application.add_middleware(CORSMiddleware, allow_origins=list(origins), allow_credentials=True,

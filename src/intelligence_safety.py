@@ -10,7 +10,7 @@ from .database import connection
 from .token_usage import aggregate_token_usage
 
 
-MUTATION_SCOPES = frozenset({'reminder', 'reanalysis'})
+MUTATION_SCOPES = frozenset({'reminder', 'reanalysis', 'ledger_correction', 'question', 'follow_up', 'brief'})
 
 
 class MutationRateLimited(Exception):

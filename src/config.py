@@ -55,6 +55,8 @@ class Settings:
     shadow_model_enabled: bool = False
     # Scam and phishing checks (local and deterministic; see src/risk_analysis.py).
     risk_analysis_enabled: bool = False
+    # Money and subscriptions from receipts (amounts never reach a provider).
+    ledger_enabled: bool = False
 
     def __post_init__(self):
         for name, low, high in (('poll_interval_seconds',5,86400), ('batch_size',1,200),
@@ -75,7 +77,7 @@ class Settings:
         for name in ('action_extraction_enabled', 'action_reminders_enabled',
                      'telegram_action_reminders_enabled',
                      'token_collection_enabled', 'token_analytics_visible',
-                     'explanations_visible', 'risk_analysis_enabled'):
+                     'explanations_visible', 'risk_analysis_enabled', 'ledger_enabled'):
             if type(getattr(self, name)) is not bool:
                 raise ValueError(f'{name} must be a boolean')
         if self.action_reminders_enabled and not self.action_extraction_enabled:
@@ -148,4 +150,5 @@ class Settings:
             explanations_visible=_environment_bool('MAILMIND_EXPLANATIONS_VISIBLE',False),
             shadow_model_enabled=_environment_bool('MAILMIND_SHADOW_MODEL_ENABLED',False),
             risk_analysis_enabled=_environment_bool('MAILMIND_RISK_ANALYSIS_ENABLED',False),
+            ledger_enabled=_environment_bool('MAILMIND_LEDGER_ENABLED',False),
         )

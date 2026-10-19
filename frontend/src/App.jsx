@@ -17,6 +17,7 @@ import { Pagination } from './components/Pagination';
 import { SectionTabs } from './components/SectionTabs';
 import { SearchFilters } from './components/SearchFilters';
 import { TokenUsagePanel } from './components/TokenUsagePanel';
+import { MoneyPanel } from './components/MoneyPanel';
 import { EASE_OUT } from './motion';
 import { BootContext, useBootSequence } from './boot';
 
@@ -25,6 +26,7 @@ const INITIAL_QUERY = {
   offset: 0, search: '', category: '', emailId: '',
   actionOffset: 0, actionStatus: 'open', actionFilter: 'open', actionType: '',
   actionDueFrom: '', actionDueTo: '', tokenWindow: 'day',
+  ledgerMonth: '', ledgerOffset: 0,
 };
 // Panels stay mounted (hidden) so state survives a tab switch; the content
 // fades up each time its panel becomes the visible one.
@@ -43,6 +45,7 @@ const TABS = [
   { key: 'inbox', label: 'Inbox' },
   { key: 'actions', label: 'Action Center' },
   { key: 'usage', label: 'Usage' },
+  { key: 'money', label: 'Money', when: status => status?.ledger?.enabled },
 ];
 
 function App() {
@@ -51,7 +54,11 @@ function App() {
   const [activeTab, setActiveTab] = useState('inbox');
   // Mount the Usage panel on first visit so its chart bundle loads on demand.
   const [usageOpened, setUsageOpened] = useState(false);
-  useEffect(() => { if (activeTab === 'usage') setUsageOpened(true); }, [activeTab]);
+  const [moneyOpened, setMoneyOpened] = useState(false);
+  useEffect(() => {
+    if (activeTab === 'usage') setUsageOpened(true);
+    if (activeTab === 'money') setMoneyOpened(true);
+  }, [activeTab]);
   const tabRefs = useRef([]);
   const {
     snapshot, loading, error, actionError, notice, pending, refresh, mutate,
@@ -88,16 +95,17 @@ function App() {
     });
   };
   const selectTab = key => showSection(key);
+  const tabs = TABS.filter(tab => !tab.when || tab.when(snapshot?.status));
   const tabKeys = event => {
-    const index = TABS.findIndex(tab => tab.key === activeTab);
+    const index = tabs.findIndex(tab => tab.key === activeTab);
     let next = index;
-    if (event.key === 'ArrowRight') next = (index + 1) % TABS.length;
-    else if (event.key === 'ArrowLeft') next = (index - 1 + TABS.length) % TABS.length;
+    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
     else if (event.key === 'Home') next = 0;
-    else if (event.key === 'End') next = TABS.length - 1;
+    else if (event.key === 'End') next = tabs.length - 1;
     else return;
     event.preventDefault();
-    showSection(TABS[next].key);
+    showSection(tabs[next].key);
     tabRefs.current[next]?.focus();
   };
   const openSource = emailId => {
@@ -126,7 +134,7 @@ function App() {
 
   return <BootContext.Provider value={booting}><div className={booting ? 'dashboard booting' : 'dashboard'}>
     <AppHeader snapshot={snapshot} pending={pending} mutate={accountMutate} loading={loading} error={error}
-      nav={showData ? <SectionTabs tabs={TABS} activeTab={activeTab} onSelect={selectTab} onKeyDown={tabKeys} tabRefs={tabRefs} /> : null} />
+      nav={showData ? <SectionTabs tabs={tabs} activeTab={activeTab} onSelect={selectTab} onKeyDown={tabKeys} tabRefs={tabRefs} /> : null} />
     <ConnectivityBanner snapshot={snapshot} refresh={refresh} />
     <AppFeedback error={error} actionError={actionError} notice={notice} snapshot={snapshot} pending={pending} refresh={refresh} dismissActionError={dismissActionError} dismissNotice={dismissNotice} />
     <main className='dashboard-main'>
@@ -153,6 +161,9 @@ function App() {
         <TabPanel id='usage' active={activeTab === 'usage'}>
           {usageOpened && <TokenUsagePanel snapshot={snapshot} setQuery={setQuery} />}
         </TabPanel>
+        {tabs.some(tab => tab.key === 'money') && <TabPanel id='money' active={activeTab === 'money'}>
+          {moneyOpened && <MoneyPanel snapshot={snapshot} query={query} setQuery={setQuery} disabled={disabled || readOnly} mutate={mutate} api={api} openSource={openSource} />}
+        </TabPanel>}
       </>}
       <AppFooter autoMarkRead={snapshot?.status.auto_mark_read} />
     </main>

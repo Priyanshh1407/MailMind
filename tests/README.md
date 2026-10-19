@@ -10,7 +10,7 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
-At the 19 October 2026 verification, all 624 discovered backend tests passed. Each of the 25 earlier test modules passed on its own on 6 October; the new `test_signals` and `test_risk` modules also pass on their own.
+At the 19 October 2026 verification, all 645 discovered backend tests passed. Each of the 25 earlier test modules passed on its own on 6 October; the new `test_signals`, `test_risk` and `test_ledger` modules also pass on their own.
 
 One full run on 19 October 2026 reported a single error that did not recur in eight later full runs (two in place, six in an isolated copy). Its test name was not captured, so no cause is claimed. If it happens again, keep the run's output: `unittest` prints the failing test's name and traceback.
 
@@ -19,6 +19,7 @@ Regression and contract suites added after the audit:
 - `test_audit_regressions.py`: every audit finding reproduced through the real code path (provider failover, shadow authority, grounding, deadlines, explanations, Telegram timing, retry-time repair, deletion errors, configuration messages, the action-type filter).
 - `test_provider_faults.py`: 9 provider fault types × 2 scopes against a written contract (rendered to `docs/RESILIENCE.md`).
 - `test_cloud_evaluation.py`: the evaluation harness scores recordings exactly as production parses them.
+- `test_ledger.py`: amounts in Indian and foreign formats (currency before or after), the total cue beating items, subtotals, savings and balances, the placeholder privacy contract on every benchmark request (and a planted leak caught), cloud answers validated and filled in locally, subscriptions from monthly and yearly series but not irregular repeats, migration 17 keeping token rows, one cloud call per cycle, retry then rules fallback, corrections surviving rescans, account fencing, classification request bytes pinned, the routes, purge, and a report that replays byte for byte.
 - `test_risk.py`: the scam rules (lookalikes, links, lures, the OTP-warning and statement-password exclusions), the property that adding a red flag never lowers a score, weights that refit identically, a report that replays byte for byte, a train/test split with no shared template, re-scoring when signals or rules change, a scoring failure that never undoes a classification, the high-risk alert prefix, purge, and the routes with the feature on and off.
 - `test_signals.py`: security signals (Gmail's authentication verdicts preferred over forged earlier hops, reply paths, links, hidden text) are extracted without changing the visible body, saved with the email, backfilled without side effects, fenced on account switch, purged with the account, and exposed by a CSRF-protected route.
 
@@ -62,8 +63,8 @@ Set-Location ..
 
 Current verified result:
 
-- 58 Node unit tests passed;
-- 41 Playwright browser scenarios passed;
+- 62 Node unit tests passed;
+- 43 Playwright browser scenarios passed;
 - lint passed;
 - production build passed.
 

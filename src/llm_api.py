@@ -649,3 +649,148 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
             return result(outcome='ERROR',reason='provider_budget_exhausted')
         failures.append(provider_failure(error))
         return routes_failed()
+
+
+# --- structured answers for the assistant features ------------------------------
+# Ledger extraction, Ask your inbox, follow-up drafts and the daily brief use
+# their own request builders and their own call slots, so they can never take
+# capacity from live classification or change its requests.
+ASSIST_GEMINI_CALLS = tuple(BoundedCalls(1) for _ in range(3))
+ASSIST_GROQ_CALLS = BoundedCalls(1)
+
+
+class StructuredUnavailable(Exception):
+    def __init__(self, code, retryable):
+        super().__init__(code)
+        self.code = code
+        self.retryable = retryable
+
+
+def structured_gemini_config(system, schema, model, max_output_tokens):
+    config = {'system_instruction': system, 'response_mime_type': 'application/json',
+              'response_json_schema': schema, 'max_output_tokens': max_output_tokens}
+    if _supports_thinking_level(model):
+        config['thinking_config'] = {'thinking_level': 'low'}
+    return config
+
+
+def structured_groq_body(model, system, schema, schema_name, contents, max_output_tokens):
+    return {'model': model,
+            'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': contents}],
+            'response_format': {'type': 'json_schema', 'json_schema': {
+                'name': schema_name, 'strict': True, 'schema': schema}},
+            'temperature': 0, 'max_completion_tokens': max_output_tokens}
+
+
+def call_structured(contents, *, system, schema, schema_name, settings, operation, validate,
+                    usage_recorder=None, before_request=None, budget_seconds=None,
+                    max_output_tokens=2048, record_key='assist', max_chars=MAX_PROVIDER_OUTPUT_CHARS):
+    """One validated JSON answer: Gemini models in order, then Groq.
+
+    Same failover rules as classification: a timeout, 429 or 5xx cools the
+    model down; a 400/404 or unknown error cools it down too; a rejected
+    Gemini key skips the other Gemini models; an answer that fails `validate`
+    tries the next route without a cooldown. Returns (value, source, model).
+    Raises StructuredUnavailable(code, retryable) when every route failed.
+    """
+    if settings.local_only:
+        raise StructuredUnavailable('cloud_disabled_local_only', False)
+    budget = RequestBudget(budget_seconds or settings.classification_budget_seconds)
+    guard = before_request or nullcontext
+    failures = []
+
+    def record(key, provider, model_version, outcome, measurement):
+        if usage_recorder is not None:
+            usage_recorder.record(key, provider=provider, model_version=model_version,
+                                  operation=operation, outcome=outcome, measurement=measurement)
+
+    def finish():
+        if not failures:
+            raise StructuredUnavailable('cloud_not_configured_or_unavailable', False)
+        retryable = [failure for failure in failures if failure.retryable]
+        raise StructuredUnavailable((retryable or failures)[-1].code, bool(retryable))
+
+    client = None
+    try:
+        client = get_client()
+    except Exception as error:
+        log_event('cloud_client_unavailable', error=error)
+    key_rejected = False
+    for index, version in enumerate(settings.gemini_models if client is not None else ()):
+        if key_rejected or not _model_is_available(version):
+            continue
+        if budget.remaining() < 0.05:
+            failures.append(Failure('provider_budget_exhausted', True))
+            finish()
+        attempted, captured = Event(), []
+        try:
+            timeout = budget.timeout(settings.provider_timeout_seconds)
+            config = structured_gemini_config(system, schema, version, max_output_tokens)
+            def generate(version=version, config=config):
+                with guard():
+                    attempted.set()
+                    response = client.models.generate_content(model=version, contents=contents, config=config)
+                    captured.append(response)
+                    return response
+            response = ASSIST_GEMINI_CALLS[index].run(generate, timeout)
+            measurement = gemini_usage_measurement(response)
+            try:
+                value = validate(_provider_object(response.text, max_chars=max_chars))
+                record(f'{record_key}:gemini:{index}', 'gemini', version, TokenOutcome.SUCCESS.value, measurement)
+                _model_succeeded(version)
+                return value, 'gemini', version
+            except (ValueError, TypeError, AttributeError, KeyError):
+                record(f'{record_key}:gemini:{index}', 'gemini', version, TokenOutcome.FAILED.value, measurement)
+                log_event('assist_invalid_output')
+                failures.append(Failure('invalid_provider_output', False))
+        except Exception as error:
+            if attempted.is_set():
+                record(f'{record_key}:gemini:{index}', 'gemini', version, failure_outcome(error),
+                       gemini_usage_measurement(captured[0]) if captured else unavailable_measurement())
+            if isinstance(error, WorkCancelled):
+                raise
+            failure = provider_failure(error)
+            failures.append(failure)
+            log_event('assist_provider_failed', error=error)
+            if failure.code == 'provider_auth':
+                key_rejected = True
+            else:
+                _cool_down_model(version)
+    key = os.getenv('GROQ_API_KEY')
+    if not key or budget.remaining() < 0.05:
+        finish()
+    version = settings.groq_model
+    attempted, captured = Event(), []
+    try:
+        import requests
+        timeout = budget.timeout(settings.provider_timeout_seconds)
+        def generate_groq():
+            with guard():
+                attempted.set()
+                response = requests.post(GROQ_URL, headers={'Authorization': f'Bearer {key}'},
+                                         timeout=(timeout / 2, timeout / 2),
+                                         json=structured_groq_body(version, system, schema, schema_name,
+                                                                   contents, max_output_tokens))
+                response.raise_for_status()
+                payload = response.json()
+                captured.append(payload)
+                return payload
+        payload = ASSIST_GROQ_CALLS.run(generate_groq, timeout)
+        measurement = groq_usage_measurement(payload)
+        try:
+            value = validate(_provider_object(payload['choices'][0]['message']['content'], max_chars=max_chars))
+            record(f'{record_key}:groq', 'groq', version, TokenOutcome.SUCCESS.value, measurement)
+            return value, 'groq', version
+        except (KeyError, IndexError, ValueError, TypeError):
+            record(f'{record_key}:groq', 'groq', version, TokenOutcome.FAILED.value, measurement)
+            log_event('assist_invalid_output')
+            failures.append(Failure('invalid_provider_output', False))
+    except Exception as error:
+        if attempted.is_set():
+            record(f'{record_key}:groq', 'groq', version, failure_outcome(error),
+                   groq_usage_measurement(captured[0]) if captured else unavailable_measurement())
+        if isinstance(error, WorkCancelled):
+            raise
+        log_event('assist_provider_failed', error=error)
+        failures.append(provider_failure(error))
+    finish()

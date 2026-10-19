@@ -1,0 +1,1750 @@
+[
+ {
+  "id": "food-0",
+  "sender": "Swiggy <noreply@swiggy.in>",
+  "subject": "Your Swiggy order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 280\nDelivery fee: Rs 35\nDiscount: -Rs 50\nOrder total: Rs 265\nYou saved Rs 50 on this order.",
+  "received": "2026-07-01",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 26500,
+   "currency": "INR",
+   "merchant": "Swiggy"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "food-1",
+  "sender": "Zomato <noreply@zomato.com>",
+  "subject": "Your Zomato order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 293.50\nDelivery fee: Rs 36\nDiscount: -Rs 52\nOrder total: Rs 277.50\nYou saved Rs 52 on this order.",
+  "received": "2026-07-04",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 27750,
+   "currency": "INR",
+   "merchant": "Zomato"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "food-2",
+  "sender": "Swiggy <noreply@swiggy.in>",
+  "subject": "Your Swiggy order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 307\nDelivery fee: Rs 37\nDiscount: -Rs 54\nOrder total: Rs 290\nYou saved Rs 54 on this order.",
+  "received": "2026-07-07",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 29000,
+   "currency": "INR",
+   "merchant": "Swiggy"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "food-3",
+  "sender": "Zomato <noreply@zomato.com>",
+  "subject": "Your Zomato order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 320.50\nDelivery fee: Rs 38\nDiscount: -Rs 56\nOrder total: Rs 302.50\nYou saved Rs 56 on this order.",
+  "received": "2026-07-10",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 30250,
+   "currency": "INR",
+   "merchant": "Zomato"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "food-4",
+  "sender": "Swiggy <noreply@swiggy.in>",
+  "subject": "Your Swiggy order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 334\nDelivery fee: Rs 39\nDiscount: -Rs 58\nOrder total: Rs 315\nYou saved Rs 58 on this order.",
+  "received": "2026-07-13",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 31500,
+   "currency": "INR",
+   "merchant": "Swiggy"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "food-5",
+  "sender": "Zomato <noreply@zomato.com>",
+  "subject": "Your Zomato order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 347.50\nDelivery fee: Rs 40\nDiscount: -Rs 60\nOrder total: Rs 327.50\nYou saved Rs 60 on this order.",
+  "received": "2026-07-16",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 32750,
+   "currency": "INR",
+   "merchant": "Zomato"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "food-6",
+  "sender": "Swiggy <noreply@swiggy.in>",
+  "subject": "Your Swiggy order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 361\nDelivery fee: Rs 41\nDiscount: -Rs 62\nOrder total: Rs 340\nYou saved Rs 62 on this order.",
+  "received": "2026-07-19",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 34000,
+   "currency": "INR",
+   "merchant": "Swiggy"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "food-7",
+  "sender": "Zomato <noreply@zomato.com>",
+  "subject": "Your Zomato order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 374.50\nDelivery fee: Rs 42\nDiscount: -Rs 64\nOrder total: Rs 352.50\nYou saved Rs 64 on this order.",
+  "received": "2026-07-22",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 35250,
+   "currency": "INR",
+   "merchant": "Zomato"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "food-8",
+  "sender": "Swiggy <noreply@swiggy.in>",
+  "subject": "Your Swiggy order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 388\nDelivery fee: Rs 43\nDiscount: -Rs 66\nOrder total: Rs 365\nYou saved Rs 66 on this order.",
+  "received": "2026-07-25",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 36500,
+   "currency": "INR",
+   "merchant": "Swiggy"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "food-9",
+  "sender": "Zomato <noreply@zomato.com>",
+  "subject": "Your Zomato order is delivered",
+  "body": "Thanks for ordering!\nItem total: Rs 401.50\nDelivery fee: Rs 44\nDiscount: -Rs 68\nOrder total: Rs 377.50\nYou saved Rs 68 on this order.",
+  "received": "2026-07-28",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 37750,
+   "currency": "INR",
+   "merchant": "Zomato"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-0",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Order confirmed: #40211",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,499\nGrand Total: ₹1,299\nYou saved ₹1,200. Cashback of ₹50 will be credited later.",
+  "received": "2026-07-03",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 129900,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-1",
+  "sender": "Flipkart <no-reply@flipkart.com>",
+  "subject": "Order confirmed: #40212",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,549\nGrand Total: ₹1,330\nYou saved ₹1,219. Cashback of ₹50 will be credited later.",
+  "received": "2026-07-07",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 133000,
+   "currency": "INR",
+   "merchant": "Flipkart"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-2",
+  "sender": "Myntra <orders@myntra.com>",
+  "subject": "Order confirmed: #40213",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,599\nGrand Total: ₹1,361\nYou saved ₹1,238. Cashback of ₹50 will be credited later.",
+  "received": "2026-07-11",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 136100,
+   "currency": "INR",
+   "merchant": "Myntra"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-3",
+  "sender": "Nykaa <orders@nykaa.com>",
+  "subject": "Order confirmed: #40214",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,649\nGrand Total: ₹1,392\nYou saved ₹1,257. Cashback of ₹50 will be credited later.",
+  "received": "2026-07-15",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 139200,
+   "currency": "INR",
+   "merchant": "Nykaa"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-4",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Order confirmed: #40215",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,699\nGrand Total: ₹1,423\nYou saved ₹1,276. Cashback of ₹50 will be credited later.",
+  "received": "2026-07-19",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 142300,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-5",
+  "sender": "Flipkart <no-reply@flipkart.com>",
+  "subject": "Order confirmed: #40216",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,749\nGrand Total: ₹1,454\nYou saved ₹1,295. Cashback of ₹50 will be credited later.",
+  "received": "2026-07-23",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 145400,
+   "currency": "INR",
+   "merchant": "Flipkart"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-6",
+  "sender": "Myntra <orders@myntra.com>",
+  "subject": "Order confirmed: #40217",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,799\nGrand Total: ₹1,485\nYou saved ₹1,314. Cashback of ₹50 will be credited later.",
+  "received": "2026-07-27",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 148500,
+   "currency": "INR",
+   "merchant": "Myntra"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-7",
+  "sender": "Nykaa <orders@nykaa.com>",
+  "subject": "Order confirmed: #40218",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,849\nGrand Total: ₹1,516\nYou saved ₹1,333. Cashback of ₹50 will be credited later.",
+  "received": "2026-07-31",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 151600,
+   "currency": "INR",
+   "merchant": "Nykaa"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-8",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Order confirmed: #40219",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,899\nGrand Total: ₹1,547\nYou saved ₹1,352. Cashback of ₹50 will be credited later.",
+  "received": "2026-08-04",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 154700,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-9",
+  "sender": "Flipkart <no-reply@flipkart.com>",
+  "subject": "Order confirmed: #40220",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,949\nGrand Total: ₹1,578\nYou saved ₹1,371. Cashback of ₹50 will be credited later.",
+  "received": "2026-08-08",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 157800,
+   "currency": "INR",
+   "merchant": "Flipkart"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-10",
+  "sender": "Myntra <orders@myntra.com>",
+  "subject": "Order confirmed: #40221",
+  "body": "Hello, your order has been placed.\nMRP: ₹2,999\nGrand Total: ₹1,609\nYou saved ₹1,390. Cashback of ₹50 will be credited later.",
+  "received": "2026-08-12",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 160900,
+   "currency": "INR",
+   "merchant": "Myntra"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-11",
+  "sender": "Nykaa <orders@nykaa.com>",
+  "subject": "Order confirmed: #40222",
+  "body": "Hello, your order has been placed.\nMRP: ₹3,049\nGrand Total: ₹1,640\nYou saved ₹1,409. Cashback of ₹50 will be credited later.",
+  "received": "2026-08-16",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 164000,
+   "currency": "INR",
+   "merchant": "Nykaa"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-12",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Order confirmed: #40223",
+  "body": "Hello, your order has been placed.\nMRP: ₹3,099\nGrand Total: ₹1,671\nYou saved ₹1,428. Cashback of ₹50 will be credited later.",
+  "received": "2026-08-20",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 167100,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-13",
+  "sender": "Flipkart <no-reply@flipkart.com>",
+  "subject": "Order confirmed: #40224",
+  "body": "Hello, your order has been placed.\nMRP: ₹3,149\nGrand Total: ₹1,702\nYou saved ₹1,447. Cashback of ₹50 will be credited later.",
+  "received": "2026-08-24",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 170200,
+   "currency": "INR",
+   "merchant": "Flipkart"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-14",
+  "sender": "Myntra <orders@myntra.com>",
+  "subject": "Order confirmed: #40225",
+  "body": "Hello, your order has been placed.\nMRP: ₹3,199\nGrand Total: ₹1,733\nYou saved ₹1,466. Cashback of ₹50 will be credited later.",
+  "received": "2026-08-28",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 173300,
+   "currency": "INR",
+   "merchant": "Myntra"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "shop-15",
+  "sender": "Nykaa <orders@nykaa.com>",
+  "subject": "Order confirmed: #40226",
+  "body": "Hello, your order has been placed.\nMRP: ₹3,249\nGrand Total: ₹1,764\nYou saved ₹1,485. Cashback of ₹50 will be credited later.",
+  "received": "2026-09-01",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 176400,
+   "currency": "INR",
+   "merchant": "Nykaa"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-0",
+  "sender": "HDFC Bank InstaAlerts <alerts@hdfcbank.net>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.2,500 has been debited from your account ending 4821 on 01-07-2026. Available balance: Rs.45,230.",
+  "received": "2026-07-01",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 250000,
+   "currency": "INR",
+   "merchant": "HDFC Bank"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-1",
+  "sender": "ICICI Bank <alerts@icicibank.com>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.2,623.45 has been debited from your account ending 4821 on 02-07-2026. Available balance: Rs.46,229.99.",
+  "received": "2026-07-06",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 262345,
+   "currency": "INR",
+   "merchant": "ICICI Bank"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-2",
+  "sender": "SBI <alerts@sbi.co.in>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.2,746.90 has been debited from your account ending 4821 on 03-07-2026. Available balance: Rs.47,229.98.",
+  "received": "2026-07-11",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 274690,
+   "currency": "INR",
+   "merchant": "SBI"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-3",
+  "sender": "HDFC Bank InstaAlerts <alerts@hdfcbank.net>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.2,870.35 has been debited from your account ending 4821 on 04-07-2026. Available balance: Rs.48,229.97.",
+  "received": "2026-07-16",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 287035,
+   "currency": "INR",
+   "merchant": "HDFC Bank"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-4",
+  "sender": "ICICI Bank <alerts@icicibank.com>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.2,993.80 has been debited from your account ending 4821 on 05-07-2026. Available balance: Rs.49,229.96.",
+  "received": "2026-07-21",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 299380,
+   "currency": "INR",
+   "merchant": "ICICI Bank"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-5",
+  "sender": "SBI <alerts@sbi.co.in>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.3,117.25 has been debited from your account ending 4821 on 06-07-2026. Available balance: Rs.50,229.95.",
+  "received": "2026-07-26",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 311725,
+   "currency": "INR",
+   "merchant": "SBI"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-6",
+  "sender": "HDFC Bank InstaAlerts <alerts@hdfcbank.net>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.3,240.70 has been debited from your account ending 4821 on 07-07-2026. Available balance: Rs.51,229.94.",
+  "received": "2026-07-31",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 324070,
+   "currency": "INR",
+   "merchant": "HDFC Bank"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-7",
+  "sender": "ICICI Bank <alerts@icicibank.com>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.3,364.15 has been debited from your account ending 4821 on 08-07-2026. Available balance: Rs.52,229.93.",
+  "received": "2026-08-05",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 336415,
+   "currency": "INR",
+   "merchant": "ICICI Bank"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-8",
+  "sender": "SBI <alerts@sbi.co.in>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.3,487.60 has been debited from your account ending 4821 on 09-07-2026. Available balance: Rs.53,229.92.",
+  "received": "2026-08-10",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 348760,
+   "currency": "INR",
+   "merchant": "SBI"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-9",
+  "sender": "HDFC Bank InstaAlerts <alerts@hdfcbank.net>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.3,611.05 has been debited from your account ending 4821 on 10-07-2026. Available balance: Rs.54,229.91.",
+  "received": "2026-08-15",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 361105,
+   "currency": "INR",
+   "merchant": "HDFC Bank"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-10",
+  "sender": "ICICI Bank <alerts@icicibank.com>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.3,734.50 has been debited from your account ending 4821 on 11-07-2026. Available balance: Rs.55,229.90.",
+  "received": "2026-08-20",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 373450,
+   "currency": "INR",
+   "merchant": "ICICI Bank"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "debit-11",
+  "sender": "SBI <alerts@sbi.co.in>",
+  "subject": "Transaction alert",
+  "body": "Dear Customer, Rs.3,857.95 has been debited from your account ending 4821 on 12-07-2026. Available balance: Rs.56,229.89.",
+  "received": "2026-08-25",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 385795,
+   "currency": "INR",
+   "merchant": "SBI"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "upi-0",
+  "sender": "PhonePe <noreply@phonepe.com>",
+  "subject": "Payment successful",
+  "body": "You paid ₹120 to Ramesh Kirana Store via UPI. UPI transaction ID 6132088. Get 2% cashback up to ₹25 on your next bill payment.",
+  "received": "2026-07-01",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 12000,
+   "currency": "INR",
+   "merchant": "Ramesh Kirana Store"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "upi-1",
+  "sender": "PhonePe <noreply@phonepe.com>",
+  "subject": "Payment successful",
+  "body": "You paid ₹167.50 to Sharma Medicals via UPI. UPI transaction ID 6132188. Get 2% cashback up to ₹25 on your next bill payment.",
+  "received": "2026-07-07",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 16750,
+   "currency": "INR",
+   "merchant": "Sharma Medicals"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "upi-2",
+  "sender": "PhonePe <noreply@phonepe.com>",
+  "subject": "Payment successful",
+  "body": "You paid ₹215 to Blue Tokai Coffee via UPI. UPI transaction ID 6132288. Get 2% cashback up to ₹25 on your next bill payment.",
+  "received": "2026-07-13",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 21500,
+   "currency": "INR",
+   "merchant": "Blue Tokai Coffee"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "upi-3",
+  "sender": "PhonePe <noreply@phonepe.com>",
+  "subject": "Payment successful",
+  "body": "You paid ₹262.50 to Auto fare via UPI. UPI transaction ID 6132388. Get 2% cashback up to ₹25 on your next bill payment.",
+  "received": "2026-07-19",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 26250,
+   "currency": "INR",
+   "merchant": "Auto fare"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "upi-4",
+  "sender": "PhonePe <noreply@phonepe.com>",
+  "subject": "Payment successful",
+  "body": "You paid ₹310 to Gupta Dairy via UPI. UPI transaction ID 6132488. Get 2% cashback up to ₹25 on your next bill payment.",
+  "received": "2026-07-25",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 31000,
+   "currency": "INR",
+   "merchant": "Gupta Dairy"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "upi-5",
+  "sender": "PhonePe <noreply@phonepe.com>",
+  "subject": "Payment successful",
+  "body": "You paid ₹357.50 to Fresh Fruits Mart via UPI. UPI transaction ID 6132588. Get 2% cashback up to ₹25 on your next bill payment.",
+  "received": "2026-07-31",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 35750,
+   "currency": "INR",
+   "merchant": "Fresh Fruits Mart"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "refund-0",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Refund initiated",
+  "body": "We have initiated a refund of ₹499 for your returned item. It will reach your original payment method in 5-7 days.",
+  "received": "2026-07-10",
+  "gold": {
+   "kind": "refund",
+   "amount_minor": 49900,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "refund-1",
+  "sender": "Flipkart <no-reply@flipkart.com>",
+  "subject": "Refund initiated",
+  "body": "We have initiated a refund of ₹599 for your returned item. It will reach your original payment method in 5-7 days.",
+  "received": "2026-07-17",
+  "gold": {
+   "kind": "refund",
+   "amount_minor": 59900,
+   "currency": "INR",
+   "merchant": "Flipkart"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "refund-2",
+  "sender": "Myntra <orders@myntra.com>",
+  "subject": "Refund initiated",
+  "body": "We have initiated a refund of ₹699 for your returned item. It will reach your original payment method in 5-7 days.",
+  "received": "2026-07-24",
+  "gold": {
+   "kind": "refund",
+   "amount_minor": 69900,
+   "currency": "INR",
+   "merchant": "Myntra"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "refund-3",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Refund initiated",
+  "body": "We have initiated a refund of ₹799 for your returned item. It will reach your original payment method in 5-7 days.",
+  "received": "2026-07-31",
+  "gold": {
+   "kind": "refund",
+   "amount_minor": 79900,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "refund-4",
+  "sender": "Flipkart <no-reply@flipkart.com>",
+  "subject": "Refund initiated",
+  "body": "We have initiated a refund of ₹899 for your returned item. It will reach your original payment method in 5-7 days.",
+  "received": "2026-08-07",
+  "gold": {
+   "kind": "refund",
+   "amount_minor": 89900,
+   "currency": "INR",
+   "merchant": "Flipkart"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "refund-5",
+  "sender": "Myntra <orders@myntra.com>",
+  "subject": "Refund initiated",
+  "body": "We have initiated a refund of ₹999 for your returned item. It will reach your original payment method in 5-7 days.",
+  "received": "2026-08-14",
+  "gold": {
+   "kind": "refund",
+   "amount_minor": 99900,
+   "currency": "INR",
+   "merchant": "Myntra"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "bill-0",
+  "sender": "Airtel <ebill@airtel.in>",
+  "subject": "Your Airtel bill is ready",
+  "body": "Your bill amount is ₹599. Due date: 5 Nov. Pay on time to avoid a late fee of ₹100.",
+  "received": "2026-07-01",
+  "gold": {
+   "kind": "bill",
+   "amount_minor": 59900,
+   "currency": "INR",
+   "merchant": "Airtel"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "bill-1",
+  "sender": "Jio <bill@jio.com>",
+  "subject": "Your Jio bill is ready",
+  "body": "Your bill amount is ₹749. Due date: 5 Oct. Pay on time to avoid a late fee of ₹100.",
+  "received": "2026-07-12",
+  "gold": {
+   "kind": "bill",
+   "amount_minor": 74900,
+   "currency": "INR",
+   "merchant": "Jio"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "bill-2",
+  "sender": "Tata Power <billing@tatapower.com>",
+  "subject": "Your Tata Power bill is ready",
+  "body": "Your bill amount is ₹899. Due date: 5 Nov. Pay on time to avoid a late fee of ₹100.",
+  "received": "2026-07-23",
+  "gold": {
+   "kind": "bill",
+   "amount_minor": 89900,
+   "currency": "INR",
+   "merchant": "Tata Power"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "bill-3",
+  "sender": "ACT Fibernet <billing@actcorp.in>",
+  "subject": "Your ACT Fibernet bill is ready",
+  "body": "Your bill amount is ₹1,049. Due date: 5 Oct. Pay on time to avoid a late fee of ₹100.",
+  "received": "2026-08-03",
+  "gold": {
+   "kind": "bill",
+   "amount_minor": 104900,
+   "currency": "INR",
+   "merchant": "ACT Fibernet"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "bill-4",
+  "sender": "Airtel <ebill@airtel.in>",
+  "subject": "Your Airtel bill is ready",
+  "body": "Your bill amount is ₹1,199. Due date: 5 Nov. Pay on time to avoid a late fee of ₹100.",
+  "received": "2026-08-14",
+  "gold": {
+   "kind": "bill",
+   "amount_minor": 119900,
+   "currency": "INR",
+   "merchant": "Airtel"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "bill-5",
+  "sender": "Jio <bill@jio.com>",
+  "subject": "Your Jio bill is ready",
+  "body": "Your bill amount is ₹1,349. Due date: 5 Oct. Pay on time to avoid a late fee of ₹100.",
+  "received": "2026-08-25",
+  "gold": {
+   "kind": "bill",
+   "amount_minor": 134900,
+   "currency": "INR",
+   "merchant": "Jio"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "bill-6",
+  "sender": "Tata Power <billing@tatapower.com>",
+  "subject": "Your Tata Power bill is ready",
+  "body": "Your bill amount is ₹1,499. Due date: 5 Nov. Pay on time to avoid a late fee of ₹100.",
+  "received": "2026-09-05",
+  "gold": {
+   "kind": "bill",
+   "amount_minor": 149900,
+   "currency": "INR",
+   "merchant": "Tata Power"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "bill-7",
+  "sender": "ACT Fibernet <billing@actcorp.in>",
+  "subject": "Your ACT Fibernet bill is ready",
+  "body": "Your bill amount is ₹1,649. Due date: 5 Oct. Pay on time to avoid a late fee of ₹100.",
+  "received": "2026-09-16",
+  "gold": {
+   "kind": "bill",
+   "amount_minor": 164900,
+   "currency": "INR",
+   "merchant": "ACT Fibernet"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "usd-0",
+  "sender": "Amazon Web Services <aws-billing@amazon.com>",
+  "subject": "Your receipt",
+  "body": "Receipt for your payment. Amount paid: $12.34 USD. Thank you.",
+  "received": "2026-07-05",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 1234,
+   "currency": "USD",
+   "merchant": "Amazon Web Services"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "usd-1",
+  "sender": "GitHub <billing@github.com>",
+  "subject": "Your receipt",
+  "body": "Receipt for your payment. Amount paid: $4.00 USD. Thank you.",
+  "received": "2026-07-13",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 400,
+   "currency": "USD",
+   "merchant": "GitHub"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "usd-2",
+  "sender": "Notion <billing@makenotion.com>",
+  "subject": "Your receipt",
+  "body": "Receipt for your payment. Amount paid: $10.00 USD. Thank you.",
+  "received": "2026-07-21",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 1000,
+   "currency": "USD",
+   "merchant": "Notion"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "usd-3",
+  "sender": "DigitalOcean <billing@digitalocean.com>",
+  "subject": "Your receipt",
+  "body": "Receipt for your payment. Amount paid: $6.00 USD. Thank you.",
+  "received": "2026-07-29",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 600,
+   "currency": "USD",
+   "merchant": "DigitalOcean"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-netflix-0",
+  "sender": "Netflix <info@account.netflix.com>",
+  "subject": "Your Netflix membership",
+  "body": "Thanks for being a member. We charged ₹649 for your monthly plan. Your membership renews on 05 Jul 2026.",
+  "received": "2026-06-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 64900,
+   "currency": "INR",
+   "merchant": "Netflix"
+  },
+  "series": {
+   "merchant": "Netflix",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-netflix-1",
+  "sender": "Netflix <info@account.netflix.com>",
+  "subject": "Your Netflix membership",
+  "body": "Thanks for being a member. We charged ₹649 for your monthly plan. Your membership renews on 04 Aug 2026.",
+  "received": "2026-07-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 64900,
+   "currency": "INR",
+   "merchant": "Netflix"
+  },
+  "series": {
+   "merchant": "Netflix",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-netflix-2",
+  "sender": "Netflix <info@account.netflix.com>",
+  "subject": "Your Netflix membership",
+  "body": "Thanks for being a member. We charged ₹649 for your monthly plan. Your membership renews on 03 Sep 2026.",
+  "received": "2026-08-04",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 64900,
+   "currency": "INR",
+   "merchant": "Netflix"
+  },
+  "series": {
+   "merchant": "Netflix",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-spotify-0",
+  "sender": "Spotify <no-reply@spotify.com>",
+  "subject": "Your Spotify membership",
+  "body": "Thanks for being a member. We charged ₹119 for your monthly plan. Your membership renews on 06 Jul 2026.",
+  "received": "2026-06-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 11900,
+   "currency": "INR",
+   "merchant": "Spotify"
+  },
+  "series": {
+   "merchant": "Spotify",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-spotify-1",
+  "sender": "Spotify <no-reply@spotify.com>",
+  "subject": "Your Spotify membership",
+  "body": "Thanks for being a member. We charged ₹119 for your monthly plan. Your membership renews on 06 Aug 2026.",
+  "received": "2026-07-06",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 11900,
+   "currency": "INR",
+   "merchant": "Spotify"
+  },
+  "series": {
+   "merchant": "Spotify",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-spotify-2",
+  "sender": "Spotify <no-reply@spotify.com>",
+  "subject": "Your Spotify membership",
+  "body": "Thanks for being a member. We charged ₹119 for your monthly plan. Your membership renews on 06 Sep 2026.",
+  "received": "2026-08-06",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 11900,
+   "currency": "INR",
+   "merchant": "Spotify"
+  },
+  "series": {
+   "merchant": "Spotify",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-youtube-premium-0",
+  "sender": "YouTube <noreply-purchases@youtube.com>",
+  "subject": "Your YouTube Premium membership",
+  "body": "Thanks for being a member. We charged ₹129 for your monthly plan. Your membership renews on 05 Jul 2026.",
+  "received": "2026-06-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 12900,
+   "currency": "INR",
+   "merchant": "YouTube Premium"
+  },
+  "series": {
+   "merchant": "YouTube Premium",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-youtube-premium-1",
+  "sender": "YouTube <noreply-purchases@youtube.com>",
+  "subject": "Your YouTube Premium membership",
+  "body": "Thanks for being a member. We charged ₹129 for your monthly plan. Your membership renews on 04 Aug 2026.",
+  "received": "2026-07-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 12900,
+   "currency": "INR",
+   "merchant": "YouTube Premium"
+  },
+  "series": {
+   "merchant": "YouTube Premium",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-youtube-premium-2",
+  "sender": "YouTube <noreply-purchases@youtube.com>",
+  "subject": "Your YouTube Premium membership",
+  "body": "Thanks for being a member. We charged ₹129 for your monthly plan. Your membership renews on 03 Sep 2026.",
+  "received": "2026-08-04",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 12900,
+   "currency": "INR",
+   "merchant": "YouTube Premium"
+  },
+  "series": {
+   "merchant": "YouTube Premium",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-google-one-0",
+  "sender": "Google One <payments-noreply@google.com>",
+  "subject": "Your Google One membership",
+  "body": "Thanks for being a member. We charged ₹130 for your monthly plan. Your membership renews on 05 Jul 2026.",
+  "received": "2026-06-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 13000,
+   "currency": "INR",
+   "merchant": "Google One"
+  },
+  "series": {
+   "merchant": "Google One",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-google-one-1",
+  "sender": "Google One <payments-noreply@google.com>",
+  "subject": "Your Google One membership",
+  "body": "Thanks for being a member. We charged ₹130 for your monthly plan. Your membership renews on 04 Aug 2026.",
+  "received": "2026-07-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 13000,
+   "currency": "INR",
+   "merchant": "Google One"
+  },
+  "series": {
+   "merchant": "Google One",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-disney-hotstar-0",
+  "sender": "Disney+ Hotstar <billing@hotstar.com>",
+  "subject": "Your Disney+ Hotstar membership",
+  "body": "Thanks for being a member. We charged ₹299 for your quarterly plan. Your membership renews on 04 Sep 2026.",
+  "received": "2026-06-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 29900,
+   "currency": "INR",
+   "merchant": "Disney+ Hotstar"
+  },
+  "series": {
+   "merchant": "Disney+ Hotstar",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-disney-hotstar-1",
+  "sender": "Disney+ Hotstar <billing@hotstar.com>",
+  "subject": "Your Disney+ Hotstar membership",
+  "body": "Thanks for being a member. We charged ₹299 for your quarterly plan. Your membership renews on 04 Dec 2026.",
+  "received": "2026-09-04",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 29900,
+   "currency": "INR",
+   "merchant": "Disney+ Hotstar"
+  },
+  "series": {
+   "merchant": "Disney+ Hotstar",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-amazon-prime-0",
+  "sender": "Amazon Prime <prime@amazon.in>",
+  "subject": "Your Amazon Prime membership",
+  "body": "Thanks for being a member. We charged ₹1,499 for your yearly plan. Your membership renews on 05 Oct 2026.",
+  "received": "2025-10-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 149900,
+   "currency": "INR",
+   "merchant": "Amazon Prime"
+  },
+  "series": {
+   "merchant": "Amazon Prime",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "sub-amazon-prime-1",
+  "sender": "Amazon Prime <prime@amazon.in>",
+  "subject": "Your Amazon Prime membership",
+  "body": "Thanks for being a member. We charged ₹1,499 for your yearly plan. Your membership renews on 05 Oct 2027.",
+  "received": "2026-10-05",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 149900,
+   "currency": "INR",
+   "merchant": "Amazon Prime"
+  },
+  "series": {
+   "merchant": "Amazon Prime",
+   "recurring": true
+  },
+  "split": "dev"
+ },
+ {
+  "id": "repeat-amazon-0",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Your Amazon.in order",
+  "body": "Your order has shipped. Order Total: Rs. 399",
+  "received": "2026-06-01",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 39900,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "series": {
+   "merchant": "Amazon",
+   "recurring": false
+  },
+  "split": "dev"
+ },
+ {
+  "id": "repeat-amazon-1",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Your Amazon.in order",
+  "body": "Your order has shipped. Order Total: Rs. 469",
+  "received": "2026-06-10",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 46900,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "series": {
+   "merchant": "Amazon",
+   "recurring": false
+  },
+  "split": "dev"
+ },
+ {
+  "id": "repeat-amazon-2",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Your Amazon.in order",
+  "body": "Your order has shipped. Order Total: Rs. 539",
+  "received": "2026-07-18",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 53900,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "series": {
+   "merchant": "Amazon",
+   "recurring": false
+  },
+  "split": "dev"
+ },
+ {
+  "id": "repeat-amazon-3",
+  "sender": "Amazon.in <auto-confirm@amazon.in>",
+  "subject": "Your Amazon.in order",
+  "body": "Your order has shipped. Order Total: Rs. 609",
+  "received": "2026-07-21",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 60900,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "series": {
+   "merchant": "Amazon",
+   "recurring": false
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-0",
+  "sender": "Apple <news@insideapple.apple.com>",
+  "subject": "iPhone, now starting at ₹69,900",
+  "body": "Meet the new iPhone, starting at ₹69,900. Shop now and get up to ₹5,000 off with select cards.",
+  "received": "2026-07-01",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-1",
+  "sender": "Flipkart <offers@flipkart.com>",
+  "subject": "Big Billion Days",
+  "body": "Up to 80% off on electronics. Laptops starting at ₹24,990. Sale ends Sunday. Shop now.",
+  "received": "2026-07-03",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-2",
+  "sender": "Amazon.in <price-alert@amazon.in>",
+  "subject": "Price drop on your wishlist",
+  "body": "Good news: the item on your wishlist dropped to ₹1,999 from ₹2,499. Deal of the day.",
+  "received": "2026-07-05",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-3",
+  "sender": "Swiggy <offers@swiggy.in>",
+  "subject": "Flat ₹150 off tonight",
+  "body": "Use code TREAT150 for flat ₹150 off on orders above ₹499. Only for you, tonight.",
+  "received": "2026-07-07",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-4",
+  "sender": "Zerodha <newsletter@zerodha.com>",
+  "subject": "Market wrap",
+  "body": "Nifty closed 1.2% higher. Reliance rose ₹42 to ₹2,960. This is not investment advice.",
+  "received": "2026-07-09",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-5",
+  "sender": "MakeMyTrip <deals@makemytrip.com>",
+  "subject": "Goa flights from ₹3,499",
+  "body": "Fly to Goa from ₹3,499. Use code FLYGOA for ₹500 off. Coupon valid this week.",
+  "received": "2026-07-11",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-6",
+  "sender": "Cult.fit <hello@cult.fit>",
+  "subject": "Your membership offer",
+  "body": "Get cultpass ELITE at ₹1,299 per month, 30% off for 3 days. Use code FIT30.",
+  "received": "2026-07-13",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-7",
+  "sender": "Paytm <offers@paytm.com>",
+  "subject": "Cashback offer",
+  "body": "Get up to ₹100 cashback on your next 3 recharges of ₹199 or more. Use code SAVE100.",
+  "received": "2026-07-15",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-8",
+  "sender": "Nykaa <offers@nykaa.com>",
+  "subject": "Pink Friday Sale",
+  "body": "Up to 50% off on top brands. Lipsticks starting at ₹199. Shop now, sale ends today.",
+  "received": "2026-07-17",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-9",
+  "sender": "Croma <deals@croma.com>",
+  "subject": "TVs from ₹12,990",
+  "body": "Smart TVs starting at ₹12,990 with no-cost EMI from ₹1,083 per month. Shop now.",
+  "received": "2026-07-19",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-10",
+  "sender": "Apple <news@insideapple.apple.com>",
+  "subject": "iPhone, now starting at ₹69,900",
+  "body": "Meet the new iPhone, starting at ₹69,900. Shop now and get up to ₹5,000 off with select cards.",
+  "received": "2026-07-21",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-11",
+  "sender": "Flipkart <offers@flipkart.com>",
+  "subject": "Big Billion Days",
+  "body": "Up to 80% off on electronics. Laptops starting at ₹24,990. Sale ends Sunday. Shop now.",
+  "received": "2026-07-23",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-12",
+  "sender": "Amazon.in <price-alert@amazon.in>",
+  "subject": "Price drop on your wishlist",
+  "body": "Good news: the item on your wishlist dropped to ₹1,999 from ₹2,499. Deal of the day.",
+  "received": "2026-07-25",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-13",
+  "sender": "Swiggy <offers@swiggy.in>",
+  "subject": "Flat ₹150 off tonight",
+  "body": "Use code TREAT150 for flat ₹150 off on orders above ₹499. Only for you, tonight.",
+  "received": "2026-07-27",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-14",
+  "sender": "Zerodha <newsletter@zerodha.com>",
+  "subject": "Market wrap",
+  "body": "Nifty closed 1.2% higher. Reliance rose ₹42 to ₹2,960. This is not investment advice.",
+  "received": "2026-07-29",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-15",
+  "sender": "MakeMyTrip <deals@makemytrip.com>",
+  "subject": "Goa flights from ₹3,499",
+  "body": "Fly to Goa from ₹3,499. Use code FLYGOA for ₹500 off. Coupon valid this week.",
+  "received": "2026-07-31",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-16",
+  "sender": "Cult.fit <hello@cult.fit>",
+  "subject": "Your membership offer",
+  "body": "Get cultpass ELITE at ₹1,299 per month, 30% off for 3 days. Use code FIT30.",
+  "received": "2026-08-02",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-17",
+  "sender": "Paytm <offers@paytm.com>",
+  "subject": "Cashback offer",
+  "body": "Get up to ₹100 cashback on your next 3 recharges of ₹199 or more. Use code SAVE100.",
+  "received": "2026-08-04",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-18",
+  "sender": "Nykaa <offers@nykaa.com>",
+  "subject": "Pink Friday Sale",
+  "body": "Up to 50% off on top brands. Lipsticks starting at ₹199. Shop now, sale ends today.",
+  "received": "2026-08-06",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "advert-19",
+  "sender": "Croma <deals@croma.com>",
+  "subject": "TVs from ₹12,990",
+  "body": "Smart TVs starting at ₹12,990 with no-cost EMI from ₹1,083 per month. Shop now.",
+  "received": "2026-08-08",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "dev"
+ },
+ {
+  "id": "holdout-0",
+  "sender": "BigBasket <care@bigbasket.com>",
+  "subject": "Order delivered",
+  "body": "Your order is delivered.\nSubtotal ₹1,142.00\nSlot charges ₹30.00\nCoupon BB50 -₹50.00\nTotal Payable ₹1,122.00",
+  "received": "2026-08-01",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 112200,
+   "currency": "INR",
+   "merchant": "BigBasket"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-1",
+  "sender": "Uber Receipts <noreply@uber.com>",
+  "subject": "Your Tuesday evening trip with Uber",
+  "body": "Thanks for riding. Trip fare ₹212.48, booking fee ₹18.00. Total ₹230.48 charged to UPI.",
+  "received": "2026-08-02",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 23048,
+   "currency": "INR",
+   "merchant": "Uber"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-2",
+  "sender": "Rapido <support@rapido.bike>",
+  "subject": "Ride invoice",
+  "body": "Ride completed. Amount charged: INR 86. Rate your captain.",
+  "received": "2026-08-03",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 8600,
+   "currency": "INR",
+   "merchant": "Rapido"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-3",
+  "sender": "IRCTC <ticketadmin@irctc.co.in>",
+  "subject": "Booking confirmation",
+  "body": "Ticket booked for PNR 4521. Ticket fare Rs. 1,045.00, convenience fee Rs. 17.70. Total amount Rs. 1,062.70.",
+  "received": "2026-08-04",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 106270,
+   "currency": "INR",
+   "merchant": "IRCTC"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-4",
+  "sender": "Axis Bank <alerts@axisbank.com>",
+  "subject": "Debit alert",
+  "body": "INR 1,850.00 spent on Axis Bank Credit Card XX9012 at DMART on 12-08-26. Avl Limit: INR 1,48,150.00",
+  "received": "2026-08-05",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 185000,
+   "currency": "INR",
+   "merchant": "DMART"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-5",
+  "sender": "Kotak Bank <alerts@kotak.com>",
+  "subject": "Account update",
+  "body": "Rs 3,000.00 is debited from your a/c XX441 towards UPI/ola. Bal: Rs 22,390.10",
+  "received": "2026-08-06",
+  "gold": {
+   "kind": "debit",
+   "amount_minor": 300000,
+   "currency": "INR",
+   "merchant": "Ola"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-6",
+  "sender": "Apple <no_reply@email.apple.com>",
+  "subject": "Your receipt from Apple",
+  "body": "Billed to card ending 7781.\niCloud+ with 50 GB (Monthly) ₹75.00\nTOTAL ₹75.00\nRenews 14 Sep 2026.",
+  "received": "2026-08-07",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 7500,
+   "currency": "INR",
+   "merchant": "Apple"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-7",
+  "sender": "LinkedIn <billing@linkedin.com>",
+  "subject": "Your Premium receipt",
+  "body": "Thank you for your payment of ₹1,567.00 for LinkedIn Premium Career. Your subscription renews automatically on 3 Oct 2026.",
+  "received": "2026-08-08",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 156700,
+   "currency": "INR",
+   "merchant": "LinkedIn"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-8",
+  "sender": "Zepto <noreply@zeptonow.com>",
+  "subject": "Order summary",
+  "body": "Items: Milk, Bread, Eggs. Item total ₹212. Handling charge ₹9. Grand total ₹221. You saved ₹38!",
+  "received": "2026-08-09",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 22100,
+   "currency": "INR",
+   "merchant": "Zepto"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-9",
+  "sender": "Decathlon <orders@decathlon.in>",
+  "subject": "Invoice for your order",
+  "body": "Invoice no. DEC-2209. Net amount payable: Rs 2,499 (incl. GST Rs 381). Paid via card.",
+  "received": "2026-08-10",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 249900,
+   "currency": "INR",
+   "merchant": "Decathlon"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-10",
+  "sender": "Myntra <updates@myntra.com>",
+  "subject": "Refund processed",
+  "body": "Your refund of Rs. 1,099 has been processed to your bank account. It may take 3-5 days to reflect.",
+  "received": "2026-08-11",
+  "gold": {
+   "kind": "refund",
+   "amount_minor": 109900,
+   "currency": "INR",
+   "merchant": "Myntra"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-11",
+  "sender": "BESCOM <billing@bescom.co.in>",
+  "subject": "Electricity bill",
+  "body": "Bill for August generated. Amount due: Rs 1,284. Please pay before 20 Sep to avoid disconnection.",
+  "received": "2026-08-12",
+  "gold": {
+   "kind": "bill",
+   "amount_minor": 128400,
+   "currency": "INR",
+   "merchant": "BESCOM"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-12",
+  "sender": "Vercel <billing@vercel.com>",
+  "subject": "Receipt #3021",
+  "body": "Pro plan, 1 seat. Amount paid $20.00. Next invoice on Oct 12, 2026.",
+  "received": "2026-08-13",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 2000,
+   "currency": "USD",
+   "merchant": "Vercel"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-13",
+  "sender": "Udemy <no-reply@udemy.com>",
+  "subject": "Thanks for your purchase",
+  "body": "Course: Python for Data Science. Original price ₹3,499. Paid ₹449.",
+  "received": "2026-08-14",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 44900,
+   "currency": "INR",
+   "merchant": "Udemy"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-14",
+  "sender": "Spotify <no-reply@spotify.com>",
+  "subject": "Premium Individual",
+  "body": "Your card was charged ₹119 for Spotify Premium. Your plan renews on 9 Oct 2026.",
+  "received": "2026-08-15",
+  "gold": {
+   "kind": "subscription",
+   "amount_minor": 11900,
+   "currency": "INR",
+   "merchant": "Spotify"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-15",
+  "sender": "Swiggy Instamart <noreply@swiggy.in>",
+  "subject": "Order delivered",
+  "body": "Bill details: Item total ₹640, Delivery partner fee ₹25, Handling fee ₹6, Discount -₹80. To pay: ₹591.",
+  "received": "2026-08-16",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 59100,
+   "currency": "INR",
+   "merchant": "Swiggy Instamart"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-16",
+  "sender": "HDFC Bank <alerts@hdfcbank.net>",
+  "subject": "Refund credited",
+  "body": "Rs. 799.00 has been credited back to your card ending 3321 as a refund from AMAZON.",
+  "received": "2026-08-17",
+  "gold": {
+   "kind": "refund",
+   "amount_minor": 79900,
+   "currency": "INR",
+   "merchant": "Amazon"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-17",
+  "sender": "Jio <care@jio.com>",
+  "subject": "Recharge successful",
+  "body": "Recharge of ₹299 done for 28 days. Plan valid till 30 Sep.",
+  "received": "2026-08-18",
+  "gold": {
+   "kind": "purchase",
+   "amount_minor": 29900,
+   "currency": "INR",
+   "merchant": "Jio"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-18",
+  "sender": "Amazon.in <store-news@amazon.in>",
+  "subject": "Deals picked for you",
+  "body": "Echo Dot now at ₹2,999 (was ₹5,499). Limited time deal. Shop now.",
+  "received": "2026-08-19",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-19",
+  "sender": "PolicyBazaar <info@policybazaar.com>",
+  "subject": "Save on health insurance",
+  "body": "Plans starting at ₹500 per month. Compare and save up to 25%. Get a free quote.",
+  "received": "2026-08-20",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-20",
+  "sender": "Groww <noreply@groww.in>",
+  "subject": "Weekly market update",
+  "body": "Your portfolio is up 3.1% this week. Top gainer: TCS (+₹84). Explore SIPs from ₹100.",
+  "received": "2026-08-21",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-21",
+  "sender": "Ola <offers@olacabs.com>",
+  "subject": "Ride for less",
+  "body": "Get 20% off on your next 3 rides, up to ₹75 per ride. Use code RIDE20.",
+  "received": "2026-08-22",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-22",
+  "sender": "Swiggy <offers@swiggy.in>",
+  "subject": "Your favourites are back",
+  "body": "Biryani starting at ₹149. Free delivery on orders above ₹199. Order now.",
+  "received": "2026-08-23",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "holdout"
+ },
+ {
+  "id": "holdout-23",
+  "sender": "Friend <rohan.mehta@gmail.com>",
+  "subject": "Dinner split",
+  "body": "Hey, dinner came to Rs 2,400 so your share is Rs 600. Send it whenever.",
+  "received": "2026-08-24",
+  "gold": {
+   "kind": "none"
+  },
+  "split": "holdout"
+ }
+]

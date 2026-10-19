@@ -48,7 +48,7 @@ const ACTION_STATUSES = ['open', 'completed', 'dismissed', 'snoozed'];
 export const ACTION_TYPES = ['reply_required', 'approval_required', 'payment_required', 'document_required', 'meeting', 'review_required', 'follow_up_required', 'general_task'];
 const REMINDER_STATUSES = ['scheduled', 'claimed', 'delivered', 'dismissed', 'retry', 'dead'];
 const TOKEN_PROVIDERS = ['gemini', 'groq', 'local', 'embedding'];
-const TOKEN_OPERATIONS = ['classification_analysis', 'local_shadow', 'document_embedding', 'query_embedding', 'manual_prediction', 'action_reanalysis'];
+const TOKEN_OPERATIONS = ['classification_analysis', 'local_shadow', 'document_embedding', 'query_embedding', 'manual_prediction', 'action_reanalysis', 'ledger_extraction', 'inbox_question', 'follow_up_draft', 'daily_brief'];
 const TOKEN_COUNT_METHODS = ['provider_reported', 'tokenizer_counted', 'estimated', 'unavailable'];
 const TOKEN_OUTCOMES = ['success', 'failed', 'timeout', 'cancelled'];
 const ANALYSIS_SOURCES = ['gemini', 'groq', 'local_heuristic', 'system'];
@@ -97,6 +97,18 @@ function validRisk(risk) {
     && RISK_BAND_VALUES.includes(risk.band) && ['full', 'content_only'].includes(risk.evidence_level)
     && nullableTimestamp(risk.reviewed_at) && Array.isArray(risk.findings)
     && risk.findings.every(item => record(item) && typeof item.signal === 'string' && typeof item.evidence === 'string'));
+}
+
+const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP'];
+const LEDGER_KINDS = ['purchase', 'subscription', 'refund', 'bill', 'debit'];
+const LEDGER_PERIODS = ['weekly', 'monthly', 'quarterly', 'yearly'];
+function validLedgerEntry(entry) {
+  return record(entry) && positiveInteger(entry.entry_id) && typeof entry.email_id === 'string'
+    && LEDGER_KINDS.includes(entry.kind) && positiveInteger(entry.amount_minor) && CURRENCIES.includes(entry.currency)
+    && typeof entry.merchant === 'string' && timestamp(entry.occurred_at)
+    && (entry.renews_on === null || /^\d{4}-\d{2}-\d{2}$/.test(entry.renews_on))
+    && (entry.period === null || LEDGER_PERIODS.includes(entry.period)) && typeof entry.evidence === 'string'
+    && ['local', 'gemini', 'groq'].includes(entry.source) && integer(entry.revision) && typeof entry.user_corrected === 'boolean';
 }
 
 function validAction(action) {
@@ -151,6 +163,10 @@ export function validateResponse(path, method, data) {
   if (valid && method === 'GET' && route.endsWith('/history')) valid = identity(data) && Array.isArray(data.feedback) && Array.isArray(data.processing);
   if (valid && ((method === 'POST' && ['/authenticate','/inbox/sync','/ingestion/fetch-next','/intelligence/backfill','/signals/backfill'].includes(route)) || route.startsWith('/jobs/'))) valid = ['string','number'].includes(typeof data.job_id) && typeof data.status === 'string';
   if (valid && method === 'POST' && route === '/intelligence/backfill') valid = typeof data.message === 'string' && ['requested','admitted','eligible','capacity'].every(key => integer(data[key])) && data.requested >= 1 && data.requested <= 100 && data.admitted >= 1 && data.admitted <= data.requested && data.capacity <= 1000;
+  if (valid && method === 'GET' && route === '/ledger/summary') valid = identity(data) && /^\d{4}-\d{2}$/.test(data.month) && CURRENCIES.includes(data.currency) && record(data.totals) && Object.entries(data.totals).every(([key, value]) => CURRENCIES.includes(key) && keysAreIntegers(value, ['spent_minor', 'refunds_minor', 'bills_minor', 'count']) && Number.isInteger(value.net_minor)) && Array.isArray(data.trend) && data.trend.every(row => record(row) && /^\d{4}-\d{2}$/.test(row.month) && integer(row.spent_minor) && integer(row.refunds_minor)) && Array.isArray(data.merchants) && data.merchants.every(row => record(row) && typeof row.merchant === 'string' && CURRENCIES.includes(row.currency) && integer(row.spent_minor) && integer(row.count)) && keysAreIntegers(data.scan, ['done', 'not_transaction', 'retry', 'waiting']);
+  if (valid && method === 'GET' && route === '/ledger/entries') valid = identity(data) && Array.isArray(data.entries) && data.entries.every(validLedgerEntry) && ['total', 'limit', 'offset'].every(key => integer(data[key]));
+  if (valid && method === 'PATCH' && /^\/ledger\/entries\/\d+$/.test(route)) valid = identity(data) && validLedgerEntry(data.entry) && typeof data.message === 'string';
+  if (valid && method === 'GET' && route === '/ledger/subscriptions') valid = identity(data) && Array.isArray(data.subscriptions) && data.subscriptions.every(row => record(row) && typeof row.merchant === 'string' && CURRENCIES.includes(row.currency) && LEDGER_PERIODS.includes(row.period) && positiveInteger(row.amount_minor) && integer(row.monthly_minor) && /^\d{4}-\d{2}-\d{2}$/.test(row.renews_on) && positiveInteger(row.charges) && typeof row.email_id === 'string') && Array.isArray(data.insights) && data.insights.every(row => record(row) && typeof row.category === 'string' && Array.isArray(row.merchants) && integer(row.monthly_minor));
   const actionMutation = /^\/actions\/\d+(?:\/snooze)?$/.test(route);
   if (valid && actionMutation && ['PATCH', 'POST'].includes(method)) {
     valid = validActionMutation(data);

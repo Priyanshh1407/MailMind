@@ -109,7 +109,12 @@ export function dashboardQueries(query = {}) {
     actions.set('due_from', dueFrom);
     actions.set('due_to', dueTo);
   }
-  return { email, actions, tokenWindow };
+  const ledger = new URLSearchParams({ limit: '50', offset: String(pageOffset(query.ledgerOffset, 'Ledger offset')) });
+  if (query.ledgerMonth) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(query.ledgerMonth)) throw new TypeError('Ledger month must be YYYY-MM.');
+    ledger.set('month', query.ledgerMonth);
+  }
+  return { email, actions, tokenWindow, ledger };
 }
 
 function emptyActionSummary(session) {
@@ -197,13 +202,18 @@ async function readDashboard(api, query, signal, jobId, clock) {
         emptyTodayTokens,
       )
       : Promise.resolve(unavailable(emptyTodayTokens));
-  const [status, telemetry, page, actionSummary, actionPage, tokenUsage, tokenToday] = await Promise.all([
+  const month = queries.ledger.get('month');
+  const ledgerRead = (path, empty) => readable ? optionalRead(() => scoped(path), empty) : Promise.resolve(unavailable(empty));
+  const [status, telemetry, page, actionSummary, actionPage, tokenUsage, tokenToday, ledgerSummary, ledgerEntries, ledgerSubscriptions] = await Promise.all([
     scoped('/status'), scoped('/telemetry'),
     readable ? scoped('/emails?' + queries.email) : Promise.resolve(null),
     readable ? optionalRead(() => scoped('/actions/summary'), emptySummary) : Promise.resolve(unavailable(emptySummary)),
     readable ? optionalRead(() => scoped('/actions?' + queries.actions), emptyPage) : Promise.resolve(unavailable(emptyPage)),
     selectedTokens,
     todayTokens,
+    ledgerRead('/ledger/summary' + (month ? '?month=' + month : ''), null),
+    ledgerRead('/ledger/entries?' + queries.ledger, null),
+    ledgerRead('/ledger/subscriptions', null),
   ]);
   let job = null;
   if (jobId) { try { job = await api.request('/jobs/' + encodeURIComponent(jobId), { signal }); } catch (error) { if (error.status !== 404) throw error; } }
@@ -218,6 +228,10 @@ async function readDashboard(api, query, signal, jobId, clock) {
       summary: tokenUsage.data, state: tokenUsage.state,
       error: tokenUsage.error, today: tokenToday.data,
       todayState: tokenToday.state, todayError: tokenToday.error,
+    },
+    ledger: {
+      state: ledgerSummary.state, error: ledgerSummary.error || ledgerEntries.error || ledgerSubscriptions.error,
+      summary: ledgerSummary.data, entries: ledgerEntries.data, subscriptions: ledgerSubscriptions.data,
     },
     refreshMs: Math.max(0, clock() - start), checkedAt: new Date().toISOString(),
   };

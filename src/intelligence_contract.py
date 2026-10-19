@@ -92,6 +92,10 @@ class TokenOperation(str, Enum):
     QUERY_EMBEDDING = "query_embedding"
     MANUAL_PREDICTION = "manual_prediction"
     ACTION_REANALYSIS = "action_reanalysis"
+    LEDGER_EXTRACTION = "ledger_extraction"
+    INBOX_QUESTION = "inbox_question"
+    FOLLOW_UP_DRAFT = "follow_up_draft"
+    DAILY_BRIEF = "daily_brief"
 
 
 class TokenCountMethod(str, Enum):

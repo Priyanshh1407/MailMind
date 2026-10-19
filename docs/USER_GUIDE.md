@@ -103,6 +103,17 @@ With scam checks switched on (`MAILMIND_RISK_ANALYSIS_ENABLED=true`), an email t
 
 The checks are local rules; nothing is sent to an AI provider. Older emails are checked in the background. Until an email's security signals are captured (see **Capture security signals**), its check uses the text and sender address only, and says so. A score is a warning, not a verdict: MailMind never hides or deletes mail because of it.
 
+### Money
+
+With the Money tab switched on (`MAILMIND_LEDGER_ENABLED=true`), MailMind reads your saved receipts, bank alerts, refunds, bills and subscription emails and shows:
+
+- what you spent this month, refunds, and bills due, with a 12-month chart (**View monthly values** shows the numbers);
+- your top merchants this month;
+- recurring charges with their next renewal, and a note when you pay for overlapping services;
+- every transaction with the sentence it came from. **Open source** shows the email; **Correct** fixes an amount, merchant or kind, and your correction is kept even if the email is scanned again.
+
+Amounts never leave your computer: each one is hidden from AI providers as a numbered placeholder, and the provider only says which placeholder is the total. Without a provider (or in local-only mode) local rules decide. Spam is never scanned.
+
 ## Categories
 
 | Lane | Meaning |
