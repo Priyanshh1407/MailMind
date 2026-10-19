@@ -85,8 +85,9 @@ class _HTMLText(HTMLParser):
     ignored = {'script', 'style', 'head', 'template', 'svg', 'noscript'}
     blocks = {'p', 'div', 'br', 'hr', 'li', 'tr', 'td', 'th', 'pre', 'h1', 'h2', 'h3', 'h4', 'table', 'section', 'blockquote'}
 
-    def __init__(self):
+    def __init__(self, drop_hidden=False):
         super().__init__(convert_charrefs=True)
+        self.drop_hidden = drop_hidden
         self.text = []
         self.hidden = []
         # Evidence for scam checks: links (visible text + target) and text a
@@ -127,11 +128,13 @@ class _HTMLText(HTMLParser):
 
     def handle_data(self, data):
         if not self.hidden:
+            if self.styled_hidden:
+                self.hidden_text.append(data)
+                if self.drop_hidden:
+                    return  # a reader cannot see it, so the AI is not shown it either
             self.text.append(data)
             if self.anchor is not None:
                 self.anchor[1].append(data)
-            if self.styled_hidden:
-                self.hidden_text.append(data)
 
     def _close_anchor(self):
         if self.anchor is not None and len(self.links) < MAX_LINKS:
@@ -145,8 +148,11 @@ class _HTMLText(HTMLParser):
         self._close_anchor()
 
 
-def html_to_text(value, *, limit=MAX_BODY_CHARS):
-    parser = _HTMLText()
+def html_to_text(value, *, limit=MAX_BODY_CHARS, drop_hidden=False):
+    """Visible text of an HTML body. With drop_hidden, text styled to be
+    invisible (display:none, zero font size, ...) is left out: a defense
+    against instructions hidden from the reader but not from a model."""
+    parser = _HTMLText(drop_hidden)
     parser.feed(value)
     parser.close()
     return normalize_text(''.join(parser.text), limit=limit)

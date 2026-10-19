@@ -19,6 +19,11 @@ This directory contains the current operational and technical documentation for 
 | [Intelligence feature contract](INTELLIGENCE_FEATURE_CONTRACT.md) | Developers and reviewers | Stable action, explanation, reminder, token, and rollout behavior |
 | [Classifier evaluation](EVALUATION.md) | Reviewers | Recorded, replayable route comparison on the CC0 benchmark |
 | [Scam and phishing evaluation](RISK_EVALUATION.md) | Reviewers | Reproducible precision, recall and ablation of the local scam checks |
+| [Money extraction evaluation](LEDGER_EVALUATION.md) | Reviewers | Rules vs provider-assisted extraction, with the no-amounts privacy contract |
+| [Ask your inbox evaluation](AGENT_EVALUATION.md) | Reviewers | The cited-answer agent on a synthetic mailbox (recording pending) |
+| [Follow-up evaluation](FOLLOW_UP_EVALUATION.md) | Reviewers | Draft checks, facts and privacy (recording pending) |
+| [Daily brief evaluation](BRIEF_EVALUATION.md) | Reviewers | Three agents vs one (recording pending) |
+| [Red-team](REDTEAM.md) | Security reviewers | What a fully hijacked model could still get past MailMind's checks |
 | [Self-recovery](SELF_RECOVERY.md) | Developers, reviewers and interviewers | How MailMind recovers from outages, crashes and restarts, and what still needs a human |
 | [Provider resilience](RESILIENCE.md) | Developers and reviewers | Tested outcome for every provider fault type, generated from tests |
 | [Performance](PERFORMANCE.md) | Developers | Measured list/search latency and bundle size, with decisions |

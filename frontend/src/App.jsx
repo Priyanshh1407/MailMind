@@ -21,6 +21,7 @@ import { MoneyPanel } from './components/MoneyPanel';
 import { AskPanel } from './components/AskPanel';
 import { FollowUpsPanel } from './components/FollowUpsPanel';
 import { DailyBrief } from './components/DailyBrief';
+import { SecurityReport } from './components/SecurityReport';
 import { EASE_OUT } from './motion';
 import { BootContext, useBootSequence } from './boot';
 
@@ -171,6 +172,7 @@ function App() {
         </TabPanel>
         <TabPanel id='usage' active={activeTab === 'usage'}>
           {usageOpened && <TokenUsagePanel snapshot={snapshot} setQuery={setQuery} />}
+          {usageOpened && <SecurityReport />}
         </TabPanel>
         {tabs.some(tab => tab.key === 'money') && <TabPanel id='money' active={activeTab === 'money'}>
           {moneyOpened && <MoneyPanel snapshot={snapshot} query={query} setQuery={setQuery} disabled={disabled || readOnly} mutate={mutate} api={api} openSource={openSource} />}

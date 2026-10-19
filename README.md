@@ -22,6 +22,7 @@ The React dashboard combines live Gmail intake, recoverable background processin
 - Explicit saved-mail intelligence backfill in batches of at most 20, with live mail kept ahead of backfill work.
 - Optional Telegram alerts and opt-in automatic Gmail mark-as-read behavior.
 - Local-only mode with verified pre-provisioned assets and no cloud/Gmail/Telegram routing.
+- A red-team harness that assumes the AI model is fully hijacked and measures what MailMind's own checks still stop: 27 of 30 attacks cause harm with the checks off, 1 with them on.
 - A daily brief from three bounded agents (triage, research with verified quotes, writer citing only verified facts), with suggested actions that run only when you approve them, and a plain fallback when providers are down.
 - A Follow-ups tab: pick a sent email and get a formal follow-up in your own greeting and sign-off, checked for AI clichés and for any fact the thread never mentions, to copy into Gmail. MailMind never sends mail; names, addresses and amounts reach the provider only as placeholders.
 - An Ask tab: questions about your saved mail answered by a read-only agent, where every sentence must cite a quote verified in an email it read; unverifiable claims are removed.
@@ -152,6 +153,23 @@ Authentication alone would catch 76.9%: attackers who register their own lookali
 Switched on with `MAILMIND_INBOX_QUESTIONS_ENABLED=true` (and a provider key). Ask a question in plain English; a read-only agent searches, opens at most 10 emails and answers in a few steps. **Every sentence must cite a quote that MailMind verifies in an email the agent actually opened**; sentences that fail are removed and counted, and "I couldn't find that" is a normal answer. The tools can only read, so text planted in an email can at worst produce a wrong answer, never a change. Senders reach the provider as domains, and amounts as tokens filled in locally.
 
 On a 34-email, 30-question synthetic benchmark, the first full run (Gemini `gemini-3.5-flash-lite`) answered 27 of 30 correctly, declined all 5 unanswerable questions and never repeated the 3 planted instructions; it exposed that amounts reached answers as a bare `[AMOUNT]`, which is now fixed. That run is not replayable, so the committed [report](docs/AGENT_EVALUATION.md) is marked pending until it is re-recorded.
+
+## Red-team
+
+`python -m scripts.redteam` plays a fully hijacked AI model against MailMind's deterministic checks ([report](docs/REDTEAM.md); the Usage tab shows the result). With the checks off, 27 of 30 attacks reach the user or the AI; with them on, 1 does.
+
+| Attack | Off | On |
+| --- | ---: | ---: |
+| Instructions hidden from the reader reach the AI | 5/5 | 0/5 |
+| Zero-width characters hide a scam lure | 4/5 | 0/5 |
+| A Cyrillic or Greek lookalike domain passes | 3/5 | 0/5 |
+| Ask shows a hijacked claim as cited fact | 4/4 | 1/4 |
+| Ask shows an amount it was never given | 2/2 | 0/2 |
+| Ask reads far more mail than it needs | 1/1 | 0/1 |
+| The brief offers an action it should not | 4/4 | 0/4 |
+| A follow-up passes its checks with injected content | 4/4 | 0/4 |
+
+The one that gets through is the honest limit of grounding: a hijacked model can repeat the attacker's own email with a real quote from it. The answer then cites that email, which the scam check usually marks. Whether a live model obeys injections in the first place still needs a recorded run.
 
 ## Daily brief
 
@@ -317,10 +335,10 @@ npm run test:browser
 
 Latest local verification (19 October 2026):
 
-- Backend discovery: 677 tests passed in 31 modules; the 25 earlier modules were each verified alone on 30 September, and the new `test_signals`, `test_risk`, `test_ledger`, `test_inbox_agent`, `test_follow_ups` and `test_brief` modules also pass alone.
+- Backend discovery: 682 tests passed in 32 modules; the 25 earlier modules were each verified alone on 30 September, and the seven new feature modules also pass alone.
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
-- Frontend unit suite: 65 passed. Playwright browser suite: 46 passed.
-- Frontend lint and production build passed; initial JavaScript is 375 kB (118 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
+- Frontend unit suite: 65 passed. Playwright browser suite: 47 passed.
+- Frontend lint and production build passed; initial JavaScript is 377 kB (119 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
 
@@ -358,6 +376,8 @@ A deliberate audit of this codebase found and fixed these defects. Each one was 
 | Deadlines 5 h 30 min late (found in use) | The model saw the received time in UTC, so "by 5 pm" was saved as 17:00 UTC and shown as 10:30 pm in India | The model sees the received time in the user's zone, and the parser treats a zoneless or wrongly-UTC time as local unless the email names UTC/GMT; 14 stored deadlines repaired after a backup (`src/llm_api.py`) |
 | Corrections ignored for similar mail (found in use) | A correction reached the model only as one of ≥ 3 examples within distance 0.25, the model could still ignore it, and after every restart the worker never opened the feedback index | A verified-correction rule: same sender ≤ 0.40, or near-copy ≤ 0.20 (95% agreement with the owner's own labels); the index opens before the first email (`src/feedback_rules.py`, `src/main.py`) |
 | Scam rules misread real mail (found on the owner's inbox) | A bank's "to open the statement, enter your password as..." read as an OTP request, and a fund house's own hyphenated domain as a lookalike | Instructions for opening a protected file are excluded; domains with repeated good mail and no spam are trusted (`src/risk_analysis.py`) |
+| The red-team's first numbers were wrong (found by its own control) | Every follow-up attack looked blocked, but only because the test draft was too short; the clean draft failed the same way. Measured properly, a false "I have already transferred the amount" and a planted plain-text domain got through, and an injected message saying "transferred" made the claim look supported | Each family now has a control that must pass; links and claims of having acted must come from the user's own messages (`scripts/redteam.py`, `src/follow_ups.py`) |
+| Hidden instructions reached the AI (found by red-team) | Text styled `display:none` or zero-size was saved as body text, so providers read instructions the user never saw | Invisible text is no longer saved as body text; the scam check keeps it as a signal |
 | Follow-ups greeted mailboxes by role (found by benchmark) | "Sales Desk" and "HR Team" became "Dear Sales," and "Dear HR,", and surnames in the user's own greeting ("Dear Ms. Menon") reached the provider | The follow-up addresses people exactly as the user did in their last message, and that name is masked too (`src/follow_ups.py`) |
 | Groq rejected half the agent's steps (found while recording) | Shown a list of actions, `openai/gpt-oss-20b` answered the JSON-schema request with a native function call, which Groq refuses (`tool_use_failed`), so the fallback route failed | The rejected call, which Groq returns, is rebuilt into the step it meant and validated like any other answer (`salvage_step`) |
 | An interrupted recording destroyed a good one | Re-recording overwrote the evaluation file as it went, so a quota failure mid-run lost a complete earlier run | Recordings go to a side file that replaces the committed one only when complete |

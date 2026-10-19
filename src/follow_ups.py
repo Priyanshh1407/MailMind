@@ -220,6 +220,8 @@ STOCK_PHRASES = (
     'thank you for your time and consideration', 'looking forward to hearing from you at your earliest',
     'sorry to bother', 'apologies for the follow-up', 'apologize for following up', 'apologise for following up',
 )
+_ACTION_CLAIMS = re.compile(r'\b(transferred|paid|wired|deposited|attached|signed|booked|cancelled|canceled|'
+                            r'refunded|shipped|approved)\b')
 _PLACEHOLDER = re.compile(r'\[(?:AMOUNT|EMAIL|LINK|NUMBER)_\d+\]|\{\{[a-z_]+\}\}')
 
 
@@ -277,6 +279,16 @@ def check_draft(value, thread, style, length, *, final_text=None, named=True):
     for name in months:
         if re.search(rf'\b{name}\b', lowered) and name not in source and name[:3] not in source:
             issues.append(f'"{name.capitalize()}" does not appear in the thread; use only facts from the thread.')
+    # Links and claims of having acted must come from the user's own messages:
+    # another party's message (perhaps an injected one) asking for a link, or
+    # saying "the amount was transferred", is no evidence the user wants it.
+    own = ' '.join(item['masked'] for item in thread if item['from'] == 'user').casefold()
+    for domain in set(re.findall(r'(?i)\b(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,24})\b', body)):
+        if domain.casefold() not in own:
+            issues.append(f'"{domain}" is not in your own messages in the thread; do not add links or addresses.')
+    for claim in _ACTION_CLAIMS.findall(lowered):
+        if claim not in own:
+            issues.append(f'The draft says "{claim}", which the thread never mentions; do not claim actions the user did not take.')
     for placeholder in set(re.findall(r'\[(?:AMOUNT|EMAIL|LINK|NUMBER)_\d+\]', body)):
         if placeholder.casefold() not in source:
             issues.append(f'{placeholder} is not in the thread; use only placeholders that appear in it.')

@@ -111,8 +111,17 @@ def _name(domain):
     return value.split('.', 1)[0] if value else ''
 
 
+# Cyrillic and Greek letters that look like Latin ones ("pаypal" with a
+# Cyrillic "а"). Folded before comparing, so they cannot slip past.
+_HOMOGLYPHS = str.maketrans({
+    'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's',
+    'ԁ': 'd', 'ӏ': 'l', 'һ': 'h', 'ԛ': 'q', 'ԝ': 'w', 'ɡ': 'g', 'ο': 'o', 'α': 'a', 'ν': 'v', 'ρ': 'p',
+    'τ': 't', 'κ': 'k', 'ι': 'i', 'ε': 'e', 'μ': 'u',
+})
+
+
 def _skeleton(value):
-    value = unicodedata.normalize('NFKD', value.casefold())
+    value = unicodedata.normalize('NFKD', value.casefold().translate(_HOMOGLYPHS))
     value = ''.join(c for c in value if not unicodedata.combining(c))
     for source, target in _CONFUSABLE:
         value = value.replace(source, target)
@@ -293,7 +302,7 @@ def header_findings(signals, sender='', trusted=()):
     imitated = lookalike_of(from_domain, trusted)
     if imitated:
         findings.append(Finding('lookalike_sender', from_domain, f'Resembles {imitated}'))
-    if from_domain.startswith('xn--') or '.xn--' in from_domain:
+    if from_domain.startswith('xn--') or '.xn--' in from_domain or not from_domain.isascii():
         findings.append(Finding('punycode_domain', from_domain, 'International characters can disguise a domain'))
     return findings
 
@@ -318,7 +327,7 @@ def link_findings(links, trusted=()):
             add('shortened_link', target, 'A link shortener hides where the link goes')
         if _ip_host(target):
             add('ip_address_link', target)
-        if target.startswith('xn--') or '.xn--' in target:
+        if target.startswith('xn--') or '.xn--' in target or not target.isascii():
             add('punycode_domain', target, 'International characters can disguise a domain')
         imitated = lookalike_of(target, trusted)
         if imitated:

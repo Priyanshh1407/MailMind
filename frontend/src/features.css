@@ -756,3 +756,15 @@
   color: var(--muted);
   font-size: 12px;
 }
+
+/* ── Security report ────────────────────────────────────────── */
+.security-report {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.security-report td.residual {
+  color: var(--important);
+  font-weight: 700;
+}

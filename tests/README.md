@@ -10,7 +10,7 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
-At the 19 October 2026 verification, all 677 discovered backend tests passed. Each of the 25 earlier test modules passed on its own on 6 October; the new `test_signals`, `test_risk`, `test_ledger`, `test_inbox_agent`, `test_follow_ups` and `test_brief` modules also pass on their own.
+At the 19 October 2026 verification, all 682 discovered backend tests passed. Each of the 25 earlier test modules passed on its own on 6 October; the seven new feature modules (`test_signals`, `test_risk`, `test_ledger`, `test_inbox_agent`, `test_follow_ups`, `test_brief`, `test_redteam`) also pass on their own.
 
 One full run on 19 October 2026 reported a single error that did not recur in eight later full runs (two in place, six in an isolated copy). Its test name was not captured, so no cause is claimed. If it happens again, keep the run's output: `unittest` prints the failing test's name and traceback.
 
@@ -19,6 +19,7 @@ Regression and contract suites added after the audit:
 - `test_audit_regressions.py`: every audit finding reproduced through the real code path (provider failover, shadow authority, grounding, deadlines, explanations, Telegram timing, retry-time repair, deletion errors, configuration messages, the action-type filter).
 - `test_provider_faults.py`: 9 provider fault types × 2 scopes against a written contract (rendered to `docs/RESILIENCE.md`).
 - `test_cloud_evaluation.py`: the evaluation harness scores recordings exactly as production parses them.
+- `test_redteam.py`: hidden text kept out of the body but kept as evidence, multi-letter homoglyph spoofs caught, follow-ups unable to add links or claim actions another party wrote, every layer stopping something, only the documented residual remaining, and the report and dashboard data replaying byte for byte.
 - `test_brief.py`: local candidates without spam, the fallback needing no model, only verified facts reaching sentences, invented refs and wrong-kind proposals discarded, the single-agent ablation under the same verification, a brief with providers down, proposals running only on approval (once), rate limits, time and flag validation, purge, migration 20 and the report replay.
 - `test_follow_ups.py`: names, amounts, links and addresses masked and restored locally (links without trailing punctuation), greetings that follow how the user addressed people, style learned from sent mail, every AI-tell and invented-fact rule, one revision then problems shown, a fake Gmail that fails the test if anything but a read is called, the sent list, draft job and copy marking, switched-off and local-only modes, purge, migration 19, privacy of every benchmark request, and the report replay.
 - `test_inbox_agent.py`: cited answers kept and quotes verified, unread or invented quotes removed, honest abstention vs unverified, step and read limits, other accounts unreachable, money only as local tokens (the provider never sees the number), injected text delivered as data and unable to be cited into a lie, Groq function-call salvage, the question job (trace without email text, history, rate limit), provider failure, local-only and switched-off modes, purge, migration 18 and the report replay.
@@ -67,7 +68,7 @@ Set-Location ..
 Current verified result:
 
 - 65 Node unit tests passed;
-- 46 Playwright browser scenarios passed;
+- 47 Playwright browser scenarios passed;
 - lint passed;
 - production build passed.
 

@@ -237,6 +237,19 @@ With `MAILMIND_DAILY_BRIEF_ENABLED=true`, `GET /briefs/today` writes today's bri
 
 Approving a proposal (`POST /briefs/{id}/proposals/{n}/approve`) runs the existing revision-checked Action Center transition or scam review; `draft_follow_up` opens the Follow-ups tab on that email. Nothing runs without approval. If any agent's provider call fails, a deterministic fallback brief (titles and counts from SQLite) is stored instead, so the brief always arrives. An optional Telegram note (`MAILMIND_BRIEF_TELEGRAM_ENABLED`) carries counts only.
 
+### Prompt-injection defenses and the red-team
+
+Two layers defend against instructions planted in email. The model is told that email text is untrusted data (`data_trust` envelopes and system instructions); that needs a live model to measure. MailMind's own deterministic layers then check whatever the model returns, and `scripts/redteam.py` measures them assuming the model is **fully hijacked** ([report](REDTEAM.md)):
+
+- **Hidden-text stripping**: text styled to be invisible is not saved as body text, so no provider reads it; the scam check keeps it as a signal (`src/email_text.py`, `src/mime_parser.py`). Mail saved before this change keeps its old body.
+- **Invisible-character removal** (`normalize_text` drops format characters such as zero-width spaces) before every check.
+- **Homoglyph folding** of Cyrillic and Greek lookalike letters in domain checks, and a flag on any non-ASCII domain (`src/risk_analysis.py`).
+- **Grounding**: answers, brief facts and action evidence must quote an email the model actually opened.
+- **Token allowlists**: only amount and ledger tokens issued in the session are filled in.
+- **Budgets**: step, read and time limits per question and brief.
+- **Typed proposals** checked against the items given and their kind.
+- **Follow-up checks**: numbers, dates and weekdays must come from the thread; links and claims of having acted (paid, transferred, attached...) must come from the user's own messages.
+
 ## Intelligence data flow
 
 Validated provider output can add a bounded explanation and action candidates to the authoritative classification. Explanations remain source-labelled and do not expose hidden reasoning. Action candidates pass strict type, confidence, evidence, date, and lifecycle checks before becoming account-owned Action Center rows.

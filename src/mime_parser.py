@@ -174,7 +174,9 @@ def parse_body(payload, *, max_body_chars=MAX_BODY_CHARS, inline_loader=None):
                 links.extend(found)
                 if hidden_text:
                     hidden.append(hidden_text)
-                text = html_to_text(text, limit=MAX_DECODED_BYTES)
+                # What the reader cannot see is not saved as body text, so no AI
+                # provider reads it; the scam check keeps it as a signal.
+                text = html_to_text(text, limit=MAX_DECODED_BYTES, drop_hidden=True)
             else:
                 links.extend(plain_links(text))
             text = normalize_text(text, limit=MAX_DECODED_BYTES)

@@ -402,6 +402,14 @@ test('daily brief shows cited sentences and runs proposals only when approved',a
   await expect.poll(()=>state.draftRequest).toEqual({message_id:'sent-1',length:'standard'});
   await expect(page.getByRole('tab',{name:'Follow-ups'})).toHaveAttribute('aria-selected','true');
 });
+test('Usage tab shows the red-team result for a hijacked model',async({page})=>{
+  await setup(page);
+  await page.getByRole('tab',{name:'Usage'}).click();
+  const report=page.getByRole('region',{name:'Security report'});
+  await expect(report.getByText('What still gets through')).toBeVisible();
+  await expect(report.getByText('1 of 30 attacks still reached you',{exact:false})).toBeVisible();
+  await expect(report.getByRole('row',{name:/Instructions hidden from the reader/})).toContainText('0/5');
+});
 test('account menu and feedback editor work with keyboard and Escape',async({page})=>{
   await setup(page);const trigger=page.getByRole('button',{name:'Account options'});
   await trigger.focus();await page.keyboard.press('Enter');
