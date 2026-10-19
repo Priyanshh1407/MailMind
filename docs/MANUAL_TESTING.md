@@ -298,7 +298,7 @@ Then, at the top of the **Inbox** tab, click **Refresh brief**. After about 30-9
 
 **Optional fallback check:** stop MailMind, set `GEMINI_API_KEY` and `GROQ_API_KEY` to `invalid` in `.env`, start it, and click **Refresh brief**. You get a plain summary built from your saved mail, marked as the fallback. Put the real keys back afterwards.
 
-**Scheduled brief:** the next morning, after 08:30, a new brief appears without clicking anything.
+**Scheduled brief:** the next morning, open the dashboard after 08:30. A new brief starts on its own within a few seconds, with no click needed. It is written when the dashboard asks for it, so on a day you never open MailMind, no brief is written and no quota is used.
 
 ---
 
