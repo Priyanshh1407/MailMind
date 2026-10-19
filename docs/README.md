@@ -15,6 +15,7 @@ This directory contains the current operational and technical documentation for 
 | [Security showcase](SECURITY_FEATURES_SHOWCASE.md) | Interviewers and developers | Source-backed explanation of the security engineering |
 | [Frontend guide](../frontend/README.md) | Frontend developers | UI architecture, component responsibilities, testing, and accessibility |
 | [Test guide](../tests/README.md) | Developers | Current suites, commands, coverage, and validation limits |
+| [Manual testing guide](MANUAL_TESTING.md) | Owner | Step-by-step checks of every new feature on your own Gmail, with the emails to send and the expected results |
 | [Controlled intelligence validation](CONTROLLED_INTELLIGENCE_VALIDATION.md) | Release operators | Privacy-safe live OAuth, Gmail, action, token, reminder, and backfill checklist |
 | [Intelligence feature contract](INTELLIGENCE_FEATURE_CONTRACT.md) | Developers and reviewers | Stable action, explanation, reminder, token, and rollout behavior |
 | [Classifier evaluation](EVALUATION.md) | Reviewers | Recorded, replayable route comparison on the CC0 benchmark |

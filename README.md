@@ -417,6 +417,7 @@ Live evaluation also found that the previously configured fallback model (`gemin
 
 - [Documentation index](docs/README.md)
 - [User guide](docs/USER_GUIDE.md)
+- [Manual testing guide](docs/MANUAL_TESTING.md)
 - [Current architecture](docs/ARCHITECTURE.md)
 - [Setup and release](docs/SETUP_AND_RELEASE.md)
 - [Security policy](SECURITY.md)
