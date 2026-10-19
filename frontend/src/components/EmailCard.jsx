@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, CircleAlert, Clock3, History, Tag, Undo2 } from 'lucide-react';
 import { CATEGORIES, categoryName, formatTime, formatEmailTime, senderName } from '../dashboard';
 import { ClassificationExplanation } from './ClassificationExplanation';
+import { RiskBadge, RiskPanel } from './RiskPanel';
 import { countLabel } from '../intelligence';
 
 // `disabled` blocks changes; `readDisabled` only blocks reading (history).
@@ -71,7 +72,7 @@ export function EmailCard({ email, style, pending, disabled, readDisabled = disa
         <p className="sender" title={email.sender}>{senderName(email.sender)}</p>
         <time dateTime={email.created_at}>{formatEmailTime(email.created_at)}</time>
       </div>
-      <span className={'category-badge ' + style.badge}><span className={'badge-dot ' + style.dot} />{effective}</span>
+      <span className="email-card-badges"><RiskBadge risk={email.risk} /><span className={'category-badge ' + style.badge}><span className={'badge-dot ' + style.dot} />{effective}</span></span>
     </header>
 
     <h3>{email.subject || '(No subject)'}</h3>
@@ -85,6 +86,7 @@ export function EmailCard({ email, style, pending, disabled, readDisabled = disa
     {['retry', 'dead'].includes(email.processing?.status) && email.processing.stage !== 'notify' && <div className="recovery-actions"><button className="button secondary compact" disabled={blocked} onClick={() => recover('task')}>Retry unfinished step</button></div>}
     {/* The model's reason for the category, kept apart from the correction controls. */}
     <ClassificationExplanation analysis={email.analysis} decision={email.decision} />
+    <RiskPanel risk={email.risk} emailId={email.id} disabled={disabled} pending={pending} mutate={mutate} />
     <details className="technical-details">
       <summary>Classification details <ChevronDown size={13} /></summary>
       <div className="technical-content">

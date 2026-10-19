@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, CircleDot, ClockAlert, Coins, Database, Tag, TriangleAlert } from 'lucide-react';
+import { Activity, CheckCircle2, CircleDot, ClockAlert, Coins, Database, ShieldAlert, Tag, TriangleAlert } from 'lucide-react';
 import { Surface } from './ui/Surface';
 import { formatCount, formatTenthsAsSeconds, millisecondsToTenthsUp } from '../dashboard';
 import { AnimatedCount } from './ui/AnimatedCount';
@@ -20,6 +20,7 @@ export function DashboardStats({ snapshot }) {
   const summary = actions?.summary;
   const actionsReady = actions?.summaryState === 'ready';
   const usage = snapshot?.tokenUsage;
+  const risk = snapshot?.status?.risk;
   const tenths = millisecondsToTenthsUp(timing?.mean_ms);
   const completionPct = totals?.saved ? ((totals.completed / totals.saved) * 100).toFixed(1) + '% workflow completion' : 'Messages that completed the workflow';
   const actionValue = value => actionsReady ? <AnimatedCount value={value} /> : '-';
@@ -32,5 +33,6 @@ export function DashboardStats({ snapshot }) {
     <Stat icon={ClockAlert} label="Due soon" value={actionValue(summary?.due_soon)} detail="Due in the next 7 days" />
     <Stat icon={TriangleAlert} label="Overdue" value={actionValue(summary?.overdue)} detail="Past their deadline" />
     <Stat icon={Coins} label="Tokens today" value={usage?.todayState === 'ready' ? <AnimatedCount value={usage.today.totals.total_tokens} /> : '-'} detail="Cloud and local, since midnight" />
+    {risk?.enabled && <Stat icon={ShieldAlert} label="Risky emails" value={<AnimatedCount value={risk.high_unreviewed} />} detail={risk.medium + ' to check carefully' + (risk.unscored ? ' · ' + risk.unscored + ' not yet checked' : '')} />}
   </section>;
 }

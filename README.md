@@ -22,6 +22,7 @@ The React dashboard combines live Gmail intake, recoverable background processin
 - Explicit saved-mail intelligence backfill in batches of at most 20, with live mail kept ahead of backfill work.
 - Optional Telegram alerts and opt-in automatic Gmail mark-as-read behavior.
 - Local-only mode with verified pre-provisioned assets and no cloud/Gmail/Telegram routing.
+- Local scam and phishing checks: lookalike domains, misleading links, failed sender authentication and Indian payment lures (OTP, UPI, KYC), each with quoted evidence and a reproducible evaluation.
 - Security signals saved with every email: Gmail's SPF/DKIM/DMARC verdicts, reply paths, unsubscribe headers, links (visible text and real target) and hidden text, with an explicit backfill for older mail.
 
 ## Product workflow
@@ -128,6 +129,19 @@ The local model is a three-category **shadow**: in normal mode it can run beside
 Feedback is committed to SQLite first. The dashboard immediately uses the corrected label, while the derived feedback vector is reconciled asynchronously. A vector-store delay cannot block the user’s correction. Original predictions and revision history remain available for audit and undo.
 
 **Your corrections win for similar mail.** When a new email is close to one you corrected (from the same sender and within cosine distance 0.40, or a near-copy from anyone within 0.20), your category is applied. The AI still runs for the explanation and actions, but cannot overrule you, and "Why this category?" says *Matches your earlier correction*. Only corrections verified against your current labels in SQLite count, so text inside an email can never act as one. On the owner's inbox, a leave-one-out check over 83 labelled emails matched the owner's own label 95% of the time where the rule applied (`src/feedback_rules.py`).
+
+## Scam and phishing checks
+
+Switched on with `MAILMIND_RISK_ANALYSIS_ENABLED=true`. Each email gets a score out of 100 and a **Scam check** panel listing every rule that fired with its evidence. The rules are local and deterministic: no AI provider sees the email for this.
+
+On the CC0 synthetic benchmark (178 cases, split by template so no test email shares wording with a training email):
+
+| Flag when | Precision | Recall | False-positive rate |
+| --- | ---: | ---: | ---: |
+| High (>= 70) | 100% (19/19) | 73.1% (19/26) | 0% (0/32) |
+| Medium or high (>= 40) | 86.7% (26/30) | 100% (26/26) | 12.5% (4/32) |
+
+Authentication alone would catch 76.9%: attackers who register their own lookalike domain pass SPF, DKIM and DMARC. Removing the lookalike checks drops high-band recall from 73.1% to 26.9%. The weights are fitted with a non-negativity constraint, so adding a red flag can never lower a score. The benchmark and rules share an author, so these numbers are optimistic; see the [full report and limits](docs/RISK_EVALUATION.md).
 
 ## Hybrid search
 
@@ -270,10 +284,10 @@ npm run test:browser
 
 Latest local verification (19 October 2026):
 
-- Backend discovery: 606 tests passed in 26 modules; the 25 earlier modules were each verified alone on 30 September, and the new `test_signals` module also passes alone.
+- Backend discovery: 624 tests passed in 27 modules; the 25 earlier modules were each verified alone on 30 September, and the new `test_signals` and `test_risk` modules also pass alone.
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
-- Frontend unit suite: 58 passed. Playwright browser suite: 40 passed.
-- Frontend lint and production build passed; initial JavaScript is 332 kB (106 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
+- Frontend unit suite: 58 passed. Playwright browser suite: 41 passed.
+- Frontend lint and production build passed; initial JavaScript is 336 kB (107 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
 
@@ -310,6 +324,7 @@ A deliberate audit of this codebase found and fixed these defects. Each one was 
 | Misleading deletion error | An interrupted account deletion reported "no account to delete" while the data was still there | Only a missing account is a conflict; other failures say "retry" |
 | Deadlines 5 h 30 min late (found in use) | The model saw the received time in UTC, so "by 5 pm" was saved as 17:00 UTC and shown as 10:30 pm in India | The model sees the received time in the user's zone, and the parser treats a zoneless or wrongly-UTC time as local unless the email names UTC/GMT; 14 stored deadlines repaired after a backup (`src/llm_api.py`) |
 | Corrections ignored for similar mail (found in use) | A correction reached the model only as one of ≥ 3 examples within distance 0.25, the model could still ignore it, and after every restart the worker never opened the feedback index | A verified-correction rule: same sender ≤ 0.40, or near-copy ≤ 0.20 (95% agreement with the owner's own labels); the index opens before the first email (`src/feedback_rules.py`, `src/main.py`) |
+| Scam rules misread real mail (found on the owner's inbox) | A bank's "to open the statement, enter your password as..." read as an OTP request, and a fund house's own hyphenated domain as a lookalike | Instructions for opening a protected file are excluded; domains with repeated good mail and no spam are trusted (`src/risk_analysis.py`) |
 | Status file crashed MailMind (found in use) | On Windows, renaming over a file another process had open raised "Access is denied", and the uncaught error shut every service down | Status writes only on change, retry briefly, then skip, and never raise; credential saves retry the same way (`scripts/launch.py`, `src/file_utils.py`) |
 
 Live evaluation also found that the previously configured fallback model (`gemini-1.5-flash`) is retired (HTTP 404), which is exactly the case the first fix handles.

@@ -64,6 +64,7 @@ from src.intelligence_safety import (
     intelligence_diagnostics,
 )
 from src.email_signals import signals_summary
+from src.email_risk import risk_rows, risk_summary
 from src.intelligence_backfill import (
     backfill_summary,
     queue_intelligence_backfill,
@@ -247,6 +248,14 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 row['decision']=decision_context(row,application.state.settings.gemini_models)
         return rows
 
+    def with_extras(conn, rows):
+        rows = with_decisions(rows)
+        if application.state.settings.risk_analysis_enabled:
+            reports = risk_rows(conn, rows[0]['account_id'] if rows else None, [row['id'] for row in rows])
+            for row in rows:
+                row['risk'] = reports.get(row['id'])
+        return rows
+
     def allowed_origin(request):
         if request.headers.get('origin') not in application.state.settings.frontend_origins:
             raise HTTPException(403, 'Use the local MailMind page for this action.')
@@ -296,7 +305,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                         'SELECT indexing_state,COUNT(*) AS count FROM email_search_index WHERE account_id=? GROUP BY indexing_state',
                         (context.account_id,))
                 }
-                rows = with_decisions(get_recent_emails(
+                rows = with_extras(conn, get_recent_emails(
                     limit, account_id=context.account_id, db_conn=conn,
                     offset=offset, ranked_ids=[email_id] if exists else [],
                     include_analysis=application.state.settings.explanations_visible,
@@ -389,7 +398,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 context.account_id,conn,search=query,category=category)
             if semantic:
                 search_mode='hybrid'
-            rows=with_decisions(get_recent_emails(
+            rows=with_extras(conn, get_recent_emails(
                 limit,account_id=context.account_id,db_conn=conn,offset=offset,
                 search=query,category=category,ranked_ids=ranked_ids,
                 include_analysis=application.state.settings.explanations_visible,
@@ -874,6 +883,9 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 })
             backfill['enabled'] = bool(
                 application.state.settings.action_extraction_enabled)
+            risk={'enabled':bool(application.state.settings.risk_analysis_enabled),
+                  **(risk_summary(conn,context.account_id) if context.account_id
+                     else {'high':0,'medium':0,'low':0,'high_unreviewed':0,'unscored':0})}
             signals=(signals_summary(conn,context.account_id) if context.account_id
                      else {'captured':0,'eligible':0,'queued':0,'running':0,'retry':0,'complete':0,'dead':0})
             ingestion = get_ingestion_state(context.account_id, conn)
@@ -952,6 +964,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                     'semantic_search_index':{key:search_index_counts.get(key,0) for key in ('pending','indexed','failed')},
                     'intelligence_backfill':backfill,
                     'signals':signals,
+                    'risk':risk,
                     'poll_interval_seconds':application.state.settings.poll_interval_seconds,
                     'worker_lease_seconds':application.state.settings.worker_lease_seconds,
                     'batch_size':application.state.settings.batch_size}
@@ -1154,8 +1167,9 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                  if saved is not None else 'Google sign-in started. Finish it in the browser. Inbox work runs separately.')
         return {'job_id':job_id,'status':'running','message':message}
 
-    from api import signals as signal_routes
+    from api import risk as risk_routes, signals as signal_routes
     signal_routes.register(application, session)
+    risk_routes.register(application, session)
 
     origins = (settings or Settings()).frontend_origins
     application.add_middleware(CORSMiddleware, allow_origins=list(origins), allow_credentials=True,

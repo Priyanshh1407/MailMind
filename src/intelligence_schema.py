@@ -164,3 +164,21 @@ def migration_15(conn):
     )""")
     conn.execute('CREATE INDEX signals_backfill_due ON signals_backfill_items(account_id,status,next_retry_at,requested_at)')
 
+
+def migration_16(conn):
+    # Scam/phishing report per email. Deterministic and recomputable: a new
+    # risk version or newly captured signals simply replace the row.
+    conn.execute("""CREATE TABLE email_risk (
+        account_id TEXT NOT NULL,
+        email_id TEXT NOT NULL,
+        risk_version TEXT NOT NULL CHECK(length(risk_version) BETWEEN 1 AND 40),
+        score INTEGER NOT NULL CHECK(typeof(score)='integer' AND score BETWEEN 0 AND 100),
+        band TEXT NOT NULL CHECK(band IN ('low','medium','high')),
+        evidence_level TEXT NOT NULL CHECK(evidence_level IN ('full','content_only')),
+        findings_json TEXT NOT NULL DEFAULT '[]' CHECK(length(findings_json)<=16384 AND json_valid(findings_json) AND json_type(findings_json)='array'),
+        reviewed_at TEXT,
+        computed_at TEXT NOT NULL,
+        PRIMARY KEY(account_id,email_id),
+        FOREIGN KEY(account_id,email_id) REFERENCES email_logs(account_id,email_id) ON DELETE CASCADE
+    )""")
+    conn.execute('CREATE INDEX email_risk_band ON email_risk(account_id,band,reviewed_at)')

@@ -17,6 +17,7 @@ from .local_llm import predict_with_token_count
 from .token_usage import TokenRecorder, usage_request_prefix
 from .work_queue import fence, attempt, task_retry
 from .classification_service import run_local
+from .email_risk import score_email
 
 
 # Every route has already been tried when one of these is returned (see
@@ -125,6 +126,18 @@ def process_task(task, manager, context, token, service, model, collection_provi
                         conn,context,identity,'analysis','retry',
                         'analysis_persistence_failed',
                     )
+                if config.risk_analysis_enabled:
+                    # Local scam checks; a failure here never undoes the
+                    # classification (the worker's sweep scores it later).
+                    conn.execute('SAVEPOINT risk_report')
+                    try:
+                        score_email(conn,context.account_id,identity,analysis_signals=[
+                            item.signal for item in getattr(decision.analysis,'signals',()) or ()])
+                        conn.execute('RELEASE SAVEPOINT risk_report')
+                    except Exception as risk_error:
+                        conn.execute('ROLLBACK TO SAVEPOINT risk_report')
+                        conn.execute('RELEASE SAVEPOINT risk_report')
+                        log_event('risk_report_deferred',error=risk_error)
                 if (config.action_extraction_enabled
                         and decision.outcome == 'CLASSIFIED'):
                     conn.execute('SAVEPOINT phase4_actions')
@@ -220,6 +233,8 @@ def process_task(task, manager, context, token, service, model, collection_provi
             else:
                 # Commit 'sending' BEFORE contacting Telegram. A crash is ambiguous.
                 conn.execute("UPDATE notification_outbox SET status='sending',attempt_count=attempt_count+1,updated_at=? WHERE account_id=? AND email_id=?",(utc_timestamp(),context.account_id,identity))
+                risk=conn.execute("SELECT band FROM email_risk WHERE account_id=? AND email_id=?",(context.account_id,identity)).fetchone() if config.risk_analysis_enabled else None
+                alert_prefix='⚠ Possible scam: ' if risk and risk['band'] == 'high' else ''
         if stage == 'notify':
             from .notifier import telegram_timeouts
             request_timeout,wait_seconds=telegram_timeouts(config.provider_timeout_seconds)
@@ -233,7 +248,7 @@ def process_task(task, manager, context, token, service, model, collection_provi
                             from .privacy import redact
                         from .notifier import send_telegram_alert
                         attempted.set()
-                        return notifier('[SENDER]',redact(task['subject']),preview_text(redact(task['body']))[:100]+'...',timeout=request_timeout,**({'settings':config} if notifier is send_telegram_alert else {}))
+                        return notifier('[SENDER]',alert_prefix+redact(task['subject']),preview_text(redact(task['body']))[:100]+'...',timeout=request_timeout,**({'settings':config} if notifier is send_telegram_alert else {}))
                     delivery=TELEGRAM_CALLS.run(send,wait_seconds)
                 # Explicit compatibility for injected old boolean test adapters.
                 if isinstance(delivery,bool):

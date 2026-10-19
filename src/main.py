@@ -22,6 +22,7 @@ from .work_queue import (claim_cycle, fence, finish_cycle, ingest_email,
                          process_due_reminders)
 from .pipeline import process_task, cycle_external
 from .email_signals import process_signals_backfill
+from .email_risk import score_pending
 from .provider_policy import BoundedCalls
 from .database import utc_timestamp
 
@@ -339,6 +340,16 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
                 # Validates retrieved corrections and finds their senders (your corrections win).
                 validator=CurrentFeedback(config.db_path,context.account_id),
                 job_id=job_id))
+        if config.risk_analysis_enabled:
+            # Catch up on scam checks: unscored mail, older rules, new signals.
+            try:
+                with manager.guard(context) as conn:
+                    fence(manager,context,token,conn)
+                    score_pending(conn,context.account_id)
+            except WorkCancelled:
+                raise
+            except Exception as error:
+                log_event('risk_sweep_deferred',error=error)
         reminder_result=None
         if config.action_reminders_enabled:
             try:

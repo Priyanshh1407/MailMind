@@ -38,7 +38,7 @@ class AccountContext:
 PARKED_LOGIN_SECONDS = 24 * 3600
 # Per-account tables added by later features. Deleting account data removes
 # their rows explicitly (children first), not only through email cascades.
-FEATURE_TABLES = ('signals_backfill_items', 'email_signals')
+FEATURE_TABLES = ('signals_backfill_items', 'email_signals', 'email_risk')
 
 
 class AccountManager:

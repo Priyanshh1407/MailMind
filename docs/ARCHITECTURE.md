@@ -67,7 +67,7 @@ FastAPI owns:
 - explicit bounded saved-mail intelligence backfill; and
 - explicit recovery for unfinished tasks and ambiguous notification delivery.
 
-The API opens/migrates schema version 15 and lazily initializes heavy or optional services.
+The API opens/migrates schema version 16 and lazily initializes heavy or optional services.
 
 ### Gmail/classification worker
 
@@ -164,6 +164,25 @@ Every Gmail message is saved with bounded security evidence in `email_signals` (
 The visible body text is unchanged, so grounding, providers and the evaluation recordings are unaffected. A malformed header never fails the message.
 
 Mail saved before signals existed is filled in by an explicit backfill. `POST /signals/backfill` (`{"limit": 1..1000}`) admits saved Gmail messages without signals into `signals_backfill_items`. Each worker cycle then re-reads up to ten due messages and saves **only** their signals: no task, alert, label or read state changes. Temporary download failures retry with the usual backoff, deleted messages stop after the attempt limit, and an expired worker claim returns a row to retry. `GET /status` reports `signals` counts.
+
+### Scam and phishing checks
+
+With `MAILMIND_RISK_ANALYSIS_ENABLED=true`, every email gets a report in `email_risk` (`src/risk_analysis.py`, `src/email_risk.py`). The checks are local rules; no provider or network call is made, so they also run in local-only mode.
+
+| Group | Rules |
+| --- | --- |
+| Sender authentication | DMARC, SPF or DKIM failed; no result at all |
+| Reply paths | Replies go to a personal mailbox or another domain; a brand name on a personal address |
+| Lookalikes | The sender or a link imitates a brand or one of your trusted domains: the brand as a word (`sbi-kyc.in`), a visual confusable (`micros0ft`), or one typo (`hdfcbamk`); punycode |
+| Links | Visible text names another domain than the target; shorteners; bare IP addresses |
+| Lures | Requests to share an OTP/PIN/password (not warnings against sharing, nor "the password to open this statement is..."), UPI "receive money" tricks, KYC/PAN pressure, account-block threats, prizes, fees to release something, gift cards, credential checks |
+| Pressure and hiding | Deadlines within hours; text a reader cannot see |
+
+Each finding quotes its evidence. The score is a logistic model over the findings with weights fitted on the CC0 benchmark and constrained to be non-negative, so adding a red flag can never lower a score (`src/risk_weights.json`; see [the evaluation](RISK_EVALUATION.md)). Bands: high >= 70, medium >= 40. Trusted domains (never lookalikes) are ones you labelled Important or Updates, or that sent you at least two such emails and no spam.
+
+An email is scored inside its classification transaction, behind a savepoint so a scoring failure never undoes the classification. Each worker cycle then scores up to 50 more: unscored mail, mail scored by older rules, and mail whose signals arrived after it was scored (`content_only` becomes `full`). A high-risk Important alert is sent as "⚠ Possible scam: ..." The score never hides, moves or deletes mail.
+
+Routes: email rows carry `risk`; `GET /emails/{id}/risk` returns one report; `POST /emails/{id}/risk/review` marks it reviewed; `GET /status` reports `risk` counts.
 
 ## Intelligence data flow
 

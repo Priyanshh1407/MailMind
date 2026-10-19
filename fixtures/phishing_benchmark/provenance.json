@@ -1,0 +1,18 @@
+{
+ "name": "MailMind synthetic phishing benchmark",
+ "license": "CC0-1.0",
+ "generator": "scripts/build_phishing_benchmark.py",
+ "cases": 178,
+ "templates": 33,
+ "counts": {
+  "train": {
+   "phishing": 60,
+   "legit": 60
+  },
+  "test": {
+   "phishing": 26,
+   "legit": 32
+  }
+ },
+ "notes": "Synthetic messages written for this project. Brands appear only as impersonation targets or as legitimate senders; no real customer data. The train/test split is by template."
+}

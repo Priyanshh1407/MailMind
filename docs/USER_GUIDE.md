@@ -97,6 +97,12 @@ Automatic dashboard reminders require explicit configuration. Telegram action re
 
 Usage shows day, week, and month token totals with a daily bar chart, an accessible data table, and ranked per-provider and per-operation breakdowns with share bars. Rows whose events have no reported token count read **Not measured** rather than zero. Provider-billed tokens and locally processed tokens are separate. Counts can be provider-reported, tokenizer-counted, estimated, or unavailable; they are usage measurements, not prices.
 
+### Scam check
+
+With scam checks switched on (`MAILMIND_RISK_ANALYSIS_ENABLED=true`), an email that looks like a scam shows a red **Possible scam** or amber **Check carefully** badge with its score out of 100. Open **Scam check** on the card to see every warning sign and its evidence: the failed sender check, where the link really goes, the sentence asking for your OTP, and so on. **I've checked this email** removes it from the **Risky emails** count on the overview; the report stays.
+
+The checks are local rules; nothing is sent to an AI provider. Older emails are checked in the background. Until an email's security signals are captured (see **Capture security signals**), its check uses the text and sender address only, and says so. A score is a warning, not a verdict: MailMind never hides or deletes mail because of it.
+
 ## Categories
 
 | Lane | Meaning |

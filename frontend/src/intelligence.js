@@ -62,6 +62,35 @@ export function signalLabel(value) {
   )).join(' ');
 }
 
+export const RISK_BANDS = ['low', 'medium', 'high'];
+const RISK_SIGNALS = {
+  auth_dmarc_fail: 'Failed DMARC check',
+  auth_spf_fail: 'Failed SPF check',
+  auth_dkim_fail: 'Failed DKIM signature',
+  auth_missing: 'Sender not authenticated',
+  reply_to_freemail: 'Replies go to a personal mailbox',
+  reply_to_mismatch: 'Replies go to another domain',
+  brand_name_on_freemail: 'Brand name on a personal address',
+  lookalike_sender: 'Lookalike sender domain',
+  lookalike_link: 'Link to a lookalike domain',
+  punycode_domain: 'Disguised international domain',
+  link_text_mismatch: 'Link text hides its real target',
+  shortened_link: 'Shortened link',
+  ip_address_link: 'Link to a bare IP address',
+  otp_or_pin_request: 'Asks for an OTP, PIN or password',
+  upi_collect_lure: 'UPI "receive money" trick',
+  kyc_lure: 'KYC or PAN pressure',
+  account_threat: 'Threatens to block an account',
+  prize_lure: 'Prize or cashback bait',
+  fee_lure: 'Fee to release something',
+  gift_card_request: 'Asks for gift cards',
+  credential_request: 'Asks to verify login details',
+  urgency_pressure: 'Time pressure',
+  hidden_text: 'Hidden text',
+};
+export const riskSignalLabel = value => RISK_SIGNALS[value] || signalLabel(value);
+export const riskBandLabel = band => ({ high: 'Possible scam', medium: 'Check carefully', low: 'Low risk' })[band] || band;
+
 export function sourceLabel(value) {
   return ({
     gemini: 'Gemini',

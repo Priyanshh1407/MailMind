@@ -13,6 +13,9 @@ async function setup(page) {
   }));
   state.rows[0].body=['Hello,','','Please review the synthetic request. It is due on Friday.','','Thanks,','Synthetic Sender'].join(String.fromCharCode(10));
   // Email 0 carries the full decision story; the others use the older layout.
+  // Email 1 is a scam check example; risk is shown only when the status says it is on.
+  state.rows[1].risk={score:88,band:'high',evidence_level:'full',risk_version:'risk-v1',reviewed_at:null,computed_at:stamp,findings:[{signal:'lookalike_sender',evidence:'sbi-kyc.in',detail:'Resembles sbi.co.in',weight:0.93},{signal:'link_text_mismatch',evidence:'"onlinesbi.sbi" opens bit.ly',weight:0.4}]};
+  state.rows[2].risk={score:3,band:'low',evidence_level:'content_only',risk_version:'risk-v1',reviewed_at:null,computed_at:stamp,findings:[]};
   state.rows[0].decision={decided_by:'model',category:'IMPORTANT',route:'fallback',provider:'gemini',model_version:'gemini-3.5-flash-lite',precedents:{used:3,lookup:'used'},second_opinion:{category:'SPAM',agrees:false},elapsed_ms:1201,your_label:null};
   state.actions=[{action_id:7,account_id:'interview@example.test',email_id:'synthetic-0',fingerprint:'a'.repeat(64),action_type:'reply_required',title:'Reply to synthetic sender',description:'Send the requested confirmation.',evidence:'Please review the synthetic request.',due_at:'2026-10-02T11:30:00.000000Z',due_precision:'exact_time',confidence:'high',extraction_source:'local_heuristic',status:'open',snoozed_until:null,revision:0,created_at:stamp,updated_at:stamp,completed_at:null,analysis_revision:stamp,next_reminder_at:null,delivered_reminder_count:0}];
   await page.route('**/*',async route=>{
@@ -25,7 +28,7 @@ async function setup(page) {
     if(path==='/session' && method==='POST'){state.paired=true;data={csrf_token:'synthetic-csrf'};}
     else if(!state.paired){status=401;data={detail:'Sign in to this local app first.'};}
     else if(path==='/session')data={email:identity.account_id,csrf_token:'synthetic-csrf',connected:state.connected,purge_pending:false,generation:state.generation,read_only:!state.connected&&state.workerError==='gmail_unavailable'};
-    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},intelligence_backfill:{enabled:true,eligible:2,queued:0,running:0,retry:0,complete:0,dead:0},signals:state.signals||{captured:20,eligible:4,queued:0,running:0,retry:0,complete:0,dead:0},poll_interval_seconds:60,worker_lease_seconds:90,worker:state.workerError?{heartbeat_at:stamp,last_success_at:stamp,last_error_at:stamp,last_error_code:state.workerError}:null,connectivity:state.workerError?{gmail:'unreachable',failed_checks:3,retry_in_seconds:20}:{gmail:'ok',failed_checks:0,retry_in_seconds:null},ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
+    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},intelligence_backfill:{enabled:true,eligible:2,queued:0,running:0,retry:0,complete:0,dead:0},signals:state.signals||{captured:20,eligible:4,queued:0,running:0,retry:0,complete:0,dead:0},risk:{enabled:true,high:1,medium:0,low:1,high_unreviewed:state.riskReviewed?0:1,unscored:22},poll_interval_seconds:60,worker_lease_seconds:90,worker:state.workerError?{heartbeat_at:stamp,last_success_at:stamp,last_error_at:stamp,last_error_code:state.workerError}:null,connectivity:state.workerError?{gmail:'unreachable',failed_checks:3,retry_in_seconds:20}:{gmail:'ok',failed_checks:0,retry_in_seconds:null},ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
     else if(path==='/telemetry'){
       status=state.telemetryError||200;
       data=status!==200?{detail:'Synthetic telemetry outage.'}:{...identity,totals:{saved:24,completed:23,labelled:state.rows.filter(row=>row.human_label).length,corrected:state.rows.filter(row=>row.human_label&&row.human_label!==row.prediction).length,confirmed:state.rows.filter(row=>row.human_label&&row.human_label===row.prediction).length,feedback_events:state.revision,prediction_attempts:24},classification_timing:{mean_ms:1201,sample_count:24},local_model:{ready:state.localReady||false,version:'legacy-binary',evaluation_scope:state.evaluationScope||null},mode:{local_only:state.localOnly||false},providers:{gemini:state.localOnly?'disabled_local_only':'configured_unverified',groq:state.localOnly?'disabled_local_only':'unconfigured'}};
@@ -73,6 +76,7 @@ async function setup(page) {
     else if(path==='/logout'){state.paired=false;state.connected=false;state.generation++;data={message:'Signed out. Saved mail is kept.'};}
     else if(path==='/inbox/sync'){state.syncCalls++;status=202;data={job_id:43,status:'queued',message:'Checking Gmail for new messages.'};}
     else if(path==='/ingestion/fetch-next'){state.fetchCalls++;(state.fetchBodies||=[]).push(route.request().postDataJSON());status=202;data={job_id:44,status:'queued',message:'Loading the next 20 older messages.'};}
+    else if(path.endsWith('/risk/review')){state.riskReviewed=true;state.rows[1].risk.reviewed_at='2026-09-28T10:00:00.000000Z';data={email_id:'synthetic-1',reviewed_at:'2026-09-28T10:00:00.000000Z',message:'Marked as reviewed.'};}
     else if(path==='/signals/backfill'){(state.signalBodies||=[]).push(route.request().postDataJSON());state.signals={captured:20,eligible:0,queued:4,running:0,retry:0,complete:0,dead:0};status=202;data={job_id:46,status:'queued',admitted:4,eligible:0,message:'Capturing security signals for 4 saved emails. This only re-reads headers and links; nothing else changes.'};}
     else if(path==='/intelligence/backfill'){state.backfillCalls=(state.backfillCalls||0)+1;status=202;data={job_id:45,status:'queued',requested:20,admitted:2,eligible:2,capacity:99,message:'Queued 2 saved emails for analysis.'};}
     else {status=404;data={detail:'Synthetic route not found.'};}
@@ -107,7 +111,9 @@ test('Phase 6 tabs, KPIs, action lifecycle and source navigation work together',
   await setup(page);
   // One overview: inbox stats and follow-through KPIs share the same card design.
   const summary=page.getByRole('region',{name:'Overview'});
-  await expect(summary.locator('.stat')).toHaveCount(8);
+  // Eight core cards, plus "Risky emails" because scam checks are on.
+  await expect(summary.locator('.stat')).toHaveCount(9);
+  await expect(summary).toContainText('Risky emails1');
   await expect(summary).toContainText('Open actions1');
   await expect(summary).toContainText('Due soon1');
   await expect(summary).toContainText('Tokens today150');
@@ -278,6 +284,21 @@ test('security signals for saved mail are captured on request and show progress'
   expect(state.signalBodies[0]).toEqual({limit:4});
   await expect(page.getByText('Capturing security signals for 4 saved emails.')).toBeVisible();
   await expect(page.getByRole('button',{name:'Capturing security signals...'})).toBeDisabled();
+});
+test('scam check shows a badge, the evidence for each warning sign, and can be marked as reviewed',async({page})=>{
+  const state=await setup(page);
+  const card=page.getByRole('article',{name:'Synthetic email 1',exact:true});
+  await expect(card.getByText('Possible scam · 88')).toBeVisible();
+  await expect(page.getByRole('article',{name:'Synthetic email 2',exact:true}).getByText('Scam check: no warning signs in the text (sender checks pending).')).toBeVisible();
+  await expect(page.locator('.stat').filter({hasText:'Risky emails'})).toContainText('1');
+  await card.getByText('Scam check: possible scam (88/100)').click();
+  await expect(card.getByText('Lookalike sender domain')).toBeVisible();
+  await expect(card.getByText('Resembles sbi.co.in')).toBeVisible();
+  await expect(card.getByRole('meter',{name:'Scam risk score'})).toHaveAttribute('aria-valuenow','88');
+  await card.getByRole('button',{name:"I've checked this email"}).click();
+  await expect.poll(()=>state.riskReviewed||false).toBe(true);
+  await expect(card.getByText('You marked this as reviewed.')).toBeVisible();
+  await expect(page.locator('.stat').filter({hasText:'Risky emails'})).toContainText('0');
 });
 test('account menu and feedback editor work with keyboard and Escape',async({page})=>{
   await setup(page);const trigger=page.getByRole('button',{name:'Account options'});

@@ -1,0 +1,29 @@
+{
+ "version": "risk-v1",
+ "bias": -1.3957,
+ "weights": {
+  "auth_dmarc_fail": 0.2646,
+  "auth_spf_fail": 0.2646,
+  "auth_dkim_fail": 0.3728,
+  "auth_missing": 0.5717,
+  "reply_to_freemail": 0.374,
+  "reply_to_mismatch": 0.0,
+  "brand_name_on_freemail": 0.4302,
+  "lookalike_sender": 0.934,
+  "lookalike_link": 0.5634,
+  "punycode_domain": 0.0,
+  "link_text_mismatch": 0.2771,
+  "shortened_link": 0.2322,
+  "ip_address_link": 0.1408,
+  "otp_or_pin_request": 0.1475,
+  "upi_collect_lure": 0.2235,
+  "kyc_lure": 0.1346,
+  "account_threat": 0.6859,
+  "prize_lure": 0.2235,
+  "fee_lure": 0.6885,
+  "gift_card_request": 0.278,
+  "credential_request": 0.4141,
+  "urgency_pressure": 0.5398,
+  "hidden_text": 0.0717
+ }
+}

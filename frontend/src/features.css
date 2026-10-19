@@ -1,0 +1,118 @@
+/* Styles for the features added after Phase 6: scam checks, money, Ask,
+   follow-ups, the daily brief and the security report. Same tokens as the
+   rest of the dark theme. */
+
+/* ── Scam check ─────────────────────────────────────────────── */
+/* The badges keep their size; a long sender name truncates instead. */
+.email-card-badges {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 60%;
+}
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+
+.risk-badge.high {
+  color: var(--spam);
+  background: var(--spam-soft);
+}
+
+.risk-badge.medium {
+  color: var(--important);
+  background: var(--important-soft);
+}
+
+.risk-panel {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.risk-panel.high {
+  border-color: color-mix(in srgb, var(--spam) 45%, var(--line));
+}
+
+.risk-panel.medium {
+  border-color: color-mix(in srgb, var(--important) 40%, var(--line));
+}
+
+.risk-panel summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 13px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.risk-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.risk-panel summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+.risk-panel.high summary {
+  color: var(--spam);
+}
+
+.risk-panel.medium summary {
+  color: var(--important);
+}
+
+.risk-panel.low summary {
+  color: var(--muted);
+}
+
+.risk-meter {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.risk-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--success), var(--important) 55%, var(--spam));
+}
+
+.risk-detail {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.risk-clear,
+.risk-reviewed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.risk-clear svg {
+  color: var(--success);
+}
