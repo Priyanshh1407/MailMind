@@ -3,7 +3,10 @@ import argparse,json,os,shutil,subprocess,sys,tempfile,time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 DIRECTORIES=['src','api','scripts','tests','fixtures','config','.github','notebooks']
-FILES=['requirements.txt','requirements.lock','requirements-dev.txt','Dockerfile','docker-compose.yml','.dockerignore','.gitignore','.gitattributes','.env.example','.python-version','.nvmrc','README.md','CONTRIBUTING.md','SECURITY.md','docs/PRIVACY_AND_LOCAL_ONLY.md','docs/SETUP_AND_RELEASE.md','docs/OPERATING_POLICIES.md','docs/LOCAL_SCALE_DECISION.md','start_all.bat','start_all.sh','end_all.bat','end_all.sh']
+FILES=['requirements.txt','requirements.lock','requirements-dev.txt','Dockerfile','docker-compose.yml','.dockerignore','.gitignore','.gitattributes','.env.example','.python-version','.nvmrc','README.md','CONTRIBUTING.md','SECURITY.md','docs/PRIVACY_AND_LOCAL_ONLY.md','docs/SETUP_AND_RELEASE.md','docs/OPERATING_POLICIES.md','docs/LOCAL_SCALE_DECISION.md',
+       # Committed evaluation reports: the reproducibility tests compare against them.
+       'docs/EVALUATION.md','docs/RESILIENCE.md','docs/RISK_EVALUATION.md','docs/LEDGER_EVALUATION.md','docs/AGENT_EVALUATION.md','docs/FOLLOW_UP_EVALUATION.md','docs/BRIEF_EVALUATION.md','docs/REDTEAM.md',
+       'start_all.bat','start_all.sh','end_all.bat','end_all.sh']
 
 
 def snapshot(destination):
