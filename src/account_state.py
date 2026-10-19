@@ -46,9 +46,16 @@ class AccountManager:
         self.settings = settings
 
     @contextmanager
-    def transaction(self):
+    def transaction(self, *, readonly=False):
         with connection(self.settings.db_path, self.settings.busy_timeout_ms) as conn:
-            conn.execute("BEGIN IMMEDIATE")
+            if readonly:
+                # A plain read transaction: in WAL mode it neither waits for
+                # nor blocks writers, so many dashboard reads at once cannot
+                # time each other out. query_only makes an accidental write fail.
+                conn.execute("PRAGMA query_only=ON")
+                conn.execute("BEGIN DEFERRED")
+            else:
+                conn.execute("BEGIN IMMEDIATE")
             yield conn
 
     @staticmethod
@@ -101,7 +108,8 @@ class AccountManager:
     def session(self, token, csrf=None):
         if not token:
             raise AccessDenied()
-        with self.transaction() as conn:
+        # Checked on every request and only reads, so it must not wait for writers.
+        with self.transaction(readonly=True) as conn:
             state = self.state(conn)
             key = self.digest(token)
             row = conn.execute("SELECT * FROM local_sessions WHERE token_hash=?", (key,)).fetchone()
@@ -112,10 +120,12 @@ class AccountManager:
             return AccountContext(state['account_id'], state['generation'], key), row['csrf']
 
     @contextmanager
-    def guard(self, context, *, connected=True):
+    def guard(self, context, *, connected=True, readonly=False):
         # Hold this lock through a side effect. A successful stop cannot race a
         # later effect. An already started external request cannot be undone.
-        with self.transaction() as conn:
+        # readonly: for pure reads; the same checks run inside one consistent
+        # snapshot, without taking the write lock.
+        with self.transaction(readonly=readonly) as conn:
             state = self.state(conn)
             if state['generation'] != context.generation or state['account_id'] != context.account_id:
                 raise WorkCancelled()

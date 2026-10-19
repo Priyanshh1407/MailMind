@@ -333,9 +333,9 @@ npm run build
 npm run test:browser
 ```
 
-Latest local verification (19 October 2026):
+Latest local verification (20 October 2026):
 
-- Backend discovery: 682 tests passed in 32 modules; the 25 earlier modules were each verified alone on 30 September, and the seven new feature modules also pass alone.
+- Backend discovery: 686 tests passed in 33 modules; the 25 earlier modules were each verified alone on 30 September, and the eight new modules were each verified alone on 20 October.
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
 - Frontend unit suite: 65 passed. Playwright browser suite: 47 passed.
 - Frontend lint and production build passed; initial JavaScript is 377 kB (119 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
@@ -376,6 +376,8 @@ A deliberate audit of this codebase found and fixed these defects. Each one was 
 | Deadlines 5 h 30 min late (found in use) | The model saw the received time in UTC, so "by 5 pm" was saved as 17:00 UTC and shown as 10:30 pm in India | The model sees the received time in the user's zone, and the parser treats a zoneless or wrongly-UTC time as local unless the email names UTC/GMT; 14 stored deadlines repaired after a backup (`src/llm_api.py`) |
 | Corrections ignored for similar mail (found in use) | A correction reached the model only as one of ≥ 3 examples within distance 0.25, the model could still ignore it, and after every restart the worker never opened the feedback index | A verified-correction rule: same sender ≤ 0.40, or near-copy ≤ 0.20 (95% agreement with the owner's own labels); the index opens before the first email (`src/feedback_rules.py`, `src/main.py`) |
 | Scam rules misread real mail (found on the owner's inbox) | A bank's "to open the statement, enter your password as..." read as an OTP request, and a fund house's own hyphenated domain as a lookalike | Instructions for opening a protected file are excluded; domains with repeated good mail and no spam are trusted (`src/risk_analysis.py`) |
+| Dashboard reads failed under load (found by load test, predates these features) | Every read took SQLite's write lock, so 20 parallel dashboard reads queued past the 5 s busy timeout: 13 to 17 of 300 failed with "storage busy" on the original code too | Pure reads use a read-only snapshot that neither waits for nor blocks writers; token metering waits at most 1 s. 0 of 300 failed afterwards, and 0 of 400 at 80 parallel requests (`src/account_state.py`, `tests/test_concurrency.py`) |
+| An Ask question froze the database for its whole run (found on the live system) | The provider call and the embedding search ran inside a database transaction, so other requests failed with "storage busy" for up to 20 s | The account is checked before and after each call, with no lock held during it (`api/questions.py`, `src/inbox_agent.py`) |
 | The red-team's first numbers were wrong (found by its own control) | Every follow-up attack looked blocked, but only because the test draft was too short; the clean draft failed the same way. Measured properly, a false "I have already transferred the amount" and a planted plain-text domain got through, and an injected message saying "transferred" made the claim look supported | Each family now has a control that must pass; links and claims of having acted must come from the user's own messages (`scripts/redteam.py`, `src/follow_ups.py`) |
 | Hidden instructions reached the AI (found by red-team) | Text styled `display:none` or zero-size was saved as body text, so providers read instructions the user never saw | Invisible text is no longer saved as body text; the scam check keeps it as a signal |
 | Follow-ups greeted mailboxes by role (found by benchmark) | "Sales Desk" and "HR Team" became "Dear Sales," and "Dear HR,", and surnames in the user's own greeting ("Dear Ms. Menon") reached the provider | The follow-up addresses people exactly as the user did in their last message, and that name is masked too (`src/follow_ups.py`) |

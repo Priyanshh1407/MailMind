@@ -150,18 +150,22 @@ class Tools:
         query = normalize_text(args.get('query') or '', limit=120)
         category = args.get('category') if args.get('category') in CATEGORIES else None
         start, end = _day(args.get('date_from')), _day(args.get('date_to'))
+        lexical = None
+        if query:
+            with self.read_db() as conn:
+                lexical = lexical_search_ids(self.account_id, conn, query, category)
+        # The embedding search runs with no database lock held: loading the
+        # model can take seconds, and other requests must not wait for it.
+        semantic = []
+        if query and self.semantic is not None and len(query) >= 3:
+            try:
+                semantic = self.semantic(query)
+            except Exception:
+                semantic = []  # lexical results still answer
         with self.read_db() as conn:
             if query:
-                lexical = lexical_search_ids(self.account_id, conn, query, category)
-                semantic = []
-                if self.semantic is not None and len(query) >= 3:
-                    try:
-                        semantic = self.semantic(query)
-                    except Exception:
-                        semantic = []  # lexical results still answer
-                    allowed = set(filter_ranked_ids(self.account_id, conn, [key for key, _ in semantic], category))
-                    semantic = [row for row in semantic if row[0] in allowed]
-                ranked = hybrid_rank(lexical, semantic)
+                allowed = set(filter_ranked_ids(self.account_id, conn, [key for key, _ in semantic], category))
+                ranked = hybrid_rank(lexical, [row for row in semantic if row[0] in allowed])
             else:
                 ranked = [row[0] for row in conn.execute(
                     'SELECT email_id FROM email_logs WHERE account_id=? ORDER BY created_at DESC LIMIT 200',

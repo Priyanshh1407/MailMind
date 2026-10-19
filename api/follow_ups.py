@@ -162,7 +162,7 @@ def register(application, session):
     def sent(search: str = Query('', max_length=100), limit: int = Query(25, ge=1, le=50),
              offset: int = Query(0, ge=0, le=10000), context=Depends(session)):
         enabled()
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             items, total = sent_page(conn, context.account_id, search=search.strip(), limit=limit, offset=offset)
         entry = state.get(context.account_id, {})
         return {'account_id': context.account_id, 'generation': context.generation, 'messages': items, 'total': total,
@@ -222,7 +222,7 @@ def register(application, session):
     @application.get('/follow-ups/drafts/{follow_up_id}')
     def get_draft(follow_up_id: int, context=Depends(session)):
         enabled()
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             row = conn.execute('SELECT * FROM follow_ups WHERE follow_up_id=? AND account_id=?',
                                (follow_up_id, context.account_id)).fetchone()
         if row is None:

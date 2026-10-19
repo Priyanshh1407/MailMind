@@ -13,7 +13,7 @@ def register(application, session):
     @application.get('/emails/{email_id}/risk')
     def email_risk(email_id: str, context=Depends(session)):
         enabled()
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             if not get_email(email_id, account_id=context.account_id, db_conn=conn):
                 raise HTTPException(404, 'This email does not belong to the connected account.')
             report = get_risk(conn, context.account_id, email_id)

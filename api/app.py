@@ -284,7 +284,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     @application.get('/session')
     def get_session(request: Request, context=Depends(session)):
         _, csrf = application.state.accounts.session(request.cookies.get(COOKIE))
-        with application.state.accounts.guard(context, connected=False) as conn:
+        with application.state.accounts.guard(context, connected=False, readonly=True) as conn:
             state = application.state.accounts.state(conn)
             return {'csrf_token': csrf, 'email': state['account_id'], 'connected': bool(state['connected']),
                     'purge_pending': bool(state['purge_pending']), 'generation': state['generation'],
@@ -297,7 +297,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                email_id: str | None = Query(None, min_length=1, max_length=256),
                context=Depends(session)):
         if email_id is not None:
-            with application.state.accounts.guard(context, connected='read') as conn:
+            with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
                 exists = get_email(
                     email_id, account_id=context.account_id, db_conn=conn)
                 index_counts = {
@@ -325,7 +325,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         query=search.strip()
         search_mode='text'
         semantic_available=False
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             lexical=lexical_search_ids(context.account_id,conn,query,category) if len(query) >= MIN_SEMANTIC_QUERY else None
             index_counts={row['indexing_state']:row['count'] for row in conn.execute(
                 'SELECT indexing_state,COUNT(*) AS count FROM email_search_index WHERE account_id=? GROUP BY indexing_state',
@@ -385,7 +385,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                         measurement=query_measurement,
                     )
                 log_event('semantic_search_fallback',error=error)
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             if lexical is not None:
                 allowed_semantic=filter_ranked_ids(context.account_id,conn,
                     [identity for identity,_distance in semantic],category)
@@ -410,7 +410,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
 
     @application.get('/emails/{email_id}/history')
     def email_history(email_id: str, context=Depends(session)):
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             if not get_email(email_id,account_id=context.account_id,db_conn=conn):
                 raise HTTPException(404,'This email does not belong to the connected account.')
             response={'account_id':context.account_id,'generation':context.generation,
@@ -446,7 +446,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
 
     @application.get('/telemetry')
     def telemetry(context=Depends(session)):
-        with application.state.accounts.guard(context,connected=False) as conn:
+        with application.state.accounts.guard(context,connected=False, readonly=True) as conn:
             totals=dashboard_totals(context.account_id,conn)
             samples=[]
             latest=None
@@ -539,7 +539,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             context=Depends(session)):
         require_actions()
         try:
-            with application.state.accounts.guard(context, connected='read') as conn:
+            with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
                 rows=list_actions(
                     context.account_id,status=status,due_from=due_from,
                     due_to=due_to,email_id=email_id,action_type=action_type,limit=limit,
@@ -558,7 +558,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     @application.get('/actions/summary')
     def actions_summary(context=Depends(session)):
         require_actions()
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             result=action_summary(context.account_id,db_conn=conn)
         return {
             'account_id':context.account_id,
@@ -776,7 +776,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
             context=Depends(session)):
         if not application.state.settings.token_analytics_visible:
             raise HTTPException(404, 'Token analytics are disabled.')
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             result=aggregate_token_usage(
                 context.account_id, window=window,
                 timezone_name=application.state.settings.default_timezone,
@@ -873,7 +873,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
 
     @application.get('/status')
     def status(context=Depends(session)):
-        with application.state.accounts.guard(context, connected=False) as conn:
+        with application.state.accounts.guard(context, connected=False, readonly=True) as conn:
             state = application.state.accounts.state(conn)
             backfill=(
                 backfill_summary(context.account_id,db_conn=conn)
@@ -977,7 +977,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
 
     @application.get('/user')
     def user(context=Depends(session)):
-        with application.state.accounts.guard(context, connected=False) as conn:
+        with application.state.accounts.guard(context, connected=False, readonly=True) as conn:
             state = application.state.accounts.state(conn)
             return {'email': state['account_id'], 'connected': bool(state['connected'])}
 
@@ -1063,7 +1063,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
 
     @application.get('/jobs/{job_id}')
     def job(job_id: str,context=Depends(session)):
-        with application.state.accounts.guard(context,connected=False) as conn:
+        with application.state.accounts.guard(context,connected=False, readonly=True) as conn:
             auth=conn.execute('SELECT * FROM auth_jobs WHERE job_id=? AND session_hash=? AND generation=?',
                 (job_id,context.session_hash,context.generation)).fetchone()
             if auth:

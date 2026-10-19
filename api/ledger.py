@@ -39,7 +39,7 @@ def register(application, session):
     @application.get('/ledger/summary')
     def summary(month: str | None = Query(None, pattern=MONTH), context=Depends(session)):
         enabled()
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             return {**identity(context), **ledger_summary(conn, context.account_id, month or local_month())}
 
     @application.get('/ledger/entries')
@@ -47,7 +47,7 @@ def register(application, session):
                 limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0, le=100000),
                 context=Depends(session)):
         enabled()
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             rows, total = list_entries(conn, context.account_id, month=month, merchant=merchant,
                                        limit=limit, offset=offset)
         return {**identity(context), 'entries': rows, 'total': total, 'limit': limit, 'offset': offset}
@@ -69,5 +69,5 @@ def register(application, session):
     @application.get('/ledger/subscriptions')
     def recurring(context=Depends(session)):
         enabled()
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             return {**identity(context), **subscriptions(conn, context.account_id)}

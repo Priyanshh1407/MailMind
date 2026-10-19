@@ -58,6 +58,17 @@ def register(application, session, search_collection):
             with manager.guard(context, connected='read') as conn:
                 yield conn
 
+        @contextmanager
+        def fenced():
+            # Around a provider call: check the account before and after, but
+            # never hold the database during the call. (Holding it locked
+            # SQLite for the whole request and made other requests fail.)
+            with manager.guard(context, connected='read'):
+                pass
+            yield
+            with manager.guard(context, connected='read'):
+                pass
+
         def semantic(query):
             from src.email_search import semantic_candidates
             return semantic_candidates(query, context.account_id, search_collection())
@@ -89,7 +100,7 @@ def register(application, session, search_collection):
             value, _source, _model = call_structured(
                 contents, system=SYSTEM_INSTRUCTION, schema=OUTPUT_SCHEMA, schema_name='mailmind_inbox_agent',
                 settings=settings, operation=TokenOperation.INBOX_QUESTION.value, validate=validate_step,
-                usage_recorder=recorder, before_request=read_db, budget_seconds=max(3, min(remaining, 20)),
+                usage_recorder=recorder, before_request=fenced, budget_seconds=max(3, min(remaining, 20)),
                 max_output_tokens=1536, record_key=f'step-{steps["count"]}', max_chars=16000, salvage=salvage_step)
             return value
 
@@ -153,7 +164,7 @@ def register(application, session, search_collection):
     @application.get('/questions/{question_id}')
     def get_question(question_id: int, context=Depends(session)):
         enabled()
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             row = conn.execute('SELECT * FROM inbox_questions WHERE question_id=? AND account_id=?',
                                (question_id, context.account_id)).fetchone()
         if row is None:
@@ -163,7 +174,7 @@ def register(application, session, search_collection):
     @application.get('/questions')
     def list_questions(limit: int = Query(HISTORY_LIMIT, ge=1, le=50), context=Depends(session)):
         enabled()
-        with application.state.accounts.guard(context, connected='read') as conn:
+        with application.state.accounts.guard(context, connected='read', readonly=True) as conn:
             rows = conn.execute('SELECT * FROM inbox_questions WHERE account_id=? ORDER BY question_id DESC LIMIT ?',
                                 (context.account_id, limit)).fetchall()
         return {'account_id': context.account_id, 'generation': context.generation,

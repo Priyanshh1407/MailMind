@@ -10,7 +10,7 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
-At the 19 October 2026 verification, all 682 discovered backend tests passed. Each of the 25 earlier test modules passed on its own on 6 October; the seven new feature modules (`test_signals`, `test_risk`, `test_ledger`, `test_inbox_agent`, `test_follow_ups`, `test_brief`, `test_redteam`) also pass on their own.
+At the 19 October 2026 verification, all 686 discovered backend tests passed. Each of the 25 earlier test modules passed on its own on 6 October; the eight new modules (`test_signals`, `test_risk`, `test_ledger`, `test_inbox_agent`, `test_follow_ups`, `test_brief`, `test_redteam`, `test_concurrency`) each passed on their own on 20 October.
 
 One full run on 19 October 2026 reported a single error that did not recur in eight later full runs (two in place, six in an isolated copy). Its test name was not captured, so no cause is claimed. If it happens again, keep the run's output: `unittest` prints the failing test's name and traceback.
 
@@ -19,6 +19,7 @@ Regression and contract suites added after the audit:
 - `test_audit_regressions.py`: every audit finding reproduced through the real code path (provider failover, shadow authority, grounding, deadlines, explanations, Telegram timing, retry-time repair, deletion errors, configuration messages, the action-type filter).
 - `test_provider_faults.py`: 9 provider fault types × 2 scopes against a written contract (rendered to `docs/RESILIENCE.md`).
 - `test_cloud_evaluation.py`: the evaluation harness scores recordings exactly as production parses them.
+- `test_concurrency.py`: dashboard reads succeed while another process holds SQLite's write lock (no read waits out the busy timeout), a write inside a read-only guard fails loudly, and real writes still wait their turn and succeed.
 - `test_redteam.py`: hidden text kept out of the body but kept as evidence, multi-letter homoglyph spoofs caught, follow-ups unable to add links or claim actions another party wrote, every layer stopping something, only the documented residual remaining, and the report and dashboard data replaying byte for byte.
 - `test_brief.py`: local candidates without spam, the fallback needing no model, only verified facts reaching sentences, invented refs and wrong-kind proposals discarded, the single-agent ablation under the same verification, a brief with providers down, proposals running only on approval (once), rate limits, time and flag validation, purge, migration 20 and the report replay.
 - `test_follow_ups.py`: names, amounts, links and addresses masked and restored locally (links without trailing punctuation), greetings that follow how the user addressed people, style learned from sent mail, every AI-tell and invented-fact rule, one revision then problems shown, a fake Gmail that fails the test if anything but a read is called, the sent list, draft job and copy marking, switched-off and local-only modes, purge, migration 19, privacy of every benchmark request, and the report replay.
@@ -73,6 +74,10 @@ Current verified result:
 - production build passed.
 
 If Playwright Chromium is unavailable, run <code>npx playwright install chromium</code> or configure a compatible installed Chrome/Chromium executable.
+
+## Live check against the real app
+
+`npm run test:live` (in `frontend/`) drives the real dashboard against a running API, with no mocks, at desktop and phone sizes: every tab renders, no horizontal overflow, no JavaScript errors, no server errors, and only the two expected 4xx responses (`401 /session` before the first session opens, `404 /mailmind-supervisor.json` when the launcher is not running). Start the API and the built UI first. On 20 October 2026 it passed 42 of 42 against a copy of the owner's data.
 
 ## Integration helpers
 

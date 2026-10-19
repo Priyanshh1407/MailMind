@@ -203,22 +203,25 @@ class TokenRecorder:
             self.request_prefix, attempt, provider, model_version, operation
         )
         try:
-            return record_token_usage(
-                account_id=self.account_id,
-                email_id=self.email_id,
-                job_id=self.job_id,
-                request_id=request_id,
-                provider=provider,
-                model_version=model_version,
-                operation=operation,
-                input_tokens=measurement.input_tokens,
-                output_tokens=measurement.output_tokens,
-                total_tokens=measurement.total_tokens,
-                count_method=measurement.count_method,
-                outcome=outcome,
-                metadata=measurement.metadata,
-                db_path=self.db_path,
-            )
+            # Telemetry must never make a request wait: if the database is busy
+            # for more than a second, this count is skipped.
+            from .database import connection
+            with connection(self.db_path, busy_timeout_ms=1000) as conn:
+                return record_token_usage(
+                    account_id=self.account_id, db_conn=conn,
+                    email_id=self.email_id,
+                    job_id=self.job_id,
+                    request_id=request_id,
+                    provider=provider,
+                    model_version=model_version,
+                    operation=operation,
+                    input_tokens=measurement.input_tokens,
+                    output_tokens=measurement.output_tokens,
+                    total_tokens=measurement.total_tokens,
+                    count_method=measurement.count_method,
+                    outcome=outcome,
+                    metadata=measurement.metadata,
+                )
         except Exception:
             return None
 

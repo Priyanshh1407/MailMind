@@ -185,9 +185,10 @@ class SalvageTests(unittest.TestCase):
 
 
 class ApiTests(AgentBase):
-    def client(self, settings=None):
+    def client(self, settings=None, search_index=False):
+        index = Mock(return_value=Mock()) if search_index else Mock(side_effect=RuntimeError('no index'))
         app = create_app(settings=settings or self.settings, model_factory=Mock(return_value=Mock(model_loaded=False)),
-                         vector_factory=Mock(return_value=Mock()), search_vector_factory=Mock(side_effect=RuntimeError('no index')))
+                         vector_factory=Mock(return_value=Mock()), search_vector_factory=index)
         client = TestClient(app, base_url='http://localhost')
         client.__enter__()
         self.addCleanup(client.__exit__, None, None, None)
@@ -225,6 +226,41 @@ class ApiTests(AgentBase):
         self.assertEqual([step['action'] for step in item['trace']], ['read_email', 'final'])
         self.assertNotIn('inspection', json.dumps(item['trace']))
         self.assertEqual(client.get('/questions').json()['questions'][0]['question_id'], item['question_id'])
+
+    def test_a_slow_provider_or_search_never_locks_the_database(self):
+        # Found on the live system: the provider call used to run inside a
+        # database transaction, so other requests failed with "storage busy".
+        import threading
+        steps = iter([step('search_mail', query='deposit'), step('read_email', email_id='landlord'),
+                      step('final', final(('By 15 October.', 'landlord', 'by 15 October after the inspection')))])
+        in_call = threading.Event()
+
+        def slow_provider(*args, **kwargs):
+            # Like the real call_structured: the request runs inside the hook.
+            with kwargs['before_request']():
+                in_call.set()
+                time.sleep(2)
+            return next(steps), 'gemini', 'm'
+
+        def slow_search(*args, **kwargs):
+            in_call.set()
+            time.sleep(2)
+            return []
+        with patch('src.llm_api.call_structured', side_effect=slow_provider), \
+                patch('src.email_search.semantic_candidates', side_effect=slow_search):
+            client = self.client(search_index=True)
+            question = client.post('/questions', json={'question': 'When is the deposit back?'}).json()['question_id']
+            for _ in range(4):  # provider, slow search, provider (read), provider (final)
+                self.assertTrue(in_call.wait(5))
+                in_call.clear()
+                time.sleep(0.3)
+                started = time.monotonic()
+                write = client.post('/questions', json={'question': 'A second one?'})  # a write: claims a slot
+                read = client.get(f'/questions/{question}')
+                self.assertLess(time.monotonic() - started, 1.5)
+                self.assertIn(write.status_code, (409, 429))
+                self.assertEqual(read.status_code, 200)
+            self.assertEqual(self.wait(client, question)['status'], 'answered')
 
     def test_provider_failure_switched_off_local_only_and_purge(self):
         from src.llm_api import StructuredUnavailable
