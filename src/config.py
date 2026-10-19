@@ -59,6 +59,8 @@ class Settings:
     ledger_enabled: bool = False
     # "Ask your inbox": a read-only agent whose every sentence cites a verified quote.
     inbox_questions_enabled: bool = False
+    # Follow-ups tab: drafts to copy into Gmail. MailMind never sends mail.
+    follow_ups_enabled: bool = False
 
     def __post_init__(self):
         for name, low, high in (('poll_interval_seconds',5,86400), ('batch_size',1,200),
@@ -79,7 +81,7 @@ class Settings:
         for name in ('action_extraction_enabled', 'action_reminders_enabled',
                      'telegram_action_reminders_enabled',
                      'token_collection_enabled', 'token_analytics_visible',
-                     'explanations_visible', 'risk_analysis_enabled', 'ledger_enabled', 'inbox_questions_enabled'):
+                     'explanations_visible', 'risk_analysis_enabled', 'ledger_enabled', 'inbox_questions_enabled', 'follow_ups_enabled'):
             if type(getattr(self, name)) is not bool:
                 raise ValueError(f'{name} must be a boolean')
         if self.action_reminders_enabled and not self.action_extraction_enabled:
@@ -154,4 +156,5 @@ class Settings:
             risk_analysis_enabled=_environment_bool('MAILMIND_RISK_ANALYSIS_ENABLED',False),
             ledger_enabled=_environment_bool('MAILMIND_LEDGER_ENABLED',False),
             inbox_questions_enabled=_environment_bool('MAILMIND_INBOX_QUESTIONS_ENABLED',False),
+            follow_ups_enabled=_environment_bool('MAILMIND_FOLLOW_UPS_ENABLED',False),
         )

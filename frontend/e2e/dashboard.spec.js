@@ -28,7 +28,7 @@ async function setup(page) {
     if(path==='/session' && method==='POST'){state.paired=true;data={csrf_token:'synthetic-csrf'};}
     else if(!state.paired){status=401;data={detail:'Sign in to this local app first.'};}
     else if(path==='/session')data={email:identity.account_id,csrf_token:'synthetic-csrf',connected:state.connected,purge_pending:false,generation:state.generation,read_only:!state.connected&&state.workerError==='gmail_unavailable'};
-    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},intelligence_backfill:{enabled:true,eligible:2,queued:0,running:0,retry:0,complete:0,dead:0},signals:state.signals||{captured:20,eligible:4,queued:0,running:0,retry:0,complete:0,dead:0},risk:{enabled:true,high:1,medium:0,low:1,high_unreviewed:state.riskReviewed?0:1,unscored:22},ledger:{enabled:state.ledgerEnabled!==false},questions:{enabled:true},poll_interval_seconds:60,worker_lease_seconds:90,worker:state.workerError?{heartbeat_at:stamp,last_success_at:stamp,last_error_at:stamp,last_error_code:state.workerError}:null,connectivity:state.workerError?{gmail:'unreachable',failed_checks:3,retry_in_seconds:20}:{gmail:'ok',failed_checks:0,retry_in_seconds:null},ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
+    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},intelligence_backfill:{enabled:true,eligible:2,queued:0,running:0,retry:0,complete:0,dead:0},signals:state.signals||{captured:20,eligible:4,queued:0,running:0,retry:0,complete:0,dead:0},risk:{enabled:true,high:1,medium:0,low:1,high_unreviewed:state.riskReviewed?0:1,unscored:22},ledger:{enabled:state.ledgerEnabled!==false},questions:{enabled:true},follow_ups:{enabled:true},poll_interval_seconds:60,worker_lease_seconds:90,worker:state.workerError?{heartbeat_at:stamp,last_success_at:stamp,last_error_at:stamp,last_error_code:state.workerError}:null,connectivity:state.workerError?{gmail:'unreachable',failed_checks:3,retry_in_seconds:20}:{gmail:'ok',failed_checks:0,retry_in_seconds:null},ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
     else if(path==='/telemetry'){
       status=state.telemetryError||200;
       data=status!==200?{detail:'Synthetic telemetry outage.'}:{...identity,totals:{saved:24,completed:23,labelled:state.rows.filter(row=>row.human_label).length,corrected:state.rows.filter(row=>row.human_label&&row.human_label!==row.prediction).length,confirmed:state.rows.filter(row=>row.human_label&&row.human_label===row.prediction).length,feedback_events:state.revision,prediction_attempts:24},classification_timing:{mean_ms:1201,sample_count:24},local_model:{ready:state.localReady||false,version:'legacy-binary',evaluation_scope:state.evaluationScope||null},mode:{local_only:state.localOnly||false},providers:{gemini:state.localOnly?'disabled_local_only':'configured_unverified',groq:state.localOnly?'disabled_local_only':'unconfigured'}};
@@ -76,6 +76,11 @@ async function setup(page) {
     else if(path==='/logout'){state.paired=false;state.connected=false;state.generation++;data={message:'Signed out. Saved mail is kept.'};}
     else if(path==='/inbox/sync'){state.syncCalls++;status=202;data={job_id:43,status:'queued',message:'Checking Gmail for new messages.'};}
     else if(path==='/ingestion/fetch-next'){state.fetchCalls++;(state.fetchBodies||=[]).push(route.request().postDataJSON());status=202;data={job_id:44,status:'queued',message:'Loading the next 20 older messages.'};}
+    else if(path==='/follow-ups/sent'){data={...identity,messages:[{message_id:'sent-1',thread_id:'thread-1',to:'Priya Menon <priya@zoho.example>',subject:'Application for Backend Engineer',snippet:'I applied for the Backend Engineer role on 12 September.',sent_at:1789000000000,reply_state:'waiting',waiting_days:4}],total:1,limit:25,offset:0,refreshing:false,refreshed_at:stamp,has_more:false,error_code:null};}
+    else if(path==='/follow-ups/sent/refresh'){state.sentRefreshes=(state.sentRefreshes||0)+1;status=202;data={status:'running',message:'Fetching your sent mail...'};}
+    else if(path==='/follow-ups/drafts'&&method==='POST'){state.draftRequest=route.request().postDataJSON();state.draftPolls=0;status=202;data={follow_up_id:3,status:'running',message:'Reading the thread...'};}
+    else if(path==='/follow-ups/drafts/3'&&method==='GET'){state.draftPolls++;const done=state.draftPolls>1;data={...identity,follow_up_id:3,message_id:'sent-1',thread_id:'thread-1',length:'standard',status:done?'drafted':'running',text:done?'Dear Ms. Menon,\n\nI am writing about my application for the Backend Engineer role, which I submitted on 12 September. Could you let me know whether it has been shortlisted?\n\nRegards,\nArjun Nair':null,issues:[],revised:true,summary:[{from:'You',date:'12 Sep 2026',preview:'I applied for the Backend Engineer role.'}],references:['Backend Engineer role'],recipient:'Priya Menon',total_tokens:done?900:null,latency_ms:done?3100:null,error_code:null,created_at:stamp,updated_at:stamp};}
+    else if(path==='/follow-ups/drafts/3'&&method==='PATCH'){state.draftMarked=route.request().postDataJSON();data={follow_up_id:3,status:'copied',message:'Saved.'};}
     else if(path==='/questions'&&method==='POST'){state.asked=route.request().postDataJSON();state.askPolls=0;status=202;data={question_id:9,status:'running',message:'Searching your saved mail...'};}
     else if(path==='/questions/9'){state.askPolls++;const done=state.askPolls>1;data={...identity,question_id:9,question:state.asked.question,status:done?'answered':'running',answer:done?{sentences:[{text:'Please review the synthetic request by Friday.',citations:[{email_id:'synthetic-0',quote:'It is due on Friday',subject:'Synthetic email 0',date:'2026-09-18'}]}],unanswerable:false,dropped_sentences:1,citations_total:2,citations_verified:1}:null,trace:done?[{step:1,action:'search_mail',query:'synthetic request',results:3,elapsed_ms:900},{step:2,action:'read_email',email_id:'synthetic-0',ok:true,elapsed_ms:800},{step:3,action:'final',elapsed_ms:1100}]:[{step:1,action:'search_mail',query:'synthetic request',results:3,elapsed_ms:900}],total_tokens:done?2400:null,latency_ms:done?2800:null,error_code:null,created_at:stamp,updated_at:stamp};}
     else if(path==='/questions'){data={...identity,questions:[]};}
@@ -355,6 +360,28 @@ test('Ask tab answers with verified citations that open the source email',async(
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog').locator('mark')).toHaveText('It is due on Friday');
   await page.keyboard.press('Escape');
+});
+test('Follow-ups tab: pick a sent email, get a draft, copy it and open the Gmail thread',async({page,context})=>{
+  await context.grantPermissions(['clipboard-read','clipboard-write']);
+  const state=await setup(page);
+  await page.getByRole('tab',{name:'Follow-ups'}).click();
+  const panel=page.locator('#panel-follow-ups');
+  await expect(panel.getByText('Which email do you want to follow up on?')).toBeVisible();
+  await expect.poll(()=>state.sentRefreshes||0).toBe(1);
+  await expect(panel.getByText('No reply · 4 days')).toBeVisible();
+  await panel.getByRole('button',{name:/Application for Backend Engineer/}).click();
+  await expect.poll(()=>state.draftRequest).toEqual({message_id:'sent-1',length:'standard'});
+  await expect(panel.getByRole('region',{name:'Thread summary'})).toContainText('I applied for the Backend Engineer role.');
+  const box=panel.getByLabel('Your follow-up (edit anything before copying)');
+  await expect(box).toHaveValue(/^Dear Ms\. Menon,/);
+  await expect(panel.getByText('Passed every check',{exact:false})).toBeVisible();
+  await expect(panel.getByRole('link',{name:'Open in Gmail'})).toHaveAttribute('href','https://mail.google.com/mail/u/0/#all/thread-1');
+  await panel.getByRole('button',{name:'Copy'}).click();
+  await expect(panel.getByRole('button',{name:'Copied'})).toBeVisible();
+  // Windows clipboards store line breaks as CRLF.
+  expect((await page.evaluate(()=>navigator.clipboard.readText())).replace(/\r\n/g,'\n')).toContain('Regards,\nArjun Nair');
+  await expect.poll(()=>state.draftMarked).toEqual({status:'copied'});
+  await expect(panel.getByText('MailMind never sends mail.',{exact:false})).toBeVisible();
 });
 test('account menu and feedback editor work with keyboard and Escape',async({page})=>{
   await setup(page);const trigger=page.getByRole('button',{name:'Account options'});

@@ -67,7 +67,7 @@ FastAPI owns:
 - explicit bounded saved-mail intelligence backfill; and
 - explicit recovery for unfinished tasks and ambiguous notification delivery.
 
-The API opens/migrates schema version 18 and lazily initializes heavy or optional services.
+The API opens/migrates schema version 19 and lazily initializes heavy or optional services.
 
 ### Gmail/classification worker
 
@@ -214,6 +214,15 @@ The agent (`src/inbox_agent.py`) works in at most 6 steps within 45 seconds. Eac
 | `risk_report` | An email's scam band and warning-sign names |
 
 The answer is verified, not trusted: a citation counts only if its email was opened with `read_email` in that session and its quote passes `quote_in_source` against that email's text. A sentence without a verified citation is removed (and counted in the trace). Amount and ledger tokens issued in the session are filled in locally (quotes show the amount as the email wrote it, so the source pop-up can highlight it); invented tokens become "[amount unavailable]". Status is `answered`, `unanswerable` (the model abstained), `unverified` (nothing survived verification), `failed` or `cancelled`. The stored trace has tool names, search words, counts and timings, never email text.
+
+### Follow-ups
+
+With `MAILMIND_FOLLOW_UPS_ENABLED=true`, the Follow-ups tab drafts a reply for a sent email; the user copies it into Gmail. MailMind has no send or draft code path, and a test fails if any Gmail method other than the reads below is touched.
+
+- `POST /follow-ups/sent/refresh` (rate-limited) reads one page of `SENT` (last 90 days) with `format='metadata'` into `sent_messages`, and checks up to 10 threads' latest sender to mark them waiting or replied. `GET /follow-ups/sent` serves the cache with local search.
+- `POST /follow-ups/drafts` starts a job: read the whole thread (`threads.get`), mask it (`src/follow_ups.py`: amounts, addresses, links and long numbers become numbered placeholders; the header names and the name the user addressed become `{{recipient_name}}` / `{{my_name}}`), learn or reuse the user's style (greeting, sign-off, signature, length, spelling from their recent sent mail, cached for a week), and call `call_structured` with its own schema (greeting, 1-3 paragraphs, closing, references).
+- `check_draft` then rejects stock AI phrases, dash chains, exclamation marks, emojis, lists, rhetorical triples, wrong length, a greeting or sign-off other than the user's, references that do not quote the thread, and any number, date or weekday the thread never mentions. A failing draft gets one revision with the exact problems; whatever still fails is returned as "Check before sending" notes. The draft is assembled and unmasked locally.
+- The recipient is addressed exactly as the user addressed them in their own last message ("Dear Ms. Menon", "Dear Sir/Madam", "Hi Neha"); team mailboxes never become "Dear Sales".
 
 ## Intelligence data flow
 

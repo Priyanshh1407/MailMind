@@ -185,6 +185,9 @@ export function validateResponse(path, method, data) {
   if (valid && method === 'POST' && route === '/questions') valid = positiveInteger(data.question_id) && data.status === 'running' && typeof data.message === 'string';
   if (valid && method === 'GET' && /^\/questions\/\d+$/.test(route)) valid = identity(data) && validQuestion(data);
   if (valid && method === 'GET' && route === '/questions') valid = identity(data) && Array.isArray(data.questions) && data.questions.every(validQuestion);
+  if (valid && method === 'GET' && route === '/follow-ups/sent') valid = identity(data) && Array.isArray(data.messages) && data.messages.every(row => record(row) && typeof row.message_id === 'string' && typeof row.thread_id === 'string' && typeof row.subject === 'string' && integer(row.sent_at) && [null, 'waiting', 'replied'].includes(row.reply_state) && (row.waiting_days === null || integer(row.waiting_days))) && typeof data.refreshing === 'boolean' && typeof data.has_more === 'boolean' && integer(data.total);
+  if (valid && method === 'GET' && /^\/follow-ups\/drafts\/\d+$/.test(route)) valid = identity(data) && positiveInteger(data.follow_up_id) && ['running', 'drafted', 'copied', 'dismissed', 'failed'].includes(data.status) && (data.text === null || typeof data.text === 'string') && Array.isArray(data.issues) && data.issues.every(item => typeof item === 'string') && Array.isArray(data.summary) && typeof data.thread_id === 'string';
+  if (valid && method === 'POST' && route === '/follow-ups/drafts') valid = positiveInteger(data.follow_up_id) && typeof data.message === 'string';
   const actionMutation = /^\/actions\/\d+(?:\/snooze)?$/.test(route);
   if (valid && actionMutation && ['PATCH', 'POST'].includes(method)) {
     valid = validActionMutation(data);

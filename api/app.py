@@ -968,6 +968,8 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                     'ledger':{'enabled':bool(application.state.settings.ledger_enabled)},
                     'questions':{'enabled':bool(application.state.settings.inbox_questions_enabled
                                                 and not application.state.settings.local_only)},
+                    'follow_ups':{'enabled':bool(application.state.settings.follow_ups_enabled
+                                                 and not application.state.settings.local_only)},
                     'poll_interval_seconds':application.state.settings.poll_interval_seconds,
                     'worker_lease_seconds':application.state.settings.worker_lease_seconds,
                     'batch_size':application.state.settings.batch_size}
@@ -1176,6 +1178,8 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     ledger_routes.register(application, session)
     from api import questions as question_routes
     question_routes.register(application, session, search_collection)
+    from api import follow_ups as follow_up_routes
+    follow_up_routes.register(application, session)
 
     origins = (settings or Settings()).frontend_origins
     application.add_middleware(CORSMiddleware, allow_origins=list(origins), allow_credentials=True,

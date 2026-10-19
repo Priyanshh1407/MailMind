@@ -19,6 +19,7 @@ import { SearchFilters } from './components/SearchFilters';
 import { TokenUsagePanel } from './components/TokenUsagePanel';
 import { MoneyPanel } from './components/MoneyPanel';
 import { AskPanel } from './components/AskPanel';
+import { FollowUpsPanel } from './components/FollowUpsPanel';
 import { EASE_OUT } from './motion';
 import { BootContext, useBootSequence } from './boot';
 
@@ -48,6 +49,7 @@ const TABS = [
   { key: 'usage', label: 'Usage' },
   { key: 'money', label: 'Money', when: status => status?.ledger?.enabled },
   { key: 'ask', label: 'Ask', when: status => status?.questions?.enabled },
+  { key: 'follow-ups', label: 'Follow-ups', when: status => status?.follow_ups?.enabled },
 ];
 
 function App() {
@@ -58,10 +60,12 @@ function App() {
   const [usageOpened, setUsageOpened] = useState(false);
   const [moneyOpened, setMoneyOpened] = useState(false);
   const [askOpened, setAskOpened] = useState(false);
+  const [followOpened, setFollowOpened] = useState(false);
   useEffect(() => {
     if (activeTab === 'usage') setUsageOpened(true);
     if (activeTab === 'money') setMoneyOpened(true);
     if (activeTab === 'ask') setAskOpened(true);
+    if (activeTab === 'follow-ups') setFollowOpened(true);
   }, [activeTab]);
   const tabRefs = useRef([]);
   const {
@@ -170,6 +174,9 @@ function App() {
         </TabPanel>}
         {tabs.some(tab => tab.key === 'ask') && <TabPanel id='ask' active={activeTab === 'ask'}>
           {askOpened && <AskPanel snapshot={snapshot} disabled={disabled} api={api} openSource={openSource} />}
+        </TabPanel>}
+        {tabs.some(tab => tab.key === 'follow-ups') && <TabPanel id='follow-ups' active={activeTab === 'follow-ups'}>
+          {followOpened && <FollowUpsPanel snapshot={snapshot} disabled={disabled || readOnly} api={api} />}
         </TabPanel>}
       </>}
       <AppFooter autoMarkRead={snapshot?.status.auto_mark_read} />

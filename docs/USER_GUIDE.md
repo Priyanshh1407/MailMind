@@ -125,6 +125,17 @@ With the Ask tab switched on (`MAILMIND_INBOX_QUESTIONS_ENABLED=true`, plus a Ge
 
 Ask is off in local-only mode, because answering needs an AI provider.
 
+### Follow-ups
+
+With the Follow-ups tab switched on (`MAILMIND_FOLLOW_UPS_ENABLED=true`, plus a provider key):
+
+1. Open **Follow-ups**. Your recent sent mail appears at once and refreshes in the background; **No reply · N days** marks threads where your message is still the last one.
+2. Pick the email to follow up on. MailMind reads the thread and shows a short summary.
+3. A formal follow-up appears in your own greeting and sign-off. Edit anything, choose **Short** or **Standard**, or **Regenerate**.
+4. **Copy**, then **Open in Gmail** to open that thread, paste it as a reply, and send it yourself. MailMind never sends mail.
+
+If the draft could not pass every check, the problems are listed under **Check before sending**.
+
 ## Categories
 
 | Lane | Meaning |

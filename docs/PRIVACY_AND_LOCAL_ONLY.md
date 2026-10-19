@@ -15,6 +15,8 @@ No account mail is accessed before successful Google OAuth connection. The seman
 | Groq | Provider fallback | The same minimized classification payload |
 | Gemini / Groq (Money tab, optional) | Which amount in a receipt is the total, its kind and merchant | The masked email text with **every amount replaced by a numbered placeholder** and the received date; the sender is omitted. Real amounts never leave the computer |
 | Gemini / Groq (Ask tab, optional) | Answering your question about saved mail | Your question; for each email the agent chooses to read (at most 10), the same minimised text classification sends; sender **domains** only (never names or addresses); dates; amounts as `{{amount:N}}` and `{{ledger:...}}` tokens filled in locally |
+| Gmail (Follow-ups tab, optional) | Listing sent mail and reading the thread you pick | Sent-mail headers (To, Subject, Date) and Gmail's preview; the full thread only for the email you choose. MailMind never sends mail or creates drafts |
+| Gemini / Groq (Follow-ups tab, optional) | Writing the follow-up | The thread with names in its From/To headers and the names you addressed replaced by `{{recipient_name}}` / `{{my_name}}`, and amounts, email addresses, links and long numbers as numbered placeholders, all restored locally; style settings learned locally (greeting, sign-off, spelling), never your other sent emails |
 | Telegram | Optional Important alerts | Minimized masked subject and short body snippet plus delivery identifiers |
 | Local API/browser | Dashboard and controls | Account-scoped saved data over loopback |
 | Embedded Chroma | Feedback retrieval and semantic search | Local account-scoped derived text and embeddings |

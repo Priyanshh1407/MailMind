@@ -1,0 +1,7 @@
+{
+ "name": "MailMind synthetic follow-up benchmark",
+ "license": "CC0-1.0",
+ "generator": "scripts/build_follow_up_benchmark.py",
+ "threads": 18,
+ "notes": "Synthetic threads and people written for this project."
+}

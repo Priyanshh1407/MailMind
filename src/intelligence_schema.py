@@ -273,3 +273,47 @@ def migration_18(conn):
         updated_at TEXT NOT NULL
     )""")
     conn.execute('CREATE INDEX inbox_questions_recent ON inbox_questions(account_id,question_id DESC)')
+
+
+def migration_19(conn):
+    # Follow-ups: a cache of sent-mail headers, the user's learned style, and
+    # each draft. MailMind never sends mail; drafts are copied by the user.
+    conn.execute("""CREATE TABLE sent_messages (
+        account_id TEXT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+        message_id TEXT NOT NULL CHECK(length(message_id) BETWEEN 1 AND 256),
+        thread_id TEXT NOT NULL CHECK(length(thread_id) BETWEEN 1 AND 256),
+        to_header TEXT NOT NULL DEFAULT '' CHECK(length(to_header)<=1000),
+        subject TEXT NOT NULL DEFAULT '' CHECK(length(subject)<=300),
+        snippet TEXT NOT NULL DEFAULT '' CHECK(length(snippet)<=300),
+        sent_at INTEGER NOT NULL CHECK(typeof(sent_at)='integer' AND sent_at>=0),
+        reply_state TEXT CHECK(reply_state IS NULL OR reply_state IN ('waiting','replied')),
+        last_activity_at INTEGER CHECK(last_activity_at IS NULL OR last_activity_at>=0),
+        fetched_at TEXT NOT NULL,
+        PRIMARY KEY(account_id,message_id)
+    )""")
+    conn.execute('CREATE INDEX sent_messages_recent ON sent_messages(account_id,sent_at DESC)')
+    conn.execute("""CREATE TABLE follow_up_style (
+        account_id TEXT PRIMARY KEY REFERENCES accounts(account_id) ON DELETE CASCADE,
+        profile_json TEXT NOT NULL CHECK(length(profile_json)<=4096 AND json_valid(profile_json)),
+        computed_at TEXT NOT NULL
+    )""")
+    conn.execute("""CREATE TABLE follow_ups (
+        follow_up_id INTEGER PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+        message_id TEXT NOT NULL CHECK(length(message_id) BETWEEN 1 AND 256),
+        thread_id TEXT NOT NULL CHECK(length(thread_id) BETWEEN 1 AND 256),
+        length TEXT NOT NULL CHECK(length IN ('short','standard')),
+        status TEXT NOT NULL CHECK(status IN ('running','drafted','copied','dismissed','failed')),
+        draft_text TEXT CHECK(draft_text IS NULL OR length(draft_text)<=6000),
+        issues_json TEXT NOT NULL DEFAULT '[]' CHECK(length(issues_json)<=8192 AND json_valid(issues_json)),
+        revised INTEGER NOT NULL DEFAULT 0 CHECK(revised IN (0,1)),
+        summary_json TEXT NOT NULL DEFAULT '[]' CHECK(length(summary_json)<=8192 AND json_valid(summary_json)),
+        references_json TEXT NOT NULL DEFAULT '[]' CHECK(length(references_json)<=4096 AND json_valid(references_json)),
+        recipient TEXT NOT NULL DEFAULT '' CHECK(length(recipient)<=200),
+        total_tokens INTEGER CHECK(total_tokens IS NULL OR total_tokens>=0),
+        latency_ms INTEGER CHECK(latency_ms IS NULL OR latency_ms>=0),
+        error_code TEXT CHECK(error_code IS NULL OR length(error_code) BETWEEN 1 AND 80),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
+    conn.execute('CREATE INDEX follow_ups_recent ON follow_ups(account_id,follow_up_id DESC)')
