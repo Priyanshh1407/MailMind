@@ -10,13 +10,16 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
-At the 6 October 2026 verification, all 590 discovered backend tests passed, and each of the 25 test modules also passes when run on its own.
+At the 19 October 2026 verification, all 606 discovered backend tests passed. Each of the 25 earlier test modules passed on its own on 6 October; the new `test_signals` module also passes on its own.
+
+One full run on 19 October 2026 reported a single error that did not recur in eight later full runs (two in place, six in an isolated copy). Its test name was not captured, so no cause is claimed. If it happens again, keep the run's output: `unittest` prints the failing test's name and traceback.
 
 Regression and contract suites added after the audit:
 
 - `test_audit_regressions.py`: every audit finding reproduced through the real code path (provider failover, shadow authority, grounding, deadlines, explanations, Telegram timing, retry-time repair, deletion errors, configuration messages, the action-type filter).
 - `test_provider_faults.py`: 9 provider fault types × 2 scopes against a written contract (rendered to `docs/RESILIENCE.md`).
 - `test_cloud_evaluation.py`: the evaluation harness scores recordings exactly as production parses them.
+- `test_signals.py`: security signals (Gmail's authentication verdicts preferred over forged earlier hops, reply paths, links, hidden text) are extracted without changing the visible body, saved with the email, backfilled without side effects, fenced on account switch, purged with the account, and exposed by a CSRF-protected route.
 
 The backend suite covers:
 
@@ -58,8 +61,8 @@ Set-Location ..
 
 Current verified result:
 
-- 42 Node unit tests passed;
-- 39 Playwright browser scenarios passed;
+- 58 Node unit tests passed;
+- 40 Playwright browser scenarios passed;
 - lint passed;
 - production build passed.
 

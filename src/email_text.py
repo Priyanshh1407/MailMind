@@ -69,6 +69,18 @@ def prepare_training_text(frame):
     return frame
 
 
+MAX_LINKS = 50
+MAX_LINK_HREF_CHARS = 2048
+MAX_LINK_TEXT_CHARS = 200
+MAX_HIDDEN_TEXT_CHARS = 1000
+_VOID_TAGS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'}
+# Inline styles that hide text from a reader but not from a parser.
+_HIDDEN_STYLE = re.compile(
+    r'display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?:\.0+)?(?:px|pt|em|rem|%)?\s*(?:;|$)'
+    r'|opacity\s*:\s*0(?:\.0+)?\s*(?:;|$)|max-height\s*:\s*0(?:px)?\s*(?:;|$)', re.I)
+_PLAIN_URL = re.compile(r'(?i)\bhttps?://[^\s<>"\'()\[\]]+')
+
+
 class _HTMLText(HTMLParser):
     ignored = {'script', 'style', 'head', 'template', 'svg', 'noscript'}
     blocks = {'p', 'div', 'br', 'hr', 'li', 'tr', 'td', 'th', 'pre', 'h1', 'h2', 'h3', 'h4', 'table', 'section', 'blockquote'}
@@ -77,12 +89,27 @@ class _HTMLText(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.text = []
         self.hidden = []
+        # Evidence for scam checks: links (visible text + target) and text a
+        # reader can't see. The visible text above stays exactly as before.
+        self.links = []
+        self.anchor = None
+        self.styled_hidden = []
+        self.hidden_text = []
 
     def handle_starttag(self, tag, attrs):
         if tag in self.ignored:
             self.hidden.append(tag)
         if not self.hidden and tag in self.blocks:
             self.text.append('\n')
+        values = {name: value or '' for name, value in attrs}
+        if (tag not in _VOID_TAGS and not self.hidden
+                and ('hidden' in values or _HIDDEN_STYLE.search(values.get('style', '')))):
+            self.styled_hidden.append(tag)
+        if tag == 'a' and not self.hidden:
+            self._close_anchor()
+            href = values.get('href', '').strip()
+            if href:
+                self.anchor = (href[:MAX_LINK_HREF_CHARS], [])
 
     def handle_startendtag(self, tag, attrs):
         if not self.hidden and tag in self.blocks:
@@ -91,12 +118,31 @@ class _HTMLText(HTMLParser):
     def handle_endtag(self, tag):
         if tag in self.hidden:
             self.hidden = self.hidden[:len(self.hidden)-1-self.hidden[::-1].index(tag)]
+        if tag in self.styled_hidden:
+            self.styled_hidden = self.styled_hidden[:len(self.styled_hidden)-1-self.styled_hidden[::-1].index(tag)]
+        if tag == 'a':
+            self._close_anchor()
         if not self.hidden and tag in self.blocks:
             self.text.append('\n')
 
     def handle_data(self, data):
         if not self.hidden:
             self.text.append(data)
+            if self.anchor is not None:
+                self.anchor[1].append(data)
+            if self.styled_hidden:
+                self.hidden_text.append(data)
+
+    def _close_anchor(self):
+        if self.anchor is not None and len(self.links) < MAX_LINKS:
+            href, parts = self.anchor
+            text = ' '.join(''.join(parts).split())[:MAX_LINK_TEXT_CHARS]
+            self.links.append({'text': text, 'href': href})
+        self.anchor = None
+
+    def close(self):
+        super().close()
+        self._close_anchor()
 
 
 def html_to_text(value, *, limit=MAX_BODY_CHARS):
@@ -104,3 +150,23 @@ def html_to_text(value, *, limit=MAX_BODY_CHARS):
     parser.feed(value)
     parser.close()
     return normalize_text(''.join(parser.text), limit=limit)
+
+
+def html_evidence(value):
+    """Links and hidden text of an HTML body: ([{text, href}], hidden_text)."""
+    parser = _HTMLText()
+    parser.feed(value)
+    parser.close()
+    hidden = normalize_text(' '.join(parser.hidden_text), limit=MAX_HIDDEN_TEXT_CHARS)
+    return parser.links, hidden
+
+
+def plain_links(value):
+    """Bare URLs in a plain-text body; their visible text is the URL itself."""
+    links = []
+    for match in _PLAIN_URL.finditer(value or ''):
+        href = match.group(0).rstrip('.,;:!?')[:MAX_LINK_HREF_CHARS]
+        links.append({'text': href[:MAX_LINK_TEXT_CHARS], 'href': href})
+        if len(links) >= MAX_LINKS:
+            break
+    return links

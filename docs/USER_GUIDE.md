@@ -62,6 +62,7 @@ The progress panel distinguishes saved work, waiting tasks, active classificatio
 - **Sync new messages** queues a durable, rate-limited live Gmail check.
 - Older mail: Older mail loads automatically, 20 at a time, when you reach the last two pages of your unfiltered inbox. The next 20 load once the previous 20 have been processed, so the classification queue never floods.
 - **Analyze up to 20 saved emails** explicitly enriches eligible saved mail after Action Center extraction is enabled.
+- **Capture security signals (N)** appears while some saved emails have no security signals yet (mail saved before MailMind recorded them). It re-reads only those messages' headers and links from Gmail, about ten every few seconds, and changes nothing else: no reclassification, alerts, labels or read state.
 - Active, live-pending, historical-pending, and last-live-sync values are separate.
 
 These controls are not equivalent. Sync never grants more historical backlog. Saved-mail analysis never sends historical alerts, changes Gmail read state, or creates automatic reminders. Live mail remains ahead of backfill work.

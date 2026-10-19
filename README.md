@@ -22,6 +22,7 @@ The React dashboard combines live Gmail intake, recoverable background processin
 - Explicit saved-mail intelligence backfill in batches of at most 20, with live mail kept ahead of backfill work.
 - Optional Telegram alerts and opt-in automatic Gmail mark-as-read behavior.
 - Local-only mode with verified pre-provisioned assets and no cloud/Gmail/Telegram routing.
+- Security signals saved with every email: Gmail's SPF/DKIM/DMARC verdicts, reply paths, unsubscribe headers, links (visible text and real target) and hidden text, with an explicit backfill for older mail.
 
 ## Product workflow
 
@@ -267,12 +268,12 @@ npm run build
 npm run test:browser
 ```
 
-Latest local verification (30 September 2026):
+Latest local verification (19 October 2026):
 
-- Backend discovery: 590 tests passed, and each of the 25 test modules also passes when run alone (no test-order dependence).
+- Backend discovery: 606 tests passed in 26 modules; the 25 earlier modules were each verified alone on 30 September, and the new `test_signals` module also passes alone.
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
-- Frontend unit suite: 58 passed. Playwright browser suite: 39 passed.
-- Frontend lint and production build passed; initial JavaScript is 316 kB (101 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
+- Frontend unit suite: 58 passed. Playwright browser suite: 40 passed.
+- Frontend lint and production build passed; initial JavaScript is 332 kB (106 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
 

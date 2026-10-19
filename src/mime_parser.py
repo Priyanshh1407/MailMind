@@ -6,7 +6,8 @@ from email import message_from_string
 from email.header import decode_header
 from email.message import Message
 from email.policy import default
-from .email_text import MAX_BODY_CHARS, MAX_SENDER_CHARS, normalize_text, normalize_subject, html_to_text, preview_text
+from .email_text import (MAX_BODY_CHARS, MAX_SENDER_CHARS, MAX_LINKS, MAX_HIDDEN_TEXT_CHARS, normalize_text,
+                         normalize_subject, html_to_text, html_evidence, plain_links, preview_text)
 
 MAX_DECODED_BYTES = 262144
 MAX_PARTS = 200
@@ -27,6 +28,8 @@ class ParsedBody:
     kind: str
     warnings: list = field(default_factory=list)
     truncated: bool = False
+    links: list = field(default_factory=list)
+    hidden_text: str = ''
 
 
 def _headers(part):
@@ -85,6 +88,7 @@ def parse_body(payload, *, max_body_chars=MAX_BODY_CHARS, inline_loader=None):
     warnings, visited = [], 0
     mime_limited = False
     inline_fetches = 0
+    links, hidden = [], []
     def visit(part, depth):
         nonlocal visited, mime_limited, inline_fetches
         visited += 1
@@ -166,7 +170,13 @@ def parse_body(payload, *, max_body_chars=MAX_BODY_CHARS, inline_loader=None):
                 warnings.append('body_byte_limit')
             text = _decode_bytes(decoded[:MAX_DECODED_BYTES], headers.get_content_charset(), warnings)
             if mime == 'text/html':
+                found, hidden_text = html_evidence(text)
+                links.extend(found)
+                if hidden_text:
+                    hidden.append(hidden_text)
                 text = html_to_text(text, limit=MAX_DECODED_BYTES)
+            else:
+                links.extend(plain_links(text))
             text = normalize_text(text, limit=MAX_DECODED_BYTES)
             # Keep a bounded prefix in each subtree; the final message budget
             # applies again after joining its inline sections.
@@ -185,7 +195,14 @@ def parse_body(payload, *, max_body_chars=MAX_BODY_CHARS, inline_loader=None):
     text = normalize_text(text, limit=max_body_chars)
     if not text:
         raise MessageParseError(warnings[0] if warnings else 'empty_body')
-    return ParsedBody(text, kind, sorted(set(warnings)), truncated)
+    unique, seen = [], set()
+    for link in links:
+        key = (link['text'], link['href'])
+        if key not in seen:
+            seen.add(key)
+            unique.append(link)
+    return ParsedBody(text, kind, sorted(set(warnings)), truncated, unique[:MAX_LINKS],
+                      normalize_text(' '.join(hidden), limit=MAX_HIDDEN_TEXT_CHARS))
 
 
 def parse_gmail_message(message, message_id, *, inline_loader=None):
@@ -199,6 +216,10 @@ def parse_gmail_message(message, message_id, *, inline_loader=None):
               'subject': normalize_subject(decode_mail_header(headers.get('Subject', 'No Subject'))),
               'body': body.text, 'body_snippet': preview_text(body.text), 'body_kind': body.kind,
               'body_truncated': body.truncated, 'parse_warnings': body.warnings}
+    # Security evidence (auth results, reply paths, links). Optional: a
+    # malformed header never fails the message itself.
+    from .email_signals import extract_signals
+    result['signals'] = extract_signals(headers, message.get('threadId'), body.links, body.hidden_text)
     internal_date = message.get('internalDate')
     try:
         milliseconds = int(internal_date)

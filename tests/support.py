@@ -24,6 +24,20 @@ def load_function(relative_path, name, dependencies):
     return namespace[name]
 
 
+def rewind_schema(conn, version):
+    """Make a current test database look like it stopped at `version`.
+
+    Drops every table a later migration created (dependents first, as the
+    migrations create parents before children), then rewinds user_version.
+    """
+    from src.database import TABLES_BY_VERSION
+    later = [names for introduced, names in TABLES_BY_VERSION if introduced > version]
+    for names in reversed(later):
+        for name in sorted(names):
+            conn.execute(f"DROP TABLE IF EXISTS {name}")
+    conn.execute(f"PRAGMA user_version={int(version)}")
+
+
 def fixtures():
     return json.loads((ROOT / "tests/fixtures/emails.json").read_text(encoding="utf-8"))
 

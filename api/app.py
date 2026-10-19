@@ -63,6 +63,7 @@ from src.intelligence_safety import (
     claim_mutation_slot,
     intelligence_diagnostics,
 )
+from src.email_signals import signals_summary
 from src.intelligence_backfill import (
     backfill_summary,
     queue_intelligence_backfill,
@@ -873,6 +874,8 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                 })
             backfill['enabled'] = bool(
                 application.state.settings.action_extraction_enabled)
+            signals=(signals_summary(conn,context.account_id) if context.account_id
+                     else {'captured':0,'eligible':0,'queued':0,'running':0,'retry':0,'complete':0,'dead':0})
             ingestion = get_ingestion_state(context.account_id, conn)
             if ingestion:
                 # An opaque provider cursor is internal worker state.
@@ -948,6 +951,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                     'feedback_index_pending':conn.execute("SELECT COUNT(*) FROM feedback_history f WHERE account_id=? AND indexing_state!='indexed' AND revision_id=(SELECT MAX(revision_id) FROM feedback_history x WHERE x.account_id=f.account_id AND x.email_id=f.email_id)", (context.account_id,)).fetchone()[0],
                     'semantic_search_index':{key:search_index_counts.get(key,0) for key in ('pending','indexed','failed')},
                     'intelligence_backfill':backfill,
+                    'signals':signals,
                     'poll_interval_seconds':application.state.settings.poll_interval_seconds,
                     'worker_lease_seconds':application.state.settings.worker_lease_seconds,
                     'batch_size':application.state.settings.batch_size}
@@ -1149,6 +1153,9 @@ def create_app(*, settings=None, model_factory=MailMindModel,
         message=('Reconnecting with your saved Google sign-in. If Google asks, finish it in the browser.'
                  if saved is not None else 'Google sign-in started. Finish it in the browser. Inbox work runs separately.')
         return {'job_id':job_id,'status':'running','message':message}
+
+    from api import signals as signal_routes
+    signal_routes.register(application, session)
 
     origins = (settings or Settings()).frontend_origins
     application.add_middleware(CORSMiddleware, allow_origins=list(origins), allow_credentials=True,

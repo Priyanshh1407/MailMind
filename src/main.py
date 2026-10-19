@@ -21,6 +21,7 @@ from .work_queue import (claim_cycle, fence, finish_cycle, ingest_email,
                          record_ingestion_failure, reconcile_email_analysis,
                          process_due_reminders)
 from .pipeline import process_task, cycle_external
+from .email_signals import process_signals_backfill
 from .provider_policy import BoundedCalls
 from .database import utc_timestamp
 
@@ -248,6 +249,15 @@ def _run_agent(*, settings=None, manager=None, model=None, collection=None, stop
                         excluded.update(email['id'] for email in recovered.emails)
                         pending_count+=len(recovered.emails)
                         capacity=max(0,config.max_pending_tasks-pending_count)
+            # Security signals for mail saved before they were recorded: re-read
+            # a few due messages and save only their signals (no new tasks).
+            try:
+                process_signals_backfill(manager,context,token,service,get_messages_by_id,
+                    fence=fence,guard=guard,budget_seconds=config.provider_timeout_seconds*2)
+            except WorkCancelled:
+                raise
+            except Exception as error:
+                log_event('signals_backfill_deferred',error=error)
             with manager.guard(context) as conn:
                 fence(manager,context,token,conn)
                 state=get_ingestion_state(context.account_id,conn)

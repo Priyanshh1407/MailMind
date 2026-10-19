@@ -123,3 +123,44 @@ def migration_14(conn):
     )''')
     conn.execute('''CREATE INDEX intelligence_backfill_status
         ON intelligence_backfill_items(account_id,status,updated_at,email_id)''')
+
+
+def migration_15(conn):
+    # Security evidence per email (scam forensics, red-team). Derived from the
+    # Gmail message and recaptured on demand, so it cascades with the email.
+    conn.execute("""CREATE TABLE email_signals (
+        account_id TEXT NOT NULL,
+        email_id TEXT NOT NULL,
+        signals_version INTEGER NOT NULL CHECK(typeof(signals_version)='integer' AND signals_version>=1),
+        thread_id TEXT CHECK(thread_id IS NULL OR length(thread_id) BETWEEN 1 AND 64),
+        from_address TEXT NOT NULL DEFAULT '' CHECK(length(from_address)<=320),
+        from_domain TEXT NOT NULL DEFAULT '' CHECK(length(from_domain)<=255),
+        reply_to_domain TEXT NOT NULL DEFAULT '' CHECK(length(reply_to_domain)<=255),
+        return_path_domain TEXT NOT NULL DEFAULT '' CHECK(length(return_path_domain)<=255),
+        auth_spf TEXT NOT NULL CHECK(auth_spf IN ('pass','fail','softfail','neutral','none','temperror','permerror','policy','unknown')),
+        auth_dkim TEXT NOT NULL CHECK(auth_dkim IN ('pass','fail','softfail','neutral','none','temperror','permerror','policy','unknown')),
+        auth_dmarc TEXT NOT NULL CHECK(auth_dmarc IN ('pass','fail','softfail','neutral','none','temperror','permerror','policy','unknown')),
+        list_unsubscribe TEXT NOT NULL DEFAULT '' CHECK(length(list_unsubscribe)<=2048),
+        list_unsubscribe_post INTEGER NOT NULL DEFAULT 0 CHECK(list_unsubscribe_post IN (0,1)),
+        links_json TEXT NOT NULL DEFAULT '[]' CHECK(length(links_json)<=131072 AND json_valid(links_json) AND json_type(links_json)='array'),
+        hidden_text TEXT NOT NULL DEFAULT '' CHECK(length(hidden_text)<=1000),
+        captured_at TEXT NOT NULL,
+        PRIMARY KEY(account_id,email_id),
+        FOREIGN KEY(account_id,email_id) REFERENCES email_logs(account_id,email_id) ON DELETE CASCADE
+    )""")
+    conn.execute('CREATE INDEX email_signals_thread ON email_signals(account_id,thread_id)')
+    conn.execute('CREATE INDEX email_signals_from_domain ON email_signals(account_id,from_domain)')
+    conn.execute("""CREATE TABLE signals_backfill_items (
+        account_id TEXT NOT NULL,
+        email_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','running','retry','complete','dead')),
+        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(typeof(attempt_count)='integer' AND attempt_count>=0),
+        next_retry_at REAL NOT NULL DEFAULT 0 CHECK(next_retry_at>=0),
+        error_code TEXT CHECK(error_code IS NULL OR length(error_code) BETWEEN 1 AND 80),
+        requested_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(account_id,email_id),
+        FOREIGN KEY(account_id,email_id) REFERENCES email_logs(account_id,email_id) ON DELETE CASCADE
+    )""")
+    conn.execute('CREATE INDEX signals_backfill_due ON signals_backfill_items(account_id,status,next_retry_at,requested_at)')
+

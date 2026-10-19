@@ -67,7 +67,7 @@ FastAPI owns:
 - explicit bounded saved-mail intelligence backfill; and
 - explicit recovery for unfinished tasks and ambiguous notification delivery.
 
-The API opens/migrates schema version 14 and lazily initializes heavy or optional services.
+The API opens/migrates schema version 15 and lazily initializes heavy or optional services.
 
 ### Gmail/classification worker
 
@@ -151,6 +151,19 @@ The private, CSRF-protected `POST /intelligence/backfill` route accepts `{"limit
 ### Priority
 
 New live mail is admitted and processed before older backlog, and ordinary backlog is processed before intelligence backfill. The default active-task cap is 100. The worker time-slices processing to keep Gmail discovery responsive.
+
+### Email security signals
+
+Every Gmail message is saved with bounded security evidence in `email_signals` (`src/email_signals.py`), written in the same transaction as the email:
+
+- the SPF, DKIM and DMARC verdicts Gmail recorded in `Authentication-Results`. Gmail's own header (authserv-id `google.com`) is trusted over any earlier hop, which a sender could forge;
+- the From, Reply-To and Return-Path domains, `List-Unsubscribe` and one-click unsubscribe support, and the Gmail thread ID;
+- up to 50 links, each as visible text plus its real target domain, from both HTML anchors and bare URLs;
+- up to 1,000 characters of text a reader cannot see (`display:none`, `visibility:hidden`, zero font size or opacity, the `hidden` attribute).
+
+The visible body text is unchanged, so grounding, providers and the evaluation recordings are unaffected. A malformed header never fails the message.
+
+Mail saved before signals existed is filled in by an explicit backfill. `POST /signals/backfill` (`{"limit": 1..1000}`) admits saved Gmail messages without signals into `signals_backfill_items`. Each worker cycle then re-reads up to ten due messages and saves **only** their signals: no task, alert, label or read state changes. Temporary download failures retry with the usual backoff, deleted messages stop after the attempt limit, and an expired worker claim returns a row to retry. `GET /status` reports `signals` counts.
 
 ## Intelligence data flow
 

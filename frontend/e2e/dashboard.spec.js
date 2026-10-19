@@ -25,7 +25,7 @@ async function setup(page) {
     if(path==='/session' && method==='POST'){state.paired=true;data={csrf_token:'synthetic-csrf'};}
     else if(!state.paired){status=401;data={detail:'Sign in to this local app first.'};}
     else if(path==='/session')data={email:identity.account_id,csrf_token:'synthetic-csrf',connected:state.connected,purge_pending:false,generation:state.generation,read_only:!state.connected&&state.workerError==='gmail_unavailable'};
-    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},intelligence_backfill:{enabled:true,eligible:2,queued:0,running:0,retry:0,complete:0,dead:0},poll_interval_seconds:60,worker_lease_seconds:90,worker:state.workerError?{heartbeat_at:stamp,last_success_at:stamp,last_error_at:stamp,last_error_code:state.workerError}:null,connectivity:state.workerError?{gmail:'unreachable',failed_checks:3,retry_in_seconds:20}:{gmail:'ok',failed_checks:0,retry_in_seconds:null},ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
+    else if(path==='/status')data={...identity,connected:state.connected,is_polling:false,auth_in_progress:false,purge_pending:false,auto_mark_read:false,ingestion_paused:true,fetch_next_available:true,live_monitoring:true,active_pending_tasks:1,live_pending_tasks:0,backlog_pending_tasks:1,max_pending_tasks:100,resume_pending_tasks:50,current_batch_target_tasks:100,current_batch_admitted_tasks:100,workflow_total_tasks:24,workflow_finished_tasks:23,processing_counts:{complete:23,retry:1},notification_counts:{sent:1},ingestion_failures:[],semantic_search_index:{pending:0,indexed:24,failed:0},intelligence_backfill:{enabled:true,eligible:2,queued:0,running:0,retry:0,complete:0,dead:0},signals:state.signals||{captured:20,eligible:4,queued:0,running:0,retry:0,complete:0,dead:0},poll_interval_seconds:60,worker_lease_seconds:90,worker:state.workerError?{heartbeat_at:stamp,last_success_at:stamp,last_error_at:stamp,last_error_code:state.workerError}:null,connectivity:state.workerError?{gmail:'unreachable',failed_checks:3,retry_in_seconds:20}:{gmail:'ok',failed_checks:0,retry_in_seconds:null},ingestion:{status:'deferred',fetched_count:100,failed_count:0,last_checked_at:stamp,has_more:1,backlog_authorized:0,live_status:'empty',last_live_sync_at:stamp}};
     else if(path==='/telemetry'){
       status=state.telemetryError||200;
       data=status!==200?{detail:'Synthetic telemetry outage.'}:{...identity,totals:{saved:24,completed:23,labelled:state.rows.filter(row=>row.human_label).length,corrected:state.rows.filter(row=>row.human_label&&row.human_label!==row.prediction).length,confirmed:state.rows.filter(row=>row.human_label&&row.human_label===row.prediction).length,feedback_events:state.revision,prediction_attempts:24},classification_timing:{mean_ms:1201,sample_count:24},local_model:{ready:state.localReady||false,version:'legacy-binary',evaluation_scope:state.evaluationScope||null},mode:{local_only:state.localOnly||false},providers:{gemini:state.localOnly?'disabled_local_only':'configured_unverified',groq:state.localOnly?'disabled_local_only':'unconfigured'}};
@@ -73,6 +73,7 @@ async function setup(page) {
     else if(path==='/logout'){state.paired=false;state.connected=false;state.generation++;data={message:'Signed out. Saved mail is kept.'};}
     else if(path==='/inbox/sync'){state.syncCalls++;status=202;data={job_id:43,status:'queued',message:'Checking Gmail for new messages.'};}
     else if(path==='/ingestion/fetch-next'){state.fetchCalls++;(state.fetchBodies||=[]).push(route.request().postDataJSON());status=202;data={job_id:44,status:'queued',message:'Loading the next 20 older messages.'};}
+    else if(path==='/signals/backfill'){(state.signalBodies||=[]).push(route.request().postDataJSON());state.signals={captured:20,eligible:0,queued:4,running:0,retry:0,complete:0,dead:0};status=202;data={job_id:46,status:'queued',admitted:4,eligible:0,message:'Capturing security signals for 4 saved emails. This only re-reads headers and links; nothing else changes.'};}
     else if(path==='/intelligence/backfill'){state.backfillCalls=(state.backfillCalls||0)+1;status=202;data={job_id:45,status:'queued',requested:20,admitted:2,eligible:2,capacity:99,message:'Queued 2 saved emails for analysis.'};}
     else {status=404;data={detail:'Synthetic route not found.'};}
     try{await route.fulfill({status,contentType:'application/json',headers:{'Access-Control-Allow-Origin':'http://127.0.0.1:18106','Access-Control-Allow-Credentials':'true'},body:JSON.stringify(data)});}catch{ /* cancelled route during logout or teardown */ }
@@ -268,6 +269,15 @@ test('Phase 8 saved-mail intelligence backfill is explicit, bounded and side-eff
   await page.getByRole('button',{name:'Analyze up to 20 saved emails'}).click();
   await expect.poll(()=>state.backfillCalls||0).toBe(1);
   await expect(page.getByText('Queued 2 saved emails for analysis.')).toBeVisible();
+});
+test('security signals for saved mail are captured on request and show progress',async({page})=>{
+  const state=await setup(page);
+  await expect(page.getByText('Security signals (sender checks, reply paths and links): 20 captured / 0 in progress.')).toBeVisible();
+  await page.getByRole('button',{name:'Capture security signals (4)'}).click();
+  await expect.poll(()=>state.signalBodies?.length||0).toBe(1);
+  expect(state.signalBodies[0]).toEqual({limit:4});
+  await expect(page.getByText('Capturing security signals for 4 saved emails.')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Capturing security signals...'})).toBeDisabled();
 });
 test('account menu and feedback editor work with keyboard and Escape',async({page})=>{
   await setup(page);const trigger=page.getByRole('button',{name:'Account options'});

@@ -43,6 +43,11 @@ def claim_cycle(manager, context, *, now=None):
                SET status='retry',error_code='interrupted',updated_at=?
                WHERE account_id=? AND status='running'""",
             (stamp,context.account_id))
+        conn.execute(
+            """UPDATE signals_backfill_items
+               SET status='retry',error_code='interrupted',updated_at=?
+               WHERE account_id=? AND status='running'""",
+            (stamp,context.account_id))
         # Sending may have reached Telegram before a process died.
         conn.execute("UPDATE notification_outbox SET status='unknown',error_code='interrupted_send',updated_at=? WHERE account_id=? AND status='sending'",(stamp,context.account_id))
         conn.execute("""UPDATE action_reminders SET
@@ -100,6 +105,9 @@ def ingest_email(email, manager, context, token, *, source='backlog'):
             VALUES (?,?,?,?,?,?) ON CONFLICT(account_id,email_id) DO NOTHING""",
             (context.account_id,email['id'],stamp,stamp,int(manager.settings.auto_mark_read),source))
         conn.execute('DELETE FROM ingestion_failures WHERE account_id=? AND email_id=?',(context.account_id,email['id']))
+        if email.get('signals'):
+            from .email_signals import save_email_signals
+            save_email_signals(conn,context.account_id,email['id'],email['signals'])
 
 
 def record_ingestion_failure(failure, manager, context, token):

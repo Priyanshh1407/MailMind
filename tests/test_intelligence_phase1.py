@@ -103,7 +103,7 @@ class IntelligencePhaseOneTests(unittest.TestCase):
     def test_fresh_schema_has_versioned_tables_constraints_and_indexes(self):
         self.initialize()
         with connection(self.path) as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 14)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], database.SCHEMA_VERSION)
             tables = {row[0] for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )}
@@ -146,7 +146,7 @@ class IntelligencePhaseOneTests(unittest.TestCase):
         self.initialize()
         self.initialize()
         with connection(self.path) as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 14)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], database.SCHEMA_VERSION)
             self.assertEqual(conn.execute(
                 "SELECT subject FROM email_logs WHERE account_id=?", (A,)
             ).fetchone()[0], "Synthetic subject")

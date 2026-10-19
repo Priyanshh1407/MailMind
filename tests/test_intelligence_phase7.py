@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 
 from api.app import create_app
+from tests.support import rewind_schema
 from src import database, llm_api
 from src.account_state import AccountManager, WorkCancelled
 from src.action_center import (
@@ -142,9 +143,7 @@ class Phase7Base(unittest.TestCase):
 class Phase7MigrationAndGateTests(Phase7Base):
     def test_schema_13_upgrade_is_atomic_and_repeatable(self):
         with connection(self.settings.db_path) as conn:
-            conn.execute("DROP TABLE intelligence_backfill_items")
-            conn.execute("DROP TABLE intelligence_mutation_limits")
-            conn.execute("PRAGMA user_version=12")
+            rewind_schema(conn, 12)
 
         with patch.object(
                 database, "migration_13",
@@ -165,7 +164,7 @@ class Phase7MigrationAndGateTests(Phase7Base):
         initialize_database(self.settings.db_path)
         with connection(self.settings.db_path) as conn:
             self.assertEqual(
-                conn.execute("PRAGMA user_version").fetchone()[0], 14)
+                conn.execute("PRAGMA user_version").fetchone()[0], database.SCHEMA_VERSION)
             self.assertIsNotNone(conn.execute(
                 """SELECT name FROM sqlite_master
                    WHERE type='table'

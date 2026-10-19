@@ -36,6 +36,9 @@ class AccountContext:
 # After Disconnect or Sign out the saved Google login is "parked" for this
 # long, so Connect Google can renew it silently. Then it is deleted.
 PARKED_LOGIN_SECONDS = 24 * 3600
+# Per-account tables added by later features. Deleting account data removes
+# their rows explicitly (children first), not only through email cascades.
+FEATURE_TABLES = ('signals_backfill_items', 'email_signals')
 
 
 class AccountManager:
@@ -309,6 +312,8 @@ class AccountManager:
             conn.execute("DELETE FROM email_actions WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM email_analysis WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM token_usage_events WHERE account_id=?", (context.account_id,))
+            for table in FEATURE_TABLES:
+                conn.execute(f"DELETE FROM {table} WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM email_logs WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM worker_jobs WHERE account_id=?", (context.account_id,))
             conn.execute("DELETE FROM ingestion_state WHERE account_id=?", (context.account_id,))
@@ -338,6 +343,8 @@ class AccountManager:
             conn.execute("DELETE FROM email_actions WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM email_analysis WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM token_usage_events WHERE account_id=?", (LEGACY_ACCOUNT,))
+            for table in FEATURE_TABLES:
+                conn.execute(f"DELETE FROM {table} WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM email_logs WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM worker_jobs WHERE account_id=?", (LEGACY_ACCOUNT,))
             conn.execute("DELETE FROM ingestion_state WHERE account_id=?", (LEGACY_ACCOUNT,))

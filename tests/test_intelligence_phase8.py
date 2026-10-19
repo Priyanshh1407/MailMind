@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 
 from api.app import create_app
+from tests.support import rewind_schema
 from src import database
 from src.account_state import AccountManager
 from src.action_center import list_actions, list_reminders
@@ -117,8 +118,7 @@ class Phase8Base(unittest.TestCase):
 class Phase8MigrationAndAdmissionTests(Phase8Base):
     def test_schema_14_upgrade_is_atomic_repeatable_and_required(self):
         with connection(self.settings.db_path) as conn:
-            conn.execute("DROP TABLE intelligence_backfill_items")
-            conn.execute("PRAGMA user_version=13")
+            rewind_schema(conn, 13)
         with patch.object(
                 database, "migration_14",
                 side_effect=RuntimeError("synthetic migration stop")):
@@ -137,7 +137,7 @@ class Phase8MigrationAndAdmissionTests(Phase8Base):
         initialize_database(self.settings.db_path)
         with connection(self.settings.db_path) as conn:
             self.assertEqual(
-                conn.execute("PRAGMA user_version").fetchone()[0], 14)
+                conn.execute("PRAGMA user_version").fetchone()[0], database.SCHEMA_VERSION)
             self.assertIsNotNone(conn.execute(
                 """SELECT name FROM sqlite_master
                    WHERE type='index'
