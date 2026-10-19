@@ -18,6 +18,7 @@ import { SectionTabs } from './components/SectionTabs';
 import { SearchFilters } from './components/SearchFilters';
 import { TokenUsagePanel } from './components/TokenUsagePanel';
 import { MoneyPanel } from './components/MoneyPanel';
+import { AskPanel } from './components/AskPanel';
 import { EASE_OUT } from './motion';
 import { BootContext, useBootSequence } from './boot';
 
@@ -46,6 +47,7 @@ const TABS = [
   { key: 'actions', label: 'Action Center' },
   { key: 'usage', label: 'Usage' },
   { key: 'money', label: 'Money', when: status => status?.ledger?.enabled },
+  { key: 'ask', label: 'Ask', when: status => status?.questions?.enabled },
 ];
 
 function App() {
@@ -55,9 +57,11 @@ function App() {
   // Mount the Usage panel on first visit so its chart bundle loads on demand.
   const [usageOpened, setUsageOpened] = useState(false);
   const [moneyOpened, setMoneyOpened] = useState(false);
+  const [askOpened, setAskOpened] = useState(false);
   useEffect(() => {
     if (activeTab === 'usage') setUsageOpened(true);
     if (activeTab === 'money') setMoneyOpened(true);
+    if (activeTab === 'ask') setAskOpened(true);
   }, [activeTab]);
   const tabRefs = useRef([]);
   const {
@@ -163,6 +167,9 @@ function App() {
         </TabPanel>
         {tabs.some(tab => tab.key === 'money') && <TabPanel id='money' active={activeTab === 'money'}>
           {moneyOpened && <MoneyPanel snapshot={snapshot} query={query} setQuery={setQuery} disabled={disabled || readOnly} mutate={mutate} api={api} openSource={openSource} />}
+        </TabPanel>}
+        {tabs.some(tab => tab.key === 'ask') && <TabPanel id='ask' active={activeTab === 'ask'}>
+          {askOpened && <AskPanel snapshot={snapshot} disabled={disabled} api={api} openSource={openSource} />}
         </TabPanel>}
       </>}
       <AppFooter autoMarkRead={snapshot?.status.auto_mark_read} />

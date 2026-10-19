@@ -111,6 +111,21 @@ function validLedgerEntry(entry) {
     && ['local', 'gemini', 'groq'].includes(entry.source) && integer(entry.revision) && typeof entry.user_corrected === 'boolean';
 }
 
+const QUESTION_STATUSES = ['running', 'answered', 'unanswerable', 'unverified', 'failed', 'cancelled'];
+function validQuestion(item) {
+  const answer = item.answer;
+  return record(item) && positiveInteger(item.question_id) && typeof item.question === 'string'
+    && QUESTION_STATUSES.includes(item.status) && Array.isArray(item.trace)
+    && item.trace.every(step => record(step) && integer(step.step) && typeof step.action === 'string')
+    && (answer === null || (record(answer) && Array.isArray(answer.sentences) && typeof answer.unanswerable === 'boolean'
+      && ['dropped_sentences', 'citations_total', 'citations_verified'].every(key => integer(answer[key]))
+      && answer.sentences.every(sentence => record(sentence) && typeof sentence.text === 'string' && Array.isArray(sentence.citations)
+        && sentence.citations.length > 0 && sentence.citations.every(citation => record(citation)
+          && typeof citation.email_id === 'string' && typeof citation.quote === 'string'))))
+    && (item.total_tokens === null || integer(item.total_tokens)) && (item.latency_ms === null || integer(item.latency_ms))
+    && timestamp(item.created_at);
+}
+
 function validAction(action) {
   return record(action) && positiveInteger(action.action_id) && typeof action.account_id === 'string' && typeof action.email_id === 'string' && typeof action.fingerprint === 'string'
     && ACTION_TYPES.includes(action.action_type) && typeof action.title === 'string' && typeof action.description === 'string' && typeof action.evidence === 'string'
@@ -167,6 +182,9 @@ export function validateResponse(path, method, data) {
   if (valid && method === 'GET' && route === '/ledger/entries') valid = identity(data) && Array.isArray(data.entries) && data.entries.every(validLedgerEntry) && ['total', 'limit', 'offset'].every(key => integer(data[key]));
   if (valid && method === 'PATCH' && /^\/ledger\/entries\/\d+$/.test(route)) valid = identity(data) && validLedgerEntry(data.entry) && typeof data.message === 'string';
   if (valid && method === 'GET' && route === '/ledger/subscriptions') valid = identity(data) && Array.isArray(data.subscriptions) && data.subscriptions.every(row => record(row) && typeof row.merchant === 'string' && CURRENCIES.includes(row.currency) && LEDGER_PERIODS.includes(row.period) && positiveInteger(row.amount_minor) && integer(row.monthly_minor) && /^\d{4}-\d{2}-\d{2}$/.test(row.renews_on) && positiveInteger(row.charges) && typeof row.email_id === 'string') && Array.isArray(data.insights) && data.insights.every(row => record(row) && typeof row.category === 'string' && Array.isArray(row.merchants) && integer(row.monthly_minor));
+  if (valid && method === 'POST' && route === '/questions') valid = positiveInteger(data.question_id) && data.status === 'running' && typeof data.message === 'string';
+  if (valid && method === 'GET' && /^\/questions\/\d+$/.test(route)) valid = identity(data) && validQuestion(data);
+  if (valid && method === 'GET' && route === '/questions') valid = identity(data) && Array.isArray(data.questions) && data.questions.every(validQuestion);
   const actionMutation = /^\/actions\/\d+(?:\/snooze)?$/.test(route);
   if (valid && actionMutation && ['PATCH', 'POST'].includes(method)) {
     valid = validActionMutation(data);

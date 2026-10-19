@@ -255,3 +255,21 @@ def migration_17(conn):
     )""")
     conn.execute('CREATE INDEX ledger_scans_due ON ledger_scans(account_id,status,next_retry_at)')
 
+def migration_18(conn):
+    # "Ask your inbox": each question, its verified answer and a content-free
+    # trace of the agent's steps (tool names and counts, never email text).
+    conn.execute("""CREATE TABLE inbox_questions (
+        question_id INTEGER PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+        generation INTEGER NOT NULL CHECK(typeof(generation)='integer' AND generation>=0),
+        question TEXT NOT NULL CHECK(length(question) BETWEEN 1 AND 300),
+        status TEXT NOT NULL CHECK(status IN ('running','answered','unanswerable','unverified','failed','cancelled')),
+        answer_json TEXT CHECK(answer_json IS NULL OR (length(answer_json)<=32768 AND json_valid(answer_json))),
+        trace_json TEXT NOT NULL DEFAULT '[]' CHECK(length(trace_json)<=16384 AND json_valid(trace_json) AND json_type(trace_json)='array'),
+        total_tokens INTEGER CHECK(total_tokens IS NULL OR (typeof(total_tokens)='integer' AND total_tokens>=0)),
+        latency_ms INTEGER CHECK(latency_ms IS NULL OR (typeof(latency_ms)='integer' AND latency_ms>=0)),
+        error_code TEXT CHECK(error_code IS NULL OR length(error_code) BETWEEN 1 AND 80),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
+    conn.execute('CREATE INDEX inbox_questions_recent ON inbox_questions(account_id,question_id DESC)')

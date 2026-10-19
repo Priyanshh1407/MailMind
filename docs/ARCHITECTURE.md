@@ -67,7 +67,7 @@ FastAPI owns:
 - explicit bounded saved-mail intelligence backfill; and
 - explicit recovery for unfinished tasks and ambiguous notification delivery.
 
-The API opens/migrates schema version 17 and lazily initializes heavy or optional services.
+The API opens/migrates schema version 18 and lazily initializes heavy or optional services.
 
 ### Gmail/classification worker
 
@@ -198,6 +198,22 @@ With `MAILMIND_LEDGER_ENABLED=true`, each worker cycle scans up to 20 saved Impo
 Migration 17 also rebuilds two CHECK constraints in place (`rebuild_check`, from each table's own stored definition) so token events and rate limits accept the assistant features' operations and scopes.
 
 Routes: `GET /ledger/summary?month=YYYY-MM`, `GET /ledger/entries`, `PATCH /ledger/entries/{id}` (revision-checked), `GET /ledger/subscriptions`.
+
+### Ask your inbox
+
+With `MAILMIND_INBOX_QUESTIONS_ENABLED=true` (and a provider configured), `POST /questions` starts a background job (its own runner, so a slow answer never delays Google sign-in) and `GET /questions/{id}` returns its status and a live trace. One question runs at a time per account, rate-limited through `intelligence_mutation_limits` (`question` scope); a row left running by a restart is closed as interrupted.
+
+The agent (`src/inbox_agent.py`) works in at most 6 steps within 45 seconds. Each step is one strict JSON object through `call_structured`: a tool call or the final answer. The tools only read, all through fenced account-scoped reads:
+
+| Tool | Returns to the model |
+| --- | --- |
+| `search_mail` | Up to 8 matches from the existing lexical + semantic search: email ID, local date, sender domain, masked subject. The search itself runs locally over the full sender, subject and body |
+| `read_email` | The same minimised text classification sends, capped at 4,000 characters, with each amount replaced by a session token (`{{amount:3}}`) the model can copy into an answer; at most 10 emails per question |
+| `list_actions` | Action Center tasks with their due dates |
+| `ledger_summary` | Spending and entries as `{{ledger:...}}` tokens, never numbers |
+| `risk_report` | An email's scam band and warning-sign names |
+
+The answer is verified, not trusted: a citation counts only if its email was opened with `read_email` in that session and its quote passes `quote_in_source` against that email's text. A sentence without a verified citation is removed (and counted in the trace). Amount and ledger tokens issued in the session are filled in locally (quotes show the amount as the email wrote it, so the source pop-up can highlight it); invented tokens become "[amount unavailable]". Status is `answered`, `unanswerable` (the model abstained), `unverified` (nothing survived verification), `failed` or `cancelled`. The stored trace has tool names, search words, counts and timings, never email text.
 
 ## Intelligence data flow
 

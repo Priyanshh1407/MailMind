@@ -1,0 +1,17 @@
+{
+ "name": "MailMind synthetic Ask-your-inbox benchmark",
+ "license": "CC0-1.0",
+ "generator": "scripts/build_agent_benchmark.py",
+ "emails": 34,
+ "questions": 30,
+ "groups": {
+  "lookup": 12,
+  "money": 4,
+  "update": 2,
+  "multi_hop": 2,
+  "actions": 2,
+  "unanswerable": 5,
+  "injection": 3
+ },
+ "notes": "Synthetic mailbox and questions written for this project."
+}

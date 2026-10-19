@@ -14,6 +14,7 @@ No account mail is accessed before successful Google OAuth connection. The seman
 | Gemini | Primary and fallback classification | Sender omitted or replaced; masked and bounded subject/body; optionally bounded masked feedback examples |
 | Groq | Provider fallback | The same minimized classification payload |
 | Gemini / Groq (Money tab, optional) | Which amount in a receipt is the total, its kind and merchant | The masked email text with **every amount replaced by a numbered placeholder** and the received date; the sender is omitted. Real amounts never leave the computer |
+| Gemini / Groq (Ask tab, optional) | Answering your question about saved mail | Your question; for each email the agent chooses to read (at most 10), the same minimised text classification sends; sender **domains** only (never names or addresses); dates; amounts as `{{amount:N}}` and `{{ledger:...}}` tokens filled in locally |
 | Telegram | Optional Important alerts | Minimized masked subject and short body snippet plus delivery identifiers |
 | Local API/browser | Dashboard and controls | Account-scoped saved data over loopback |
 | Embedded Chroma | Feedback retrieval and semantic search | Local account-scoped derived text and embeddings |

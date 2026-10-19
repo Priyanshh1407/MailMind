@@ -6,10 +6,10 @@ import sqlite3
 
 from .config import CATEGORIES, LEGACY_ACCOUNT, Settings
 from .intelligence_schema import (
-    migration_11, migration_12, migration_13, migration_14, migration_15, migration_16, migration_17,
+    migration_11, migration_12, migration_13, migration_14, migration_15, migration_16, migration_17, migration_18,
 )
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 # Which schema version created each table (checked on every start).
 TABLES_BY_VERSION = ((1, {'accounts','email_logs'}),
                      (2, {'prediction_attempts','feedback_history','notification_attempts','worker_jobs'}),
@@ -22,7 +22,8 @@ TABLES_BY_VERSION = ((1, {'accounts','email_logs'}),
                      (14, {'intelligence_backfill_items'}),
                      (15, {'email_signals','signals_backfill_items'}),
                      (16, {'email_risk'}),
-                     (17, {'ledger_entries','ledger_scans'}))
+                     (17, {'ledger_entries','ledger_scans'}),
+                     (18, {'inbox_questions'}))
 
 
 def utc_timestamp(value=None):
@@ -284,7 +285,7 @@ def initialize_database(db_path=None, *, manual_timezone=timezone(timedelta(hour
         existing = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not expected.issubset(existing):
             raise ValueError('Database schema is incomplete')
-        for number, migration in ((1, _migration_1), (2, _migration_2), (3, _migration_3), (4, _migration_4), (5, _migration_5), (6, _migration_6), (7, _migration_7), (8, _migration_8), (9, _migration_9), (10, _migration_10), (11, migration_11), (12, migration_12), (13, migration_13), (14, migration_14), (15, migration_15), (16, migration_16), (17, migration_17)):
+        for number, migration in ((1, _migration_1), (2, _migration_2), (3, _migration_3), (4, _migration_4), (5, _migration_5), (6, _migration_6), (7, _migration_7), (8, _migration_8), (9, _migration_9), (10, _migration_10), (11, migration_11), (12, migration_12), (13, migration_13), (14, migration_14), (15, migration_15), (16, migration_16), (17, migration_17), (18, migration_18)):
             if version < number:
                 if number == 1:
                     migration(conn, manual_timezone)

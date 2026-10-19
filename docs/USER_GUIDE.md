@@ -114,6 +114,17 @@ With the Money tab switched on (`MAILMIND_LEDGER_ENABLED=true`), MailMind reads 
 
 Amounts never leave your computer: each one is hidden from AI providers as a numbered placeholder, and the provider only says which placeholder is the total. Without a provider (or in local-only mode) local rules decide. Spam is never scanned.
 
+### Ask
+
+With the Ask tab switched on (`MAILMIND_INBOX_QUESTIONS_ENABLED=true`, plus a Gemini or Groq key), type a question about your saved mail: "When is my Zoho interview?", "How much did I spend on Swiggy this month?". MailMind searches, reads the emails it needs and answers in a few seconds.
+
+- Every sentence carries numbered sources. Click one to open the email with the quoted words highlighted.
+- Anything the AI could not back with a quote from your email is removed, and **How this was answered** says how many sentences were removed and which steps were taken.
+- If your mail does not contain the answer, it says so instead of guessing.
+- **Recent questions** keeps your last questions and answers for this account; deleting the account's data deletes them.
+
+Ask is off in local-only mode, because answering needs an AI provider.
+
 ## Categories
 
 | Lane | Meaning |

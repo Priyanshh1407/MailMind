@@ -51,11 +51,13 @@ def assert_no_amounts(contents, row):
 
 
 def record(rows, per_minute):
+    # Write to a side file: an interrupted run never replaces a good recording.
+    partial = RECORDING.with_suffix('.partial')
     settings = Settings.from_environment(load_file=True)
     from src.llm_api import StructuredUnavailable, call_structured
     RECORDING.parent.mkdir(parents=True, exist_ok=True)
     gap = 60 / per_minute
-    with RECORDING.open('w', encoding='utf-8') as stream:
+    with partial.open('w', encoding='utf-8') as stream:
         for row in rows:
             if not is_transaction(row['subject'], row['body']):
                 continue
@@ -77,6 +79,7 @@ def record(rows, per_minute):
             stream.flush()
             print(row['id'], entry.get('source') or entry.get('error'), flush=True)
             time.sleep(max(0.0, gap - (time.monotonic() - started)))
+    partial.replace(RECORDING)  # complete: now it becomes the recording
 
 
 def recordings():

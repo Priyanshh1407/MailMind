@@ -684,7 +684,8 @@ def structured_groq_body(model, system, schema, schema_name, contents, max_outpu
 
 def call_structured(contents, *, system, schema, schema_name, settings, operation, validate,
                     usage_recorder=None, before_request=None, budget_seconds=None,
-                    max_output_tokens=2048, record_key='assist', max_chars=MAX_PROVIDER_OUTPUT_CHARS):
+                    max_output_tokens=2048, record_key='assist', max_chars=MAX_PROVIDER_OUTPUT_CHARS,
+                    salvage=None):
     """One validated JSON answer: Gemini models in order, then Groq.
 
     Same failover rules as classification: a timeout, 429 or 5xx cools the
@@ -771,6 +772,20 @@ def call_structured(contents, *, system, schema, schema_name, settings, operatio
                                          timeout=(timeout / 2, timeout / 2),
                                          json=structured_groq_body(version, system, schema, schema_name,
                                                                    contents, max_output_tokens))
+                if response.status_code == 400 and salvage is not None:
+                    # Some Groq models answer a JSON-schema request with a native
+                    # function call, which the API rejects but returns as
+                    # failed_generation. `salvage` may turn it into an answer;
+                    # it is still validated like any other.
+                    try:
+                        failed = response.json()['error']
+                        if failed.get('code') == 'tool_use_failed':
+                            payload = {'choices': [{'message': {'content': json.dumps(
+                                salvage(failed['failed_generation']))}}], 'usage': response.json().get('usage')}
+                            captured.append(payload)
+                            return payload
+                    except (ValueError, KeyError, TypeError, AttributeError):
+                        pass
                 response.raise_for_status()
                 payload = response.json()
                 captured.append(payload)
