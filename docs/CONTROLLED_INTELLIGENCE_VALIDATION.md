@@ -8,7 +8,7 @@ This checklist is the deliberate live step after synthetic automated verificatio
 - Keep real personal mail, attachments, credentials, account identifiers, and provider responses out of screenshots and logs.
 - Review provider retention settings and the privacy policy.
 - Start with automatic Gmail mark-read and both reminder flags disabled.
-- Confirm schema 14, the intended feature flags, and a clean privacy-safe diagnostics result.
+- Confirm schema 20, the intended feature flags, and a clean privacy-safe diagnostics result.
 
 ## Staged checks
 
@@ -26,7 +26,13 @@ This checklist is the deliberate live step after synthetic automated verificatio
 12. Confirm backfilled messages produce no historical Telegram alert, Gmail read-state change, or automatic reminder.
 13. Switch to a second dedicated account and confirm no first-account actions, usage, explanations, or backfill state appears.
 14. Run semantic indexing and confirm the Gmail worker heartbeat remains current.
-15. Delete the test account's local data and confirm mail, analysis, actions, reminders, token events, mutation gates, and backfill rows are removed without affecting the second account.
+15. Select **Capture security signals** and confirm every saved message gets signals with no new tasks, alerts or read-state changes.
+16. With scam checks on, send a synthetic lookalike-domain message and confirm a high badge with its evidence, then mark it checked.
+17. With the Money tab on, send a synthetic receipt and confirm the total, kind and merchant; correct one entry and confirm a rescan keeps the correction.
+18. With Ask on, ask a question the mail answers and one it does not; confirm cited sentences and an honest "couldn't find that".
+19. With Follow-ups on, draft a follow-up for a synthetic sent email; confirm no Gmail draft or sent message was created.
+20. With the brief on, refresh it with providers available and again with them unavailable; confirm a cited brief, then the plain fallback; approve one suggested action and confirm only that one changed.
+21. Delete the test account's local data and confirm mail, analysis, actions, reminders, token events, mutation gates, backfill rows, signals, scam reports, ledger rows, questions, sent-mail cache, drafts and briefs are removed without affecting the second account.
 
 ## Evidence record
 

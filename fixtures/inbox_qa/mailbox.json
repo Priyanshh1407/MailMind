@@ -2,7 +2,7 @@
  "emails": [
   {
    "id": "landlord",
-   "sender": "Ramesh Iyer <ramesh.iyer@gmail.com>",
+   "sender": "Ramesh Iyer <fixture.ramesh.iyer@gmail.com>",
    "subject": "Security deposit for the flat",
    "body": "Hi, thanks for vacating on time. I will return your security deposit of Rs 40,000 by 15 October after the final inspection. Regards, Ramesh",
    "created_at": "2026-10-02T05:10:00.000000Z",
@@ -82,7 +82,7 @@
   },
   {
    "id": "party",
-   "sender": "Rohan Mehta <rohan.mehta@gmail.com>",
+   "sender": "Rohan Mehta <fixture.rohan.mehta@gmail.com>",
    "subject": "Saturday",
    "body": "Party at my place this Saturday at 7 pm. Bring snacks if you can!",
    "created_at": "2026-10-09T13:00:00.000000Z",
@@ -162,7 +162,7 @@
   },
   {
    "id": "mom",
-   "sender": "Mom <sunita.k@gmail.com>",
+   "sender": "Mom <fixture.sunita.k@gmail.com>",
    "subject": "call me",
    "body": "Call me when you land in Delhi. Dad wants to know if you will come home for Diwali.",
    "created_at": "2026-10-11T15:00:00.000000Z",

@@ -25,6 +25,21 @@ Measured on 2026-09-30 on the developer's Windows x64 workstation (CPU only). Th
 - Replacing per-row lookups with a joined query would add complexity for no user-visible gain at single-user scale.
 - Revisit this if mailboxes grow by an order of magnitude or the page size increases.
 
+## Concurrent dashboard reads
+
+**Problem (found by load test, 20 October 2026):** every read went through `BEGIN IMMEDIATE`, which takes SQLite's write lock. With 20 requests at once on a copy of real data (398 emails), 13 to 17 of 300 failed with 503 "storage busy" and p95 was about 5.6 s. The original code, before the October features, failed the same way.
+
+**Change:** pure reads (20 routes and the per-request session check) use `BEGIN DEFERRED` with `PRAGMA query_only=ON`, so they read a WAL snapshot that neither waits for nor blocks writers; a write inside one fails loudly. Token metering waits at most 1 s and then skips the event. Ask holds no transaction during a provider call or embedding search.
+
+| Load (copy of real data, Windows laptop) | Failed | Median | p95 |
+| --- | ---: | ---: | ---: |
+| 300 mixed reads incl. hybrid search, 20 parallel, before | 13-17 | - | ~5.6 s |
+| Same, after (8 runs) | 0 | 290-740 ms | 0.5-1.4 s |
+| 400 dashboard reads, 80 parallel, after | 0 | ~87 ms | ~115 ms |
+| Dashboard refresh mix, 10 parallel, with 1 GB free memory | 0 | 244 ms | 324 ms |
+
+Hybrid search is bound by the query embedding (about 0.2 s alone with free memory, 0.9 s when the machine was short of memory). `tests/test_concurrency.py` holds the lock in another connection and asserts reads still succeed quickly.
+
 ## Frontend bundle
 
 **Problem:** the production build shipped one 633 kB JavaScript chunk and triggered Vite's >500 kB warning. Recharts, the largest dependency, is used only by the Usage tab.
@@ -53,4 +68,4 @@ Adding Framer Motion with ordinary imports put 409 kB (130 kB gzip) in the initi
 | Framer Motion, direct imports | 408.9 kB | 129.6 kB | chart 372.9 kB |
 | Framer Motion, `LazyMotion` (shipped) | 315.5 kB | 100.4 kB | chart 372.9 kB, motion 85.6 kB |
 
-The CSS power-on sequence added later costs 0.6 kB. The Playwright browser suite passes 29/29, including tests that the animations settle on exact values, that the power-on sequence plays once and ends, and that reduced motion skips it and shows final values at once.
+The CSS power-on sequence added later costs 0.6 kB. With the October tabs (Money, Ask, Follow-ups, brief, scam panel, security report) the initial chunk is 377.4 kB (118.7 kB gzip); the Money chart reuses the deferred Recharts chunk. The Playwright browser suite passes 29/29, including tests that the animations settle on exact values, that the power-on sequence plays once and ends, and that reduced motion skips it and shows final values at once.

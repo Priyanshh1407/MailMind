@@ -19,6 +19,7 @@ Describe the user-visible outcome and why this change is needed.
 - [ ] Production build passed
 - [ ] Playwright suite passed when UI behavior changed
 - [ ] `pip check` passed
+- [ ] Evaluation replays and `scripts.redteam` regenerate their reports with no diff (when scoring, prompts or extraction changed)
 
 List the exact commands and results:
 
@@ -28,5 +29,6 @@ List the exact commands and results:
 - [ ] No `.env`, OAuth credential, token, database, mail, log, model, export, or generated report is staged
 - [ ] Account ownership and generation fencing were preserved
 - [ ] New external work is bounded and recoverable
+- [ ] No amount, name or address reaches a provider where the feature promises placeholders
 - [ ] Public documentation and limitations were updated
 - [ ] `git diff --check` passed

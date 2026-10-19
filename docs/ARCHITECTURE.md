@@ -64,10 +64,13 @@ FastAPI owns:
 - feedback, undo, and history;
 - Action Center reads/mutations, token analytics, and source-labelled explanations;
 - forced live sync and bounded backlog authorization; and
-- explicit bounded saved-mail intelligence backfill; and
+- explicit bounded saved-mail intelligence backfill;
+- the security signals backfill, scam reports, the Money tab, Ask, Follow-ups and the daily brief (routes in `api/signals.py`, `api/risk.py`, `api/ledger.py`, `api/questions.py`, `api/follow_ups.py`, `api/briefs.py`); and
 - explicit recovery for unfinished tasks and ambiguous notification delivery.
 
 The API opens/migrates schema version 20 and lazily initializes heavy or optional services.
+
+Every request runs inside `manager.guard(context)`, which checks the account and generation and opens a transaction. Writes use `BEGIN IMMEDIATE`; pure reads pass `readonly=True` and use `BEGIN DEFERRED` with `PRAGMA query_only=ON`, so a dashboard read takes a WAL snapshot instead of queueing behind the worker for the write lock (see [performance](PERFORMANCE.md#concurrent-dashboard-reads)). Long work such as a provider call or an embedding search never runs inside a transaction: the account is checked before and after it instead.
 
 ### Gmail/classification worker
 

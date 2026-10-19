@@ -54,12 +54,19 @@ Never commit environment files, OAuth JSON, tokens, databases, launcher logs, ex
 | <code>MAILMIND_ACTION_EXTRACTION_ENABLED</code> | <code>false</code> | Persist action candidates and enable explicit saved-mail backfill |
 | <code>MAILMIND_ACTION_REMINDERS_ENABLED</code> | <code>false</code> | Enable dashboard action reminders |
 | <code>MAILMIND_TELEGRAM_ACTION_REMINDERS_ENABLED</code> | <code>false</code> | Separately opt in to Telegram action reminders |
+| <code>MAILMIND_RISK_ANALYSIS_ENABLED</code> | <code>false</code> | Local scam and phishing checks, badges and the Risky emails KPI |
+| <code>MAILMIND_LEDGER_ENABLED</code> | <code>false</code> | Money tab; amounts reach providers only as placeholders |
+| <code>MAILMIND_INBOX_QUESTIONS_ENABLED</code> | <code>false</code> | Ask tab (needs a provider; off in local-only mode) |
+| <code>MAILMIND_FOLLOW_UPS_ENABLED</code> | <code>false</code> | Follow-ups tab (reads sent mail; never sends) |
+| <code>MAILMIND_DAILY_BRIEF_ENABLED</code> | <code>false</code> | Daily brief at the top of the Inbox |
+| <code>MAILMIND_DAILY_BRIEF_TIME</code> | <code>08:30</code> | Local time after which the day's brief is written (HH:MM) |
+| <code>MAILMIND_BRIEF_TELEGRAM_ENABLED</code> | <code>false</code> | Telegram note when the brief is ready (counts only); requires the brief |
 
 Provider variables are listed in <code>.env.example</code>. Never place provider keys in frontend source or documentation.
 
 ### Intelligence rollout order
 
-Keep schema migrations and token collection first. Observe synthetic token events, then enable explanations, validate controlled action types with reminders off, enable Action Center controls, enable dashboard reminders, and only then opt in to Telegram action reminders. Saved-mail backfill is the final, explicit step. Restart API and worker together after flag changes.
+Keep schema migrations and token collection first. Observe synthetic token events, then enable explanations, validate controlled action types with reminders off, enable Action Center controls, enable dashboard reminders, and only then opt in to Telegram action reminders. Saved-mail backfill is the final, explicit step. The assistant features can follow in any order once classification is healthy: capture security signals for saved mail before relying on scam scores, and keep the Ask, Follow-ups and brief tabs for when a provider key is configured. Restart API and worker together after flag changes.
 
 The dashboard backfill button requests 20 eligible saved messages at a time. The API hard limit is 100, and admission also obeys the global active-task cap. Backfill never performs historical Telegram notification, Gmail mark-read, or automatic-reminder side effects.
 
@@ -197,6 +204,20 @@ Set-Location ..
 
 Integration helpers:
 
+Evaluations and the red-team (offline replays; `--record` re-records live where the script supports it):
+
+~~~powershell
+.\venv\Scripts\python.exe -m scripts.evaluate_cloud --replay
+.\venv\Scripts\python.exe -m scripts.evaluate_risk --report
+.\venv\Scripts\python.exe -m scripts.evaluate_ledger --replay
+.\venv\Scripts\python.exe -m scripts.evaluate_agent --replay
+.\venv\Scripts\python.exe -m scripts.evaluate_follow_ups --replay
+.\venv\Scripts\python.exe -m scripts.evaluate_brief --replay
+.\venv\Scripts\python.exe -m scripts.redteam
+~~~
+
+Each rewrites its report in `docs/`; `git status` should then show no change.
+
 ~~~powershell
 .\venv\Scripts\python.exe -m scripts.verify_launcher
 .\venv\Scripts\python.exe -m scripts.verify_local_only --model <classifier> --embedding-cache <cache>
@@ -204,7 +225,7 @@ Integration helpers:
 .\venv\Scripts\python.exe -m scripts.check_clean_release
 ~~~
 
-At the latest automated verification, all 590 backend tests, 58 frontend unit tests and 39 browser scenarios (6 October 2026), frontend lint, and the production build passed.
+At the latest automated verification (20 October 2026), all 686 backend tests, 65 frontend unit tests and 47 browser scenarios, frontend lint, and the production build passed; the no-mock live check (`npm run test:live`) passed 42 of 42 against a copy of real data. The clean-release check could not finish because its fresh dependency install timed out; rerun it on a good connection.
 
 ## Release checklist
 
@@ -220,6 +241,9 @@ At the latest automated verification, all 590 backend tests, 58 frontend unit te
 - [ ] Confirm account switching cannot expose the previous account.
 - [ ] Follow the staged intelligence rollout order; keep Telegram action reminders opt-in.
 - [ ] Confirm explicit backfill remains bounded and lower priority than live/ordinary backlog work.
+- [ ] Regenerate every evaluation report and the red-team; confirm `git status` shows no change.
+- [ ] Re-record any evaluation still marked pending before quoting its numbers.
+- [ ] Confirm benchmark fixtures contain only fictional people and addresses.
 - [ ] Complete the controlled live validation checklist before claiming live OAuth, Gmail, provider, or Telegram validation.
 - [ ] Keep current limitations visible in public documentation.
 - [ ] Do not claim live-provider reliability or production model accuracy without deliberate evidence.

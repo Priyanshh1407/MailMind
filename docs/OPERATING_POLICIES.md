@@ -107,6 +107,16 @@ When enabled:
 
 Telegram is optional. Missing configuration is not successful delivery.
 
+## Assistant features
+
+- **Propose, never act.** The brief's suggested actions run only after Approve, through the same revision-checked routes as the Action Center. Dismissing one changes nothing.
+- **Never send mail.** Follow-ups produce text to copy; the user sends from Gmail. MailMind creates no drafts.
+- **Cite or drop.** An Ask or brief sentence without a verified quote is removed, not shown as fact. "I couldn't find that" is a valid answer.
+- **Warn, never hide.** A scam score never moves, hides or deletes mail. "I've checked this email" removes it from the Risky emails count only.
+- **Your corrections win.** A corrected ledger entry is never overwritten by a rescan.
+- **Bounded and rate-limited.** One question, draft or brief runs at a time per account, each with step, time and rate limits; none takes provider capacity from live classification.
+- **Always a brief.** If providers are down or out of quota, the brief falls back to a plain summary from saved data.
+
 ## Account lifecycle
 
 | Action | Processing effect | Data effect |
@@ -135,8 +145,9 @@ The dashboard must distinguish:
 - live sync versus historical backlog;
 - classification progress versus semantic indexing;
 - current failures versus historical failures;
-- model agreement versus measured accuracy; and
-- saved source data versus derived index state.
+- model agreement versus measured accuracy;
+- saved source data versus derived index state; and
+- an agent-written brief versus the plain fallback, and verified versus removed sentences.
 
 No invented latency, provider-online count, confidence, or success state may be displayed.
 

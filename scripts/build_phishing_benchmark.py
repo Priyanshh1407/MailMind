@@ -20,7 +20,7 @@ RECEIVED = '1790000000000'  # 2026-09-21T13:33:20Z, Gmail internalDate in ms
 
 def auth(spf, dkim, dmarc, domain):
     return (f'mx.google.com; dkim={dkim} header.i=@{domain} header.s=s1; '
-            f'spf={spf} (google.com: domain of bounce@{domain}) smtp.mailfrom=bounce@{domain}; '
+            f'spf={spf} (google.com: domain of fixture-bounce@{domain}) smtp.mailfrom=fixture-bounce@{domain}; '
             f'dmarc={dmarc} (p=NONE sp=NONE dis=NONE) header.from={domain}')
 
 
@@ -72,13 +72,13 @@ TEMPLATES = [
     ('job_fee', 'phishing', 'job-1', 'Offer letter - {brand} work from home',
      '<p>Dear Candidate,</p><p>You are selected for the data entry role at {brand}. To receive your offer letter, '
      'pay the registration fee of Rs 2,500 to activate your joining. Reply with your bank details.</p><p>HR Team</p>',
-     [dict(brand='Amazon', sender='Amazon HR', domain='gmail.com', auth=PASS, reply_to='amazon.hiring.desk@gmail.com'),
-      dict(brand='Flipkart', sender='Flipkart Careers', domain='flipkart-careers.in', auth=NONE, reply_to='hr.flipkart@outlook.com'),
-      dict(brand='TCS', sender='TCS Recruitment', domain='tcs-careers-jobs.com', auth=FAIL, reply_to='tcs.hr.team@yahoo.com')]),
+     [dict(brand='Amazon', sender='Amazon HR', domain='gmail.com', auth=PASS, reply_to='fixture.amazon.hiring.desk@gmail.com'),
+      dict(brand='Flipkart', sender='Flipkart Careers', domain='flipkart-careers.in', auth=NONE, reply_to='fixture.hr.flipkart@outlook.com'),
+      dict(brand='TCS', sender='TCS Recruitment', domain='tcs-careers-jobs.com', auth=FAIL, reply_to='fixture.tcs.hr.team@yahoo.com')]),
     ('job_fee', 'phishing', 'job-2', 'Interview shortlisted - security deposit',
      '<p>Hello, your profile on Naukri is shortlisted. A refundable security deposit of Rs 1,999 is required to book the interview slot. '
      'Transfer it today itself and send the screenshot.</p>',
-     [dict(brand='Naukri', sender='Naukri Jobs', domain='naukri-hr.in', auth=NONE, reply_to='naukri.slot@gmail.com'),
+     [dict(brand='Naukri', sender='Naukri Jobs', domain='naukri-hr.in', auth=NONE, reply_to='fixture.naukri.slot@gmail.com'),
       dict(brand='Naukri', sender='Placement Cell', domain='gmail.com', auth=PASS)]),
     ('prize', 'phishing', 'prize-1', 'You are the lucky draw winner!',
      '<p>Congratulations! You have won an iPhone in the {brand} anniversary lucky draw. Claim your prize now by paying the '
@@ -111,7 +111,7 @@ TEMPLATES = [
     ('boss_gift', 'phishing', 'boss-1', 'Quick favour',
      '<p>Hi, are you free? I am in a meeting and need you to buy 5 Amazon gift cards urgently for a client. '
      'Send me the codes immediately. I will reimburse you today.</p><p>Sent from my phone</p>',
-     [dict(brand='', sender='Rakesh Sharma (Director)', domain='gmail.com', auth=PASS, reply_to='director.office.rk@outlook.com'),
+     [dict(brand='', sender='Rakesh Sharma (Director)', domain='gmail.com', auth=PASS, reply_to='fixture.director.office.rk@outlook.com'),
       dict(brand='', sender='CEO Office', domain='ceo-office-mail.com', auth=NONE)]),
     ('authenticated_lookalike', 'phishing', 'authlook-1', '{brand}: confirm your recent transaction',
      '<p>A transaction of Rs {amount} was attempted on your card. If this was not you, verify your card details here to block it: '
@@ -134,8 +134,8 @@ TEMPLATES = [
     ('small_business', 'legit', 'smallbiz-1', 'Invoice {amount} - please pay within 24 hours',
      '<p>Hello, please find the invoice for the catering order. Kindly pay within 24 hours by bank transfer so we can '
      'confirm the booking. Reply to our accountant with any questions.</p><p>Shree Caterers</p>',
-     [dict(brand='', sender='Shree Caterers', domain='shreecaterers.in', auth=NONE, amount='Rs 18,500', reply_to='shreecaterers.accounts@gmail.com'),
-      dict(brand='', sender='Patel Tours', domain='pateltours.co.in', auth=NONE, amount='Rs 42,000', reply_to='pateltours.billing@gmail.com')]),
+     [dict(brand='', sender='Shree Caterers', domain='shreecaterers.in', auth=NONE, amount='Rs 18,500', reply_to='fixture.shreecaterers.accounts@gmail.com'),
+      dict(brand='', sender='Patel Tours', domain='pateltours.co.in', auth=NONE, amount='Rs 42,000', reply_to='fixture.pateltours.billing@gmail.com')]),
     ('newsletter', 'legit', 'news-3', 'Last chance to register: free workshop',
      '<p>Seats are nearly full for Saturday. Register now: <a href="{href}">{shown}</a></p><p>See you there, the Community Team</p>',
      [dict(brand='', sender='Pune Python Meetup', domain='punepython.org', auth=PASS, shown='Register', href='https://bit.ly/pune-py-oct', unsubscribe=True),
@@ -247,12 +247,13 @@ def build():
             domain = variant['domain']
             spf, dkim, dmarc = variant['auth']
             local = 'no-reply' if domain not in ('gmail.com', 'yahoo.co.in', 'outlook.com') else (
-                variant['sender'].split()[0].lower().strip('()') + '.' + str(1000 + template_index * 10 + index))
+                # Personal-mailbox senders get an obviously fictional local part.
+                'fixture.' + variant['sender'].split()[0].lower().strip('()') + '.' + str(1000 + template_index * 10 + index))
             headers = [
                 {'name': 'From', 'value': f'{variant["sender"]} <{local}@{domain}>'},
                 {'name': 'Subject', 'value': subject.format(**values)},
                 {'name': 'Authentication-Results', 'value': auth(spf, dkim, dmarc, domain)},
-                {'name': 'Return-Path', 'value': f'<bounce@{variant.get("return_path", domain)}>'},
+                {'name': 'Return-Path', 'value': f'<fixture-bounce@{variant.get("return_path", domain)}>'},
             ]
             if variant.get('reply_to'):
                 headers.append({'name': 'Reply-To', 'value': variant['reply_to']})

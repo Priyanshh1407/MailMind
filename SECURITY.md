@@ -49,6 +49,23 @@ MailMind treats the local browser, FastAPI, Gmail/OAuth, email content, cloud pr
 
 These controls reduce instruction/data confusion; they do not make statistical models prompt-injection proof.
 
+### Assistant features
+
+The Ask agent, follow-up drafts and the daily brief treat everything a model returns as untrusted:
+
+- **Read-only tools.** The Ask agent can search, open emails, and read actions, money totals and scam reports; it has no tool that changes anything. The brief's suggested actions are typed, checked against the items it was given, and run through the existing revision-checked paths only after the user approves them.
+- **MailMind never sends mail.** Follow-ups read sent mail and threads (`gmail.modify` already allows reads); there is no send or draft code path, and a test fails if anything but a Gmail read is called.
+- **Grounding.** Answer sentences, brief facts and action evidence must quote an email the model actually opened, checked with `quote_in_source`; uncited sentences are removed.
+- **Less data out.** Amounts become numbered placeholders or session tokens filled in locally (the provider never sees the number); follow-up threads also mask names, addresses, links and long numbers; the Ask agent sees senders as domains only.
+- **Hidden text.** Text styled to be invisible is not saved as body text, so no provider reads it; the scam check keeps it as a warning sign.
+- **Bounds.** Step, read, time and rate limits per question, draft and brief; separate call slots so they never take capacity from live classification.
+
+`python -m scripts.redteam` measures these layers assuming the model is fully hijacked: 27 of 30 attacks cause harm with them off, 1 with them on ([report](docs/REDTEAM.md)).
+
+### Scam and phishing checks
+
+The scam score is local and deterministic (no provider). It reads Gmail's own SPF/DKIM/DMARC verdict (trusted over earlier, forgeable hops), reply paths, lookalike and homoglyph domains, link targets and payment lures. It is a warning shown with its evidence; it never hides, moves or deletes mail.
+
 ### Durable background work
 
 - SQLite records queued, running, retry, complete, and dead states.
@@ -94,6 +111,8 @@ Account deletion is managed application deletion, not forensic secure erasure. I
 - The Compose demo does not currently include the semantic indexer.
 - Dependency and model risks change over time.
 - No control guarantees correct classification of every adversarial message.
+- Grounding proves an email said something, not that it is true: a hijacked model can still repeat an attacker's own email with a real quote. The answer then cites that email.
+- Model resistance to injection itself (as opposed to MailMind's checks on its output) is not yet measured with a live model.
 
 ## Reporting a vulnerability
 
@@ -107,6 +126,8 @@ Rotate an exposed credential before considering a code correction sufficient.
 
 ~~~powershell
 .\venv\Scripts\python.exe -m unittest tests.test_security_hardening -v
+.\venv\Scripts\python.exe -m unittest tests.test_redteam tests.test_concurrency -v
+.\venv\Scripts\python.exe -m scripts.redteam
 .\venv\Scripts\python.exe -m scripts.audit_dependencies
 .\venv\Scripts\python.exe -m scripts.check_clean_release
 ~~~

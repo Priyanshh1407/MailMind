@@ -161,8 +161,12 @@ are:
 - `local_shadow`;
 - `document_embedding`;
 - `query_embedding`;
-- `manual_prediction`; and
-- `action_reanalysis`.
+- `manual_prediction`;
+- `action_reanalysis`;
+- `ledger_extraction` (Money tab);
+- `inbox_question` (Ask);
+- `follow_up_draft` (Follow-ups); and
+- `daily_brief` (the brief).
 
 Gemini and Groq are provider-billed cloud usage. Local classifier and embedding
 tokens are locally processed usage. These groups are returned and displayed
@@ -199,6 +203,12 @@ The configuration is part of the existing `Settings` object:
 | `MAILMIND_TOKEN_COLLECTION_ENABLED` | `true` | Record privacy-safe events once schema/instrumentation is installed. |
 | `MAILMIND_TOKEN_ANALYTICS_VISIBLE` | `false` | Expose the validated read-only analytics UI. |
 | `MAILMIND_EXPLANATIONS_VISIBLE` | `false` | Display validated source-labelled explanations. |
+| `MAILMIND_RISK_ANALYSIS_ENABLED` | `false` | Local scam checks and reports. |
+| `MAILMIND_LEDGER_ENABLED` | `false` | Money tab and ledger scanning. |
+| `MAILMIND_INBOX_QUESTIONS_ENABLED` | `false` | Ask tab. |
+| `MAILMIND_FOLLOW_UPS_ENABLED` | `false` | Follow-ups tab. |
+| `MAILMIND_DAILY_BRIEF_ENABLED` | `false` | Daily brief; `MAILMIND_DAILY_BRIEF_TIME` (default `08:30`) sets when it is written. |
+| `MAILMIND_BRIEF_TELEGRAM_ENABLED` | `false` | Counts-only Telegram note when the brief is ready; requires the brief. |
 | `MAILMIND_DEFAULT_TIMEZONE` | `Asia/Kolkata` | Initial IANA timezone. |
 | `MAILMIND_WEEK_START` | `monday` | Initial calendar-week boundary. |
 
@@ -206,6 +216,10 @@ Boolean values accept only `true` or `false`. Reminders cannot be enabled while
 extraction is disabled. Analytics visibility cannot be enabled while collection
 is disabled. Token analytics will be read-only (`GET`); there is no API for a
 client to create or alter usage events.
+
+Rate-limit scopes in `intelligence_mutation_limits` are `reminder`, `reanalysis`,
+`ledger_correction`, `question`, `follow_up` and `brief`. Schema 17 widened the
+SQL checks for the new operations and scopes in place (`rebuild_check`).
 
 The supported rollout order is token collection, analytics/explanations, action
 extraction, dashboard reminders, and finally explicitly selected Telegram

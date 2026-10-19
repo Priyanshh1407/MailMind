@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'fixtures' / 'inbox_qa'
 
 MAILBOX = [
-    ('landlord', 'Ramesh Iyer <ramesh.iyer@gmail.com>', 'Security deposit for the flat', 'Hi, thanks for vacating on time. I will return your security deposit of Rs 40,000 by 15 October after the final inspection. Regards, Ramesh', '2026-10-02T05:10:00Z', 'IMPORTANT'),
+    ('landlord', 'Ramesh Iyer <fixture.ramesh.iyer@gmail.com>', 'Security deposit for the flat', 'Hi, thanks for vacating on time. I will return your security deposit of Rs 40,000 by 15 October after the final inspection. Regards, Ramesh', '2026-10-02T05:10:00Z', 'IMPORTANT'),
     ('electricity', 'Tata Power <billing@tatapower.com>', 'Your electricity bill is ready', 'Your bill amount is Rs 2,310 for September. Due date: 5 November. Pay on time to avoid a late fee.', '2026-10-03T04:00:00Z', 'UPDATES'),
     ('zoho-invite', 'Priya (Zoho Careers) <priya.k@zohocorp.com>', 'Interview: Backend Engineer', 'Hi Arjun, your technical interview for the Backend Engineer role is scheduled on 22 October at 11:00 am IST on Microsoft Teams. Please keep your camera on.', '2026-10-04T06:00:00Z', 'IMPORTANT'),
     ('flight', 'IndiGo <reservations@goindigo.in>', 'Booking confirmed: BLR to DEL', 'Your flight 6E 2134 from Bengaluru to Delhi departs on 28 October at 06:45. PNR AB12CD. Web check-in opens 48 hours before departure.', '2026-10-05T09:00:00Z', 'UPDATES'),
@@ -24,7 +24,7 @@ MAILBOX = [
     ('offer', 'Talent Team <offers@freshworks.com>', 'Your offer letter', 'Congratulations! Your joining date is 1 December 2026 at our Chennai office. Please sign and return the offer letter by 30 October.', '2026-10-09T10:00:00Z', 'IMPORTANT'),
     ('demo-1', 'Prof. Rao <rao@college.ac.in>', 'Project demo date', 'The final project demo will be held on 20 October in Lab 3.', '2026-10-01T06:00:00Z', 'IMPORTANT'),
     ('demo-2', 'Prof. Rao <rao@college.ac.in>', 'Re: Project demo date', 'Update: the project demo has been moved from 20 October to 24 October, same lab, same time.', '2026-10-10T06:00:00Z', 'IMPORTANT'),
-    ('party', 'Rohan Mehta <rohan.mehta@gmail.com>', 'Saturday', 'Party at my place this Saturday at 7 pm. Bring snacks if you can!', '2026-10-09T13:00:00Z', 'IMPORTANT'),
+    ('party', 'Rohan Mehta <fixture.rohan.mehta@gmail.com>', 'Saturday', 'Party at my place this Saturday at 7 pm. Bring snacks if you can!', '2026-10-09T13:00:00Z', 'IMPORTANT'),
     ('manager', 'Priya Sharma <priya.sharma@acme.example>', 'Q3 report', 'Hi, please send me the Q3 report by Friday 5 pm so I can review it before the board meeting.', '2026-10-08T05:30:00Z', 'IMPORTANT'),
     ('swiggy-1', 'Swiggy <noreply@swiggy.in>', 'Your Swiggy order is delivered', 'Item total: Rs 320\nDelivery fee: Rs 30\nOrder total: Rs 350', '2026-10-03T14:00:00Z', 'UPDATES'),
     ('swiggy-2', 'Swiggy <noreply@swiggy.in>', 'Your Swiggy order is delivered', 'Item total: Rs 450\nDiscount: -Rs 50\nOrder total: Rs 400', '2026-10-07T14:00:00Z', 'UPDATES'),
@@ -34,7 +34,7 @@ MAILBOX = [
     ('amazon', 'Amazon.in <shipment-tracking@amazon.in>', 'Delivered: your package', 'Your package with the noise-cancelling headphones was delivered on 10 October and handed to the resident.', '2026-10-10T11:00:00Z', 'UPDATES'),
     ('card', 'HDFC Bank <alerts@hdfcbank.net>', 'Credit card statement', 'Your credit card statement is ready. Total due Rs 18,450; minimum due Rs 920. Payment due date: 18 October.', '2026-10-01T03:00:00Z', 'IMPORTANT'),
     ('train', 'IRCTC <ticketadmin@irctc.co.in>', 'Ticket booked', 'PNR 4521877. Train 12658 Chennai Mail, Bengaluru to Chennai, on 2 November, departs 22:40, coach B2 berth 34.', '2026-10-11T07:00:00Z', 'UPDATES'),
-    ('mom', 'Mom <sunita.k@gmail.com>', 'call me', 'Call me when you land in Delhi. Dad wants to know if you will come home for Diwali.', '2026-10-11T15:00:00Z', 'IMPORTANT'),
+    ('mom', 'Mom <fixture.sunita.k@gmail.com>', 'call me', 'Call me when you land in Delhi. Dad wants to know if you will come home for Diwali.', '2026-10-11T15:00:00Z', 'IMPORTANT'),
     ('github', 'GitHub <notifications@github.com>', '[mailmind] Review requested on #42', 'Neha requested your review on pull request #42: Add retry backoff to the indexer.', '2026-10-12T05:00:00Z', 'UPDATES'),
     ('gym', 'Cult.fit <hello@cult.fit>', 'Membership renewal', 'Your cultpass ends on 31 October. Renew now to keep your streak.', '2026-10-06T05:00:00Z', 'UPDATES'),
     ('hackathon', 'Devfolio <team@devfolio.co>', 'You are registered!', 'You are registered for HackBLR on 9 November. Team size: up to 4. Submissions close at 6 pm.', '2026-10-04T12:00:00Z', 'UPDATES'),

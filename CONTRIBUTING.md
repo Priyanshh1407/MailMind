@@ -29,6 +29,10 @@ npm run test:browser
 Set-Location ..
 ```
 
+With the API and built UI running, `npm run test:live` (in `frontend/`) checks the real dashboard with no mocks.
+
+Changes to scam rules, the ledger, Ask, follow-ups, the brief or their prompts must keep the evaluation reports reproducible: rerun the `--replay` commands in [setup](docs/SETUP_AND_RELEASE.md#verification) and `python -m scripts.redteam`, and commit the regenerated reports. Benchmark fixtures must contain only fictional people and addresses (personal-mailbox addresses start with `fixture.`).
+
 Every new backend or frontend feature must include a focused test. Changes to account ownership, migrations, external calls, retries, or side effects also require failure and recovery coverage.
 
 ## Privacy gate

@@ -130,14 +130,14 @@
   "account": "arjun.nair@example.test",
   "thread": [
    {
-    "from": "Ramesh Iyer <ramesh.iyer@gmail.com>",
+    "from": "Ramesh Iyer <fixture.ramesh.iyer@gmail.com>",
     "to": "Arjun Nair <arjun.nair@example.test>",
     "date_ms": 1789518400000,
     "body": "Hi, I will check the flat this weekend and then return the deposit."
    },
    {
     "from": "Arjun Nair <arjun.nair@example.test>",
-    "to": "Ramesh Iyer <ramesh.iyer@gmail.com>",
+    "to": "Ramesh Iyer <fixture.ramesh.iyer@gmail.com>",
     "date_ms": 1790036800001,
     "body": "Dear Mr. Iyer,\n\nThank you. The flat was handed over on 1 September with all keys returned. Please let me know when the deposit will be transferred.\n\nRegards,\nArjun Nair"
    }
@@ -158,7 +158,7 @@
    ]
   ],
   "forbidden": [
-   "ramesh.iyer@gmail.com"
+   "fixture.ramesh.iyer@gmail.com"
   ],
   "today_ms": 1790468800000
  },

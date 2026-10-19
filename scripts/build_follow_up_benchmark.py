@@ -36,10 +36,10 @@ CASES = [
     ('invoice-payment', FORMAL, 'Accounts <accounts@clientco.example>', 'Invoice INV-0932 for August', [
         ('me', 'Dear Mr. Kapoor,\n\nPlease find attached invoice INV-0932 for Rs 45,000 for the August design work, payable within 15 days.\n\nRegards,\nArjun Nair', 0)],
      [['inv-0932', 'invoice'], ['45,000', 'payment']], []),
-    ('landlord-deposit', FORMAL, 'Ramesh Iyer <ramesh.iyer@gmail.com>', 'Security deposit refund', [
+    ('landlord-deposit', FORMAL, 'Ramesh Iyer <fixture.ramesh.iyer@gmail.com>', 'Security deposit refund', [
         ('them', 'Hi, I will check the flat this weekend and then return the deposit.', -6),
         ('me', 'Dear Mr. Iyer,\n\nThank you. The flat was handed over on 1 September with all keys returned. Please let me know when the deposit will be transferred.\n\nRegards,\nArjun Nair', 0)],
-     [['deposit'], ['1 september', 'handed over', 'keys']], ['ramesh.iyer@gmail.com']),
+     [['deposit'], ['1 september', 'handed over', 'keys']], ['fixture.ramesh.iyer@gmail.com']),
     ('meeting-slot', FRIENDLY, 'Neha Gupta <neha.gupta@startup.example>', 'Catch-up on the dashboard project', [
         ('me', 'Hi Neha,\n\nWould Tuesday or Wednesday afternoon work for a 30-minute call about the dashboard project?\n\nThanks,\nArjun', 0)],
      [['tuesday', 'wednesday'], ['dashboard']], []),

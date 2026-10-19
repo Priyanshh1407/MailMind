@@ -22,13 +22,16 @@ The React dashboard combines live Gmail intake, recoverable background processin
 - Explicit saved-mail intelligence backfill in batches of at most 20, with live mail kept ahead of backfill work.
 - Optional Telegram alerts and opt-in automatic Gmail mark-as-read behavior.
 - Local-only mode with verified pre-provisioned assets and no cloud/Gmail/Telegram routing.
-- A red-team harness that assumes the AI model is fully hijacked and measures what MailMind's own checks still stop: 27 of 30 attacks cause harm with the checks off, 1 with them on.
-- A daily brief from three bounded agents (triage, research with verified quotes, writer citing only verified facts), with suggested actions that run only when you approve them, and a plain fallback when providers are down.
-- A Follow-ups tab: pick a sent email and get a formal follow-up in your own greeting and sign-off, checked for AI clichés and for any fact the thread never mentions, to copy into Gmail. MailMind never sends mail; names, addresses and amounts reach the provider only as placeholders.
-- An Ask tab: questions about your saved mail answered by a read-only agent, where every sentence must cite a quote verified in an email it read; unverifiable claims are removed.
-- A Money tab with spending, refunds, bills and subscriptions from receipts; every amount is replaced by a numbered placeholder before any provider call, so the AI picks the total without ever seeing a number.
-- Local scam and phishing checks: lookalike domains, misleading links, failed sender authentication and Indian payment lures (OTP, UPI, KYC), each with quoted evidence and a reproducible evaluation.
+
+Added in October 2026 (scam checks, Money, Ask, Follow-ups and the brief each have their own flag, off by default; signals are always recorded):
+
 - Security signals saved with every email: Gmail's SPF/DKIM/DMARC verdicts, reply paths, unsubscribe headers, links (visible text and real target) and hidden text, with an explicit backfill for older mail.
+- Local scam and phishing checks: lookalike domains, misleading links, failed sender authentication and Indian payment lures (OTP, UPI, KYC), each with quoted evidence and a reproducible evaluation.
+- A Money tab with spending, refunds, bills and subscriptions from receipts; every amount is replaced by a numbered placeholder before any provider call, so the AI picks the total without ever seeing a number.
+- An Ask tab: questions about your saved mail answered by a read-only agent, where every sentence must cite a quote verified in an email it read; unverifiable claims are removed.
+- A Follow-ups tab: pick a sent email and get a formal follow-up in your own greeting and sign-off, checked for AI clichés and for any fact the thread never mentions, to copy into Gmail. MailMind never sends mail; names, addresses and amounts reach the provider only as placeholders.
+- A daily brief from three bounded agents (triage, research with verified quotes, writer citing only verified facts), with suggested actions that run only when you approve them, and a plain fallback when providers are down.
+- A red-team harness that assumes the AI model is fully hijacked and measures what MailMind's own checks still stop: 27 of 30 attacks cause harm with the checks off, 1 with them on.
 
 ## Product workflow
 
@@ -52,7 +55,7 @@ flowchart LR
 The native supervisor owns four child processes:
 
 1. **Semantic indexer** — waits for Google connection, then drains durable search-index rows in batches of ten.
-2. **API** — serves the local session, account lifecycle, dashboard data, search, feedback, and recovery endpoints.
+2. **API** — serves the local session, account lifecycle, dashboard data, search, feedback, and recovery endpoints, and runs the on-demand assistant jobs (Ask questions, follow-up drafts, the daily brief) on their own bounded runners.
 3. **Gmail/classification worker** — discovers live mail, admits bounded historical work, classifies messages, and handles notification/read-state stages.
 4. **Frontend** — serves the built React application at `127.0.0.1:5173`.
 
@@ -74,6 +77,8 @@ flowchart TB
   API --> DB
   API --> Search
   API --> Local
+  API -->|Ask, follow-ups, brief| Models
+  API -->|sent mail and threads, read-only| Gmail
   Worker --> DB
   Worker --> Gmail
   Worker --> Models
@@ -231,7 +236,7 @@ Read [Security policy](SECURITY.md) and [Privacy and local-only policy](docs/PRI
 
 The dashboard provides:
 
-- One overview of eight KPI cards: saved, processed, feedback, average classification time, open actions, due soon, overdue, and tokens today
+- One overview of eight KPI cards: saved, processed, feedback, average classification time, open actions, due soon, overdue, and tokens today, plus **Risky emails** and **Spent this month** when those features are on
 - Live work progress and bounded-queue counts
 - Separate live-sync and historical-backlog controls
 - Worker, model, provider, and refresh health
@@ -241,7 +246,8 @@ The dashboard provides:
 - Explicit retry/recovery controls for unfinished processing and ambiguous notifications
 - Gmail-style system alerts (offline, can't reach Gmail, service restarting, back online) with exponential-backoff retries; a network drop or service crash never signs you out or blanks the dashboard
 - Temporary failures (AI outage or quota, Gmail or Telegram errors) retry until they succeed; only permanent ones stop, with the reason
-- Inbox, Action Center, and Usage sections in the top navbar, with source-labelled explanations and bounded action lifecycle controls
+- Inbox, Action Center and Usage sections in the top navbar, plus **Money**, **Ask** and **Follow-ups** when those features are on; the daily brief sits at the top of the Inbox and the red-team result in Usage
+- A scam badge and **Scam check** panel on each email, with every warning sign and its evidence
 - A "Why this category?" explanation inside each email card: a summary, the signals, the quoted evidence that grounds them, and the whole decision (which model decided and whether a backup answered, what the category means, past corrections used as examples, the local second opinion, your own label, and the time taken)
 - Action Center filters by status and by action type (only the types the account actually has, with counts), and **Open source** shows the original email in a pop-up with the quoted sentence highlighted (Esc closes it)
 - Day, week, and month token charts that separate provider-billed from locally processed usage, with ranked per-provider and per-operation breakdowns
@@ -403,6 +409,9 @@ Live evaluation also found that the previously configured fallback model (`gemin
 - Provider quotas, retention, and service policies remain external.
 - The supported product is one trusted local user, not a hosted multi-tenant service.
 - Automated tests use synthetic or temporary data; the controlled live OAuth/Gmail checklist must be run deliberately before claiming live-provider validation.
+- The scam, money, Ask, follow-up and brief benchmarks are synthetic and written by the same person as the features, so their numbers are optimistic. The Ask, follow-up and brief live recordings and the human blind test for follow-ups are still pending (providers were out of quota); their reports say so.
+- Grounding proves that an email said something, not that it is true: a hijacked model can still repeat an attacker's own email with a real quote (the one residual case in the [red-team](docs/REDTEAM.md)).
+- Scam scores are warnings from local rules: innocent names one letter from a brand can be flagged, and senders you trust stop counting as lookalikes.
 
 ## Documentation
 
@@ -414,6 +423,13 @@ Live evaluation also found that the previously configured fallback model (`gemin
 - [Privacy and local-only](docs/PRIVACY_AND_LOCAL_ONLY.md)
 - [Security design showcase](docs/SECURITY_FEATURES_SHOWCASE.md)
 - [Classifier evaluation](docs/EVALUATION.md)
+- [Scam and phishing evaluation](docs/RISK_EVALUATION.md)
+- [Money extraction evaluation](docs/LEDGER_EVALUATION.md)
+- [Ask your inbox evaluation](docs/AGENT_EVALUATION.md)
+- [Follow-up evaluation](docs/FOLLOW_UP_EVALUATION.md)
+- [Daily brief evaluation](docs/BRIEF_EVALUATION.md)
+- [Red-team](docs/REDTEAM.md)
+- [Self-recovery](docs/SELF_RECOVERY.md)
 - [Provider resilience matrix](docs/RESILIENCE.md)
 - [Performance measurements](docs/PERFORMANCE.md)
 - [Frontend guide](frontend/README.md)
@@ -424,4 +440,4 @@ Live evaluation also found that the previously configured fallback model (`gemin
 
 Copyright © 2026 Priyansh Waghela. All rights reserved. The source is published for viewing and evaluation; no license to use, copy, modify, or distribute it is granted.
 
-The synthetic priority benchmark in `fixtures/priority_benchmark/` is CC0, as documented in its provenance file. Model, dataset, Gmail, Gemini, Groq, Telegram, and dependency terms apply independently.
+The synthetic benchmarks in `fixtures/priority_benchmark/`, `fixtures/phishing_benchmark/`, `fixtures/receipts_benchmark/`, `fixtures/inbox_qa/` and `fixtures/follow_up_benchmark/` are CC0, as documented in their provenance files; every person, address and company in them is fictional (personal-mailbox addresses start with `fixture.`). `fixtures/recorded_cloud/` holds recorded provider answers to those synthetic requests only. Model, dataset, Gmail, Gemini, Groq, Telegram, and dependency terms apply independently.

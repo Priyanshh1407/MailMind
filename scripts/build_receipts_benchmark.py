@@ -168,7 +168,7 @@ def cases():
         ('Groww <noreply@groww.in>', 'Weekly market update', 'Your portfolio is up 3.1% this week. Top gainer: TCS (+₹84). Explore SIPs from ₹100.', {'kind': 'none'}),
         ('Ola <offers@olacabs.com>', 'Ride for less', 'Get 20% off on your next 3 rides, up to ₹75 per ride. Use code RIDE20.', {'kind': 'none'}),
         ('Swiggy <offers@swiggy.in>', 'Your favourites are back', 'Biryani starting at ₹149. Free delivery on orders above ₹199. Order now.', {'kind': 'none'}),
-        ('Friend <rohan.mehta@gmail.com>', 'Dinner split', 'Hey, dinner came to Rs 2,400 so your share is Rs 600. Send it whenever.', {'kind': 'none'}),
+        ('Friend <fixture.rohan.mehta@gmail.com>', 'Dinner split', 'Hey, dinner came to Rs 2,400 so your share is Rs 600. Send it whenever.', {'kind': 'none'}),
     ]
     for index, (sender, subject, body, gold) in enumerate(holdout):
         add(f'holdout-{index}', sender, subject, body, date(2026, 8, 1) + timedelta(days=index), gold)

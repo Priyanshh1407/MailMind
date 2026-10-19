@@ -42,7 +42,7 @@ MailMind does not read or process account mail before the Google connection succ
 
 ### Navigation and overview
 
-**Inbox**, **Action Center** and **Usage** sit in the top navbar, so you can switch sections from anywhere. On narrow screens they move to their own row under the logo. Opening **Action Center** or **Usage** scrolls the page so that section starts just below the navbar; opening **Inbox** returns to the top, where the overview is.
+**Inbox**, **Action Center** and **Usage** sit in the top navbar, so you can switch sections from anywhere. **Money**, **Ask** and **Follow-ups** appear there too when those features are switched on. On narrow screens they move to their own row under the logo. Opening **Action Center** or **Usage** scrolls the page so that section starts just below the navbar; opening **Inbox** returns to the top, where the overview is.
 
 Below the navbar, one overview of eight cards in the same design covers the whole account:
 
@@ -52,6 +52,8 @@ Below the navbar, one overview of eight cards in the same design covers the whol
 - **Average classification** uses measured samples, shown in seconds with one decimal, rounded up; it does not invent a value when none exist.
 - **Open actions**, **Due soon** (next 7 days) and **Overdue** summarise the Action Center.
 - **Tokens today** counts cloud and local token usage since midnight.
+- **Risky emails** (with scam checks on) counts high-risk emails you have not marked as checked.
+- **Spent this month** (with the Money tab on) totals this month's receipts; amounts never leave your computer.
 
 ### Inbox work progress
 
@@ -239,7 +241,7 @@ Stops Gmail access and removes the selected account’s locally stored OAuth cre
 
 ### Delete this account data
 
-Removes the selected account’s managed local mail, jobs, feedback, derived vectors, and OAuth credential. Other accounts are preserved. This operation is intentionally explicit and cannot retract data previously sent to external providers.
+Removes the selected account’s managed local mail, jobs, feedback, derived vectors, OAuth credential, and everything the assistant features saved (security signals, scam reports, Money entries, questions, sent-mail list, drafts and briefs). Other accounts are preserved. This operation is intentionally explicit and cannot retract data previously sent to external providers.
 
 ### Delete old unassigned data
 
@@ -307,6 +309,8 @@ Logs are intended to contain safe event types rather than email content or raw p
 - Cloud classification receives minimized, masked content in normal mode.
 - Explicit saved-mail backfill can send the same minimized, masked saved content to configured cloud classifiers; it does not reread Gmail.
 - Token events store counts and safe metadata, not prompts, email text, or provider responses.
+- Money, Ask and the brief send amounts only as placeholders; Follow-ups also masks names, addresses and links. Scam checks never leave your computer.
+- MailMind never sends email or creates drafts; follow-ups are copied and sent by you from Gmail.
 - Masking reduces exposure but is not anonymization.
 - Local-only mode blocks cloud/Gmail/Telegram routing but is not an operating-system firewall.
 

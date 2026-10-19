@@ -10,7 +10,8 @@ The current interface follows a dark, compact dashboard design with:
 
 - local MailMind logo and favicon assets;
 - Lucide React icons;
-- section tabs in the top navbar and one overview of eight KPI cards;
+- section tabs in the top navbar (Inbox, Action Center, Usage, and Money, Ask and Follow-ups when switched on) and one overview of eight KPI cards, plus Risky emails and Spent this month when those features are on;
+- the daily brief card, scam badges and **Scam check** panels;
 - inbox progress and intake panels;
 - non-sticky search and category controls;
 - four responsive category lanes;
@@ -78,8 +79,14 @@ section-local, while a session/account mismatch cancels the complete snapshot.
 | <code>AppHeader</code> | Brand, system health, connected-account controls |
 | <code>HealthPopover</code> | Model, provider, worker, prediction, and refresh state |
 | <code>AccountControls</code> | Connect, switch, disconnect, delete, and stop-processing actions |
-| <code>DashboardStats</code> | The overview: eight KPI cards in one design (saved, processed, feedback, classification time, open actions, due soon, overdue, tokens today) |
-| <code>SectionTabs</code> | Inbox / Action Center / Usage tablist rendered in the header navbar |
+| <code>DashboardStats</code> | The overview: eight KPI cards in one design (saved, processed, feedback, classification time, open actions, due soon, overdue, tokens today), plus Risky emails and Spent this month when enabled |
+| <code>SectionTabs</code> | The header tablist; App shows Money, Ask and Follow-ups only when <code>/status</code> reports them enabled |
+| <code>RiskPanel</code> | Scam badge and the "Scam check" panel: score meter, each warning sign with its evidence, and "I've checked this email" |
+| <code>MoneyPanel</code> / <code>MoneyChart</code> | Month navigation, spent/bills/subscriptions metrics, 12-month chart (lazy Recharts), top merchants, subscriptions with overlap insights, and transactions with Open source and Correct |
+| <code>AskPanel</code> | Question box, job polling, numbered citations that open the source email, the step trace and recent questions (helpers in <code>ask.js</code>) |
+| <code>FollowUpsPanel</code> | Sent mail with "No reply" badges, thread summary, editable draft with "Check before sending" notes, Copy and Open in Gmail |
+| <code>DailyBrief</code> | The morning brief at the top of the Inbox: cited sections, suggested actions with Approve/Dismiss, and the agent trace |
+| <code>SecurityReport</code> | The committed red-team result (<code>redteam-report.json</code>) in the Usage tab |
 | <code>SourceEmailDialog</code> | Action Center pop-up showing an action's source email with the evidence highlighted; closes on Esc, the close button or a click outside |
 | <code>InboxProgress</code> | Current admitted batch and durable workflow counts |
 | <code>InboxIntake</code> | Live sync, bounded historical backlog, and explicit saved-mail intelligence backfill |
@@ -155,12 +162,11 @@ The browser suite uses synthetic in-browser API fixtures. It exercises account m
 
 It does not sign in to Google, read real mail, call live cloud providers, or send Telegram messages.
 
-At the 29 September 2026 Phase 8 verification, the frontend unit suite contains 42
-passing tests, including feature-specific validation for bounded backfill status
-and acknowledgements; the browser suite contains 24 passing scenarios. The
-Phase 8 scenario proves the control is explicit, capped at 20, observable, and
-describes its historical side-effect suppression. Lint and the production build
-also pass.
+At the 20 October 2026 verification, the frontend unit suite has 65 passing tests and the browser suite 47 passing scenarios, covering every new tab, the scam panel, the daily brief and the security report. Lint and the production build also pass.
+
+## Live check
+
+`npm run test:live` drives the real dashboard against a running API (no mocks) at desktop and phone sizes; see the [test guide](../tests/README.md#live-check-against-the-real-app).
 
 ## Security and privacy
 

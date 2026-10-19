@@ -178,7 +178,23 @@ Runtime diagnostics expose counts, timestamps, safe state codes, provider-config
 
 Application logs record allowlisted event types and exception classes rather than raw sensitive exception messages.
 
-## 15. Honest limits
+## 15. Treating the model as an attacker
+
+The Ask agent, follow-ups and the brief assume the model's output may be hostile:
+
+- tools are read-only and allowlisted per agent, with step, read and time budgets;
+- every sentence must cite a quote that `quote_in_source` finds in an email the agent actually opened;
+- the brief's proposals are typed, checked against items it was given, and run only after approval;
+- follow-ups check that links and "I have already..." claims come from the user's own messages;
+- invisible HTML text never reaches a provider.
+
+`scripts/redteam.py` replaces the model with one that does whatever the attack says and measures what still gets through: 27 of 30 attacks cause harm with these checks off, 1 with them on ([report](REDTEAM.md)). Each attack family has a control that must pass, which caught the harness's own first wrong numbers.
+
+## 16. Amounts that never leave
+
+Money, Ask and the brief replace each amount with a numbered placeholder before any provider call and fill the real value in locally. The provider chooses which placeholder is the total without seeing a number; the evaluation recorder fails if any amount appears in a request.
+
+## 17. Honest limits
 
 MailMind deliberately does not claim:
 
@@ -190,7 +206,8 @@ MailMind deliberately does not claim:
 - provider-side deletion;
 - production classifier accuracy;
 - native/container semantic-index parity; or
-- protection from a compromised local operating system.
+- protection from a compromised local operating system; or
+- that a quoted email is true (grounding proves the email said it, not that it is honest).
 
 The security value of the project is not the absence of failure. It is that failures, uncertainty, ownership, and external effects are represented explicitly and conservatively.
 

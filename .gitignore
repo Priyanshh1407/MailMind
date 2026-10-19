@@ -57,6 +57,8 @@ token.*.json
 # Test, coverage, audit, and generated report output
 test-results/
 playwright-report/
+# Live-check screenshots show real mail
+frontend/e2e-live/*.png
 reports/
 report/
 coverage/

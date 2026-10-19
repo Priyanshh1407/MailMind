@@ -17,11 +17,16 @@ No account mail is accessed before successful Google OAuth connection. The seman
 | Gemini / Groq (Ask tab, optional) | Answering your question about saved mail | Your question; for each email the agent chooses to read (at most 10), the same minimised text classification sends; sender **domains** only (never names or addresses); dates; amounts as `{{amount:N}}` and `{{ledger:...}}` tokens filled in locally |
 | Gmail (Follow-ups tab, optional) | Listing sent mail and reading the thread you pick | Sent-mail headers (To, Subject, Date) and Gmail's preview; the full thread only for the email you choose. MailMind never sends mail or creates drafts |
 | Gemini / Groq (Follow-ups tab, optional) | Writing the follow-up | The thread with names in its From/To headers and the names you addressed replaced by `{{recipient_name}}` / `{{my_name}}`, and amounts, email addresses, links and long numbers as numbered placeholders, all restored locally; style settings learned locally (greeting, sign-off, spelling), never your other sent emails |
+| Gemini / Groq (daily brief, optional) | Choosing, researching and writing the brief | Short item lines (category and sender **domain**, subject, due date); for items the research agent opens, the same minimised text classification sends, with amounts as `{{amount:N}}` tokens filled in locally |
+| Gmail (security signals backfill, explicit) | Re-reading saved messages once to capture their headers and links | The same message reads as ordinary intake; only the signals row is written, with no new tasks, alerts or read-state changes |
 | Telegram | Optional Important alerts | Minimized masked subject and short body snippet plus delivery identifiers |
+| Telegram (brief note, optional) | Telling you the brief is ready | Counts only (overdue, due this week, possible scams, waiting for replies); no email text |
 | Local API/browser | Dashboard and controls | Account-scoped saved data over loopback |
 | Embedded Chroma | Feedback retrieval and semantic search | Local account-scoped derived text and embeddings |
 
 Provider keys are carried through configuration or authorization mechanisms, not inserted into email prompts.
+
+Scam checks and security signals never leave the computer: both are computed locally from data Gmail already returned. Text styled to be invisible is not saved as body text, so no provider receives it.
 
 ## Masking
 
@@ -35,7 +40,7 @@ Masking is minimization, not anonymization. Names inside subjects or bodies, add
 
 ## Local retention
 
-SQLite stores account-scoped source mail, ingestion cursors, predictions, feedback, processing attempts, notification state, semantic-index reconciliation, source-labelled analysis, Action Center rows, reminders, token-usage events, intelligence-backfill state, and worker/account runtime state.
+SQLite stores account-scoped source mail, ingestion cursors, predictions, feedback, processing attempts, notification state, semantic-index reconciliation, source-labelled analysis, Action Center rows, reminders, token-usage events, intelligence-backfill state, and worker/account runtime state. With the October features it also keeps security signals, scam reports, ledger entries (amounts, merchants, evidence quotes), Ask questions with their answers and step traces, a cache of sent-mail headers and previews, follow-up drafts with a learned style profile, and daily briefs with their traces. Traces record tool names, counts and timings, never email text.
 
 Token events contain provider/operation/outcome categories and non-negative counts when available. They do not contain prompts, email text, action text, or provider responses. Provider-billed and locally processed tokens are reported separately and are not interchangeable cost figures.
 
@@ -56,7 +61,7 @@ MailMind has no automatic expiry policy.
 | --- | --- |
 | Stop processing | Pauses work and ends the local session; mail remains, and the OAuth credential is parked unused for 24 hours, then deleted |
 | Disconnect Google | Parks the selected account’s OAuth credential unused for 24 hours (so Connect Google can reconnect silently), then deletes it; saved mail and feedback remain. Delete account data removes it at once |
-| Delete this account data | Removes that account’s managed mail, jobs, histories, vectors, and credentials |
+| Delete this account data | Removes that account’s managed mail, jobs, histories, vectors, credentials, and every feature table (signals, scam reports, ledger, questions, sent-mail cache, drafts, briefs) |
 | Delete old unassigned data | Separately removes explicit legacy and unassigned storage |
 
 Google-side permission revocation must be performed separately. Application deletion cannot remove backups, snapshots, manual exports, copied models or datasets, delivered Telegram messages, or earlier provider requests.
@@ -79,8 +84,11 @@ Local-only mode:
 - does not send Telegram alerts;
 - rejects Google and inbox actions through the API;
 - uses explicitly prepared local model and embedding assets;
-- disables cloud fallback; and
-- reports external providers as disabled.
+- disables cloud fallback;
+- reports external providers as disabled;
+- keeps scam checks working (they are local) and the Money tab on rules only;
+- turns off Ask and Follow-ups, which need a provider; and
+- always shows the plain fallback brief, with no Telegram note.
 
 The UI and API still communicate over localhost. Local-only mode is an application routing boundary, not an operating-system firewall.
 
