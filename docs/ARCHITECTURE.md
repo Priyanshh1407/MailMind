@@ -67,7 +67,7 @@ FastAPI owns:
 - explicit bounded saved-mail intelligence backfill; and
 - explicit recovery for unfinished tasks and ambiguous notification delivery.
 
-The API opens/migrates schema version 19 and lazily initializes heavy or optional services.
+The API opens/migrates schema version 20 and lazily initializes heavy or optional services.
 
 ### Gmail/classification worker
 
@@ -223,6 +223,19 @@ With `MAILMIND_FOLLOW_UPS_ENABLED=true`, the Follow-ups tab drafts a reply for a
 - `POST /follow-ups/drafts` starts a job: read the whole thread (`threads.get`), mask it (`src/follow_ups.py`: amounts, addresses, links and long numbers become numbered placeholders; the header names and the name the user addressed become `{{recipient_name}}` / `{{my_name}}`), learn or reuse the user's style (greeting, sign-off, signature, length, spelling from their recent sent mail, cached for a week), and call `call_structured` with its own schema (greeting, 1-3 paragraphs, closing, references).
 - `check_draft` then rejects stock AI phrases, dash chains, exclamation marks, emojis, lists, rhetorical triples, wrong length, a greeting or sign-off other than the user's, references that do not quote the thread, and any number, date or weekday the thread never mentions. A failing draft gets one revision with the exact problems; whatever still fails is returned as "Check before sending" notes. The draft is assembled and unmasked locally.
 - The recipient is addressed exactly as the user addressed them in their own last message ("Dear Ms. Menon", "Dear Sir/Madam", "Hi Neha"); team mailboxes never become "Dear Sales".
+
+### Daily brief (chief of staff)
+
+With `MAILMIND_DAILY_BRIEF_ENABLED=true`, `GET /briefs/today` writes today's brief in the background the first time the dashboard asks after `MAILMIND_DAILY_BRIEF_TIME` (default 08:30 local), once per day; `POST /briefs` rewrites it on demand (rate-limited). It runs in the API on its own runner, never in the worker, so it cannot delay Gmail polling.
+
+`src/chief_of_staff.py`:
+
+1. **Candidates, locally**: the last 24 hours of Important/Updates mail, open tasks due within 7 days (or overdue), unreviewed high scam scores, renewals within 7 days, and sent mail waiting 3+ days for a reply.
+2. **Triage agent**: sees titles only and ranks at most 8; refs it invents are ignored.
+3. **Research agents**: one per chosen item (at most 6, inside a 90-second budget), each reading only that email's minimised text (amounts as tokens) and returning at most 2 facts; a fact is kept only if its quote passes `quote_in_source`.
+4. **Writer agent**: composes sections citing fact IDs only; a sentence with an unknown ID is removed. Proposals (`complete_action`, `snooze_action`, `draft_follow_up`, `mark_risky_reviewed`) are kept only for items the writer was given, of the matching kind.
+
+Approving a proposal (`POST /briefs/{id}/proposals/{n}/approve`) runs the existing revision-checked Action Center transition or scam review; `draft_follow_up` opens the Follow-ups tab on that email. Nothing runs without approval. If any agent's provider call fails, a deterministic fallback brief (titles and counts from SQLite) is stored instead, so the brief always arrives. An optional Telegram note (`MAILMIND_BRIEF_TELEGRAM_ENABLED`) carries counts only.
 
 ## Intelligence data flow
 

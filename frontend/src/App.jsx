@@ -20,6 +20,7 @@ import { TokenUsagePanel } from './components/TokenUsagePanel';
 import { MoneyPanel } from './components/MoneyPanel';
 import { AskPanel } from './components/AskPanel';
 import { FollowUpsPanel } from './components/FollowUpsPanel';
+import { DailyBrief } from './components/DailyBrief';
 import { EASE_OUT } from './motion';
 import { BootContext, useBootSequence } from './boot';
 
@@ -61,6 +62,7 @@ function App() {
   const [moneyOpened, setMoneyOpened] = useState(false);
   const [askOpened, setAskOpened] = useState(false);
   const [followOpened, setFollowOpened] = useState(false);
+  const [followTarget, setFollowTarget] = useState(null);
   useEffect(() => {
     if (activeTab === 'usage') setUsageOpened(true);
     if (activeTab === 'money') setMoneyOpened(true);
@@ -153,6 +155,7 @@ function App() {
       {showData && <>
         <DashboardStats snapshot={snapshot} />
         <TabPanel id='inbox' active={activeTab === 'inbox'}>
+          {snapshot.status.brief?.enabled && <DailyBrief snapshot={snapshot} disabled={disabled || readOnly} api={api} onOpenFollowUp={messageId => { setFollowTarget(messageId); showSection('follow-ups'); }} />}
           <div className='work-grid'><InboxProgress snapshot={snapshot} /><InboxIntake snapshot={snapshot} loading={loading} disabled={disabled || readOnly} pending={pending} mutate={mutate} /></div>
           <IngestionStatus snapshot={snapshot} disabled={disabled || readOnly} pending={pending} mutate={mutate} />
           <SearchFilters search={search} setSearch={setSearch} query={query} setQuery={setQuery} loading={loading} page={page} />
@@ -176,7 +179,7 @@ function App() {
           {askOpened && <AskPanel snapshot={snapshot} disabled={disabled} api={api} openSource={openSource} />}
         </TabPanel>}
         {tabs.some(tab => tab.key === 'follow-ups') && <TabPanel id='follow-ups' active={activeTab === 'follow-ups'}>
-          {followOpened && <FollowUpsPanel snapshot={snapshot} disabled={disabled || readOnly} api={api} />}
+          {followOpened && <FollowUpsPanel snapshot={snapshot} disabled={disabled || readOnly} api={api} pickId={followTarget} onPicked={() => setFollowTarget(null)} />}
         </TabPanel>}
       </>}
       <AppFooter autoMarkRead={snapshot?.status.auto_mark_read} />

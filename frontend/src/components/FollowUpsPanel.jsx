@@ -27,7 +27,7 @@ function SentRow({ item, onPick, disabled }) {
   </li>;
 }
 
-export function FollowUpsPanel({ snapshot, disabled, api }) {
+export function FollowUpsPanel({ snapshot, disabled, api, pickId = null, onPicked }) {
   const generation = snapshot.session.generation;
   const [sent, setSent] = useState(null);
   const [search, setSearch] = useState('');
@@ -111,6 +111,14 @@ export function FollowUpsPanel({ snapshot, disabled, api }) {
       setResult(null);
     }
   };
+
+  // Opened from a brief proposal: start drafting that sent email at once.
+  useEffect(() => {
+    if (!pickId || !sent) return;
+    const item = sent.messages.find(row => row.message_id === pickId);
+    if (item) { onPicked?.(); write(item, length); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickId, sent]);
 
   const copy = async () => {
     try {

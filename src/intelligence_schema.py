@@ -317,3 +317,22 @@ def migration_19(conn):
         updated_at TEXT NOT NULL
     )""")
     conn.execute('CREATE INDEX follow_ups_recent ON follow_ups(account_id,follow_up_id DESC)')
+
+
+def migration_20(conn):
+    # The daily brief: one row per generated brief, with its sections,
+    # proposals (and the user's decisions) and a content-free agent trace.
+    conn.execute("""CREATE TABLE daily_briefs (
+        brief_id INTEGER PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+        brief_date TEXT NOT NULL CHECK(length(brief_date)=10 AND date(brief_date) IS NOT NULL),
+        status TEXT NOT NULL CHECK(status IN ('running','ready','partial','fallback','failed')),
+        brief_json TEXT CHECK(brief_json IS NULL OR (length(brief_json)<=65536 AND json_valid(brief_json))),
+        trace_json TEXT NOT NULL DEFAULT '[]' CHECK(length(trace_json)<=16384 AND json_valid(trace_json)),
+        total_tokens INTEGER CHECK(total_tokens IS NULL OR total_tokens>=0),
+        latency_ms INTEGER CHECK(latency_ms IS NULL OR latency_ms>=0),
+        error_code TEXT CHECK(error_code IS NULL OR length(error_code) BETWEEN 1 AND 80),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
+    conn.execute('CREATE INDEX daily_briefs_recent ON daily_briefs(account_id,brief_id DESC)')

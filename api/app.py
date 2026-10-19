@@ -970,6 +970,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                                                 and not application.state.settings.local_only)},
                     'follow_ups':{'enabled':bool(application.state.settings.follow_ups_enabled
                                                  and not application.state.settings.local_only)},
+                    'brief':{'enabled':bool(application.state.settings.daily_brief_enabled)},
                     'poll_interval_seconds':application.state.settings.poll_interval_seconds,
                     'worker_lease_seconds':application.state.settings.worker_lease_seconds,
                     'batch_size':application.state.settings.batch_size}
@@ -1180,6 +1181,8 @@ def create_app(*, settings=None, model_factory=MailMindModel,
     question_routes.register(application, session, search_collection)
     from api import follow_ups as follow_up_routes
     follow_up_routes.register(application, session)
+    from api import briefs as brief_routes
+    brief_routes.register(application, session)
 
     origins = (settings or Settings()).frontend_origins
     application.add_middleware(CORSMiddleware, allow_origins=list(origins), allow_credentials=True,

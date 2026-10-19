@@ -126,6 +126,19 @@ function validQuestion(item) {
     && timestamp(item.created_at);
 }
 
+const BRIEF_STATUSES = ['running', 'ready', 'partial', 'fallback', 'failed'];
+const PROPOSAL_TYPES = ['complete_action', 'snooze_action', 'draft_follow_up', 'mark_risky_reviewed'];
+function validBrief(row) {
+  const brief = row.brief;
+  return record(row) && positiveInteger(row.brief_id) && typeof row.brief_date === 'string' && BRIEF_STATUSES.includes(row.status)
+    && Array.isArray(row.trace) && (brief === null || (record(brief) && ['agents', 'fallback', 'empty', 'single'].includes(brief.mode)
+      && Array.isArray(brief.sections) && brief.sections.every(section => record(section) && typeof section.title === 'string'
+        && Array.isArray(section.sentences) && section.sentences.every(sentence => record(sentence) && typeof sentence.text === 'string'
+          && Array.isArray(sentence.citations) && (brief.mode === 'fallback' || sentence.citations.length > 0)))
+      && Array.isArray(brief.proposals) && brief.proposals.every(item => record(item) && PROPOSAL_TYPES.includes(item.type)
+        && ['proposed', 'approved', 'dismissed'].includes(item.state) && typeof item.label === 'string')));
+}
+
 function validAction(action) {
   return record(action) && positiveInteger(action.action_id) && typeof action.account_id === 'string' && typeof action.email_id === 'string' && typeof action.fingerprint === 'string'
     && ACTION_TYPES.includes(action.action_type) && typeof action.title === 'string' && typeof action.description === 'string' && typeof action.evidence === 'string'
@@ -188,6 +201,8 @@ export function validateResponse(path, method, data) {
   if (valid && method === 'GET' && route === '/follow-ups/sent') valid = identity(data) && Array.isArray(data.messages) && data.messages.every(row => record(row) && typeof row.message_id === 'string' && typeof row.thread_id === 'string' && typeof row.subject === 'string' && integer(row.sent_at) && [null, 'waiting', 'replied'].includes(row.reply_state) && (row.waiting_days === null || integer(row.waiting_days))) && typeof data.refreshing === 'boolean' && typeof data.has_more === 'boolean' && integer(data.total);
   if (valid && method === 'GET' && /^\/follow-ups\/drafts\/\d+$/.test(route)) valid = identity(data) && positiveInteger(data.follow_up_id) && ['running', 'drafted', 'copied', 'dismissed', 'failed'].includes(data.status) && (data.text === null || typeof data.text === 'string') && Array.isArray(data.issues) && data.issues.every(item => typeof item === 'string') && Array.isArray(data.summary) && typeof data.thread_id === 'string';
   if (valid && method === 'POST' && route === '/follow-ups/drafts') valid = positiveInteger(data.follow_up_id) && typeof data.message === 'string';
+  if (valid && method === 'GET' && route === '/briefs/today') valid = identity(data) && typeof data.scheduled_time === 'string' && (data.brief === null || validBrief(data.brief));
+  if (valid && method === 'POST' && route === '/briefs') valid = positiveInteger(data.brief_id) && typeof data.message === 'string';
   const actionMutation = /^\/actions\/\d+(?:\/snooze)?$/.test(route);
   if (valid && actionMutation && ['PATCH', 'POST'].includes(method)) {
     valid = validActionMutation(data);

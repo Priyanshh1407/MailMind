@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import os
+import re
 from .prediction import Category
 from .intelligence_contract import DEFAULT_TIMEZONE, WEEK_START
 
@@ -61,6 +62,10 @@ class Settings:
     inbox_questions_enabled: bool = False
     # Follow-ups tab: drafts to copy into Gmail. MailMind never sends mail.
     follow_ups_enabled: bool = False
+    # Daily brief: a cited morning summary with proposals you approve.
+    daily_brief_enabled: bool = False
+    daily_brief_time: str = '08:30'
+    brief_telegram_enabled: bool = False
 
     def __post_init__(self):
         for name, low, high in (('poll_interval_seconds',5,86400), ('batch_size',1,200),
@@ -81,7 +86,7 @@ class Settings:
         for name in ('action_extraction_enabled', 'action_reminders_enabled',
                      'telegram_action_reminders_enabled',
                      'token_collection_enabled', 'token_analytics_visible',
-                     'explanations_visible', 'risk_analysis_enabled', 'ledger_enabled', 'inbox_questions_enabled', 'follow_ups_enabled'):
+                     'explanations_visible', 'risk_analysis_enabled', 'ledger_enabled', 'inbox_questions_enabled', 'follow_ups_enabled', 'daily_brief_enabled', 'brief_telegram_enabled'):
             if type(getattr(self, name)) is not bool:
                 raise ValueError(f'{name} must be a boolean')
         if self.action_reminders_enabled and not self.action_extraction_enabled:
@@ -91,13 +96,16 @@ class Settings:
             raise ValueError('Telegram action reminders require reminders: set MAILMIND_ACTION_REMINDERS_ENABLED=true, or MAILMIND_TELEGRAM_ACTION_REMINDERS_ENABLED=false')
         if self.telegram_action_reminders_enabled and self.local_only:
             raise ValueError('Telegram action reminders are unavailable in local-only mode: set MAILMIND_TELEGRAM_ACTION_REMINDERS_ENABLED=false for local-only runs, or MAILMIND_LOCAL_ONLY=false')
+        if not isinstance(self.daily_brief_time, str) or not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', self.daily_brief_time):
+            raise ValueError('MAILMIND_DAILY_BRIEF_TIME must be HH:MM (24-hour)')
+        if self.brief_telegram_enabled and not self.daily_brief_enabled:
+            raise ValueError('Telegram brief summaries require the brief: set MAILMIND_DAILY_BRIEF_ENABLED=true, or MAILMIND_BRIEF_TELEGRAM_ENABLED=false')
         if self.token_analytics_visible and not self.token_collection_enabled:
             raise ValueError('Token analytics visibility requires token collection: set MAILMIND_TOKEN_COLLECTION_ENABLED=true, or MAILMIND_TOKEN_ANALYTICS_VISIBLE=false')
         if self.default_timezone != DEFAULT_TIMEZONE:
             raise ValueError(f'Unsupported default timezone: {self.default_timezone}')
         if self.week_start != WEEK_START:
             raise ValueError(f'Unsupported week boundary: {self.week_start}')
-        import re
         model_pattern = re.compile(r'[a-z0-9][a-z0-9./_-]{0,99}')
         if not isinstance(self.gemini_models, tuple) or not 1 <= len(self.gemini_models) <= 3 or len(set(self.gemini_models)) != len(self.gemini_models) or any(not isinstance(value,str) or not model_pattern.fullmatch(value) for value in self.gemini_models):
             raise ValueError('MAILMIND_GEMINI_MODELS must contain one to three unique model IDs')
@@ -157,4 +165,7 @@ class Settings:
             ledger_enabled=_environment_bool('MAILMIND_LEDGER_ENABLED',False),
             inbox_questions_enabled=_environment_bool('MAILMIND_INBOX_QUESTIONS_ENABLED',False),
             follow_ups_enabled=_environment_bool('MAILMIND_FOLLOW_UPS_ENABLED',False),
+            daily_brief_enabled=_environment_bool('MAILMIND_DAILY_BRIEF_ENABLED',False),
+            daily_brief_time=os.environ.get('MAILMIND_DAILY_BRIEF_TIME','08:30').strip(),
+            brief_telegram_enabled=_environment_bool('MAILMIND_BRIEF_TELEGRAM_ENABLED',False),
         )

@@ -701,3 +701,58 @@
   flex-wrap: wrap;
   align-items: center;
 }
+
+/* ── Daily brief ────────────────────────────────────────────── */
+.daily-brief {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+}
+
+.brief-section h3,
+.brief-proposals h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.brief-section ul,
+.brief-proposals ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.brief-proposals ul {
+  padding-left: 0;
+  list-style: none;
+}
+
+.brief-proposals li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.brief-proposals li.approved,
+.brief-proposals li.dismissed {
+  opacity: .65;
+}
+
+.proposal-state {
+  color: var(--muted);
+  font-size: 12px;
+}

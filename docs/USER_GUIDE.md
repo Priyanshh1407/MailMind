@@ -136,6 +136,10 @@ With the Follow-ups tab switched on (`MAILMIND_FOLLOW_UPS_ENABLED=true`, plus a 
 
 If the draft could not pass every check, the problems are listed under **Check before sending**.
 
+### Daily brief
+
+With the brief switched on (`MAILMIND_DAILY_BRIEF_ENABLED=true`), the top of the Inbox tab shows **Your day in mail** each morning after 08:30 (change it with `MAILMIND_DAILY_BRIEF_TIME`): what needs you today, what is due this week, possible scams, renewals and replies you are waiting for. Each sentence has numbered sources. **Suggested actions** (mark a task done, snooze it a day, draft a follow-up, mark a scam checked) happen only when you click them. **Refresh brief** writes a new one. If the AI providers are unavailable you get a plain summary from your saved mail instead.
+
 ## Categories
 
 | Lane | Meaning |

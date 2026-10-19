@@ -22,6 +22,7 @@ The React dashboard combines live Gmail intake, recoverable background processin
 - Explicit saved-mail intelligence backfill in batches of at most 20, with live mail kept ahead of backfill work.
 - Optional Telegram alerts and opt-in automatic Gmail mark-as-read behavior.
 - Local-only mode with verified pre-provisioned assets and no cloud/Gmail/Telegram routing.
+- A daily brief from three bounded agents (triage, research with verified quotes, writer citing only verified facts), with suggested actions that run only when you approve them, and a plain fallback when providers are down.
 - A Follow-ups tab: pick a sent email and get a formal follow-up in your own greeting and sign-off, checked for AI clichés and for any fact the thread never mentions, to copy into Gmail. MailMind never sends mail; names, addresses and amounts reach the provider only as placeholders.
 - An Ask tab: questions about your saved mail answered by a read-only agent, where every sentence must cite a quote verified in an email it read; unverifiable claims are removed.
 - A Money tab with spending, refunds, bills and subscriptions from receipts; every amount is replaced by a numbered placeholder before any provider call, so the AI picks the total without ever seeing a number.
@@ -151,6 +152,10 @@ Authentication alone would catch 76.9%: attackers who register their own lookali
 Switched on with `MAILMIND_INBOX_QUESTIONS_ENABLED=true` (and a provider key). Ask a question in plain English; a read-only agent searches, opens at most 10 emails and answers in a few steps. **Every sentence must cite a quote that MailMind verifies in an email the agent actually opened**; sentences that fail are removed and counted, and "I couldn't find that" is a normal answer. The tools can only read, so text planted in an email can at worst produce a wrong answer, never a change. Senders reach the provider as domains, and amounts as tokens filled in locally.
 
 On a 34-email, 30-question synthetic benchmark, the first full run (Gemini `gemini-3.5-flash-lite`) answered 27 of 30 correctly, declined all 5 unanswerable questions and never repeated the 3 planted instructions; it exposed that amounts reached answers as a bare `[AMOUNT]`, which is now fixed. That run is not replayable, so the committed [report](docs/AGENT_EVALUATION.md) is marked pending until it is re-recorded.
+
+## Daily brief
+
+Switched on with `MAILMIND_DAILY_BRIEF_ENABLED=true`. Each morning a triage agent ranks what needs you (it sees titles only), a research agent per item extracts facts whose quotes are verified in the email, and a writer agent composes the brief citing only those facts; sentences citing anything else are removed. Suggested actions are typed, checked against the items the writer was given, and run through the existing Action Center code only when you approve. If any provider call fails, a deterministic summary from SQLite is shown instead. The three-agent vs one-agent comparison is ready to record ([pending](docs/BRIEF_EVALUATION.md)).
 
 ## Follow-ups
 
@@ -312,10 +317,10 @@ npm run test:browser
 
 Latest local verification (19 October 2026):
 
-- Backend discovery: 669 tests passed in 30 modules; the 25 earlier modules were each verified alone on 30 September, and the new `test_signals`, `test_risk`, `test_ledger`, `test_inbox_agent` and `test_follow_ups` modules also pass alone.
+- Backend discovery: 677 tests passed in 31 modules; the 25 earlier modules were each verified alone on 30 September, and the new `test_signals`, `test_risk`, `test_ledger`, `test_inbox_agent`, `test_follow_ups` and `test_brief` modules also pass alone.
 - Provider fault-injection matrix: 18 fault × scope cells match the documented contract (`python -m scripts.render_fault_matrix`).
-- Frontend unit suite: 65 passed. Playwright browser suite: 45 passed.
-- Frontend lint and production build passed; initial JavaScript is 368 kB (116 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
+- Frontend unit suite: 65 passed. Playwright browser suite: 46 passed.
+- Frontend lint and production build passed; initial JavaScript is 375 kB (118 kB gzip); the chart (373 kB) and the animation engine (86 kB) load as separate chunks.
 
 These are synthetic and temporary-data checks. They do not prove real-inbox model accuracy, provider retention behavior, Telegram delivery, or universal privacy.
 
