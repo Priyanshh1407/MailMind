@@ -5,7 +5,10 @@ import { formatEmailTime, formatTime } from '../dashboard';
 
 const POLL_MS = 1000;
 const POLL_LIMIT_MS = 90000;
-const gmailThreadUrl = threadId => 'https://mail.google.com/mail/u/0/#all/' + encodeURIComponent(threadId);
+// Name the account instead of a position (/u/0, /u/2): with several Google
+// accounts signed in, authuser opens the mailbox this thread belongs to.
+const gmailThreadUrl = (threadId, account) => 'https://mail.google.com/mail/u/'
+  + (account ? '?authuser=' + encodeURIComponent(account) : '0/') + '#all/' + encodeURIComponent(threadId);
 
 function recipientName(to) {
   const match = /^\s*"?([^"<]+?)"?\s*</.exec(to || '');
@@ -151,7 +154,7 @@ export function FollowUpsPanel({ snapshot, disabled, api, pickId = null, onPicke
         {result.issues.length === 0 && <p className='usage-note'>Passed every check: your greeting and sign-off, no stock AI phrases, no facts that are not in the thread{result.revised ? ', after one revision' : ''}.</p>}
         <div className='actions follow-up-actions'>
           <button className='button primary' onClick={copy} disabled={!text.trim()}>{copied ? <ClipboardCheck size={14} /> : <Clipboard size={14} />}{copied ? 'Copied' : 'Copy'}</button>
-          <a className='button secondary' href={gmailThreadUrl(picked.thread_id)} target='_blank' rel='noreferrer'><ExternalLink size={14} />Open in Gmail</a>
+          <a className='button secondary' href={gmailThreadUrl(picked.thread_id, snapshot.session.email)} target='_blank' rel='noreferrer'><ExternalLink size={14} />Open in Gmail</a>
           <div className='window-selector' role='group' aria-label='Length'>
             {['short', 'standard'].map(size => <button key={size} className={'filter-chip ' + (length === size ? 'active' : '')} aria-pressed={length === size} onClick={() => setLength(size)}>{size === 'short' ? 'Short' : 'Standard'}</button>)}
           </div>

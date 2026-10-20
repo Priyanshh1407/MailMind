@@ -377,7 +377,7 @@ test('Follow-ups tab: pick a sent email, get a draft, copy it and open the Gmail
   const box=panel.getByLabel('Your follow-up (edit anything before copying)');
   await expect(box).toHaveValue(/^Dear Ms\. Menon,/);
   await expect(panel.getByText('Passed every check',{exact:false})).toBeVisible();
-  await expect(panel.getByRole('link',{name:'Open in Gmail'})).toHaveAttribute('href','https://mail.google.com/mail/u/0/#all/thread-1');
+  await expect(panel.getByRole('link',{name:'Open in Gmail'})).toHaveAttribute('href','https://mail.google.com/mail/u/?authuser=interview%40example.test#all/thread-1');
   await panel.getByRole('button',{name:'Copy'}).click();
   await expect(panel.getByRole('button',{name:'Copied'})).toBeVisible();
   // Windows clipboards store line breaks as CRLF.
