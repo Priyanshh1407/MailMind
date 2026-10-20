@@ -376,6 +376,48 @@ class DeadlineContractTests(Phase4Base):
         self.assertEqual(self.parse('2026-10-02', 'exact_time'), ())
 
 
+class WeekdayDeadlineTests(unittest.TestCase):
+    """TZ-02 (found in use, 20 Oct): "Submit the signed NOC form by Friday 5 pm",
+    received on Tuesday 20 October, was saved as Wednesday 21 October: Groq got
+    the weekday arithmetic wrong. A named weekday now decides the date."""
+
+    TUESDAY = '2026-10-20T06:00:00.000000Z'  # 11:30 IST, Tuesday
+
+    def resolve(self, due_at, evidence, precision='exact_time', source=TUESDAY):
+        from src.action_center import resolve_action_candidate
+        from src.prediction import ActionCandidate
+        candidate = ActionCandidate(action_type='document_required', title='Submit signed NOC form',
+                                    description='Submit the form.', due_at=due_at, due_precision=precision,
+                                    evidence=evidence, confidence='high')
+        due = resolve_action_candidate(candidate, source_created_at=source)['due_at']
+        local = datetime.fromisoformat(due.replace('Z', '+00:00')).astimezone(ZoneInfo('Asia/Kolkata'))
+        return local.strftime('%a %d %b %H:%M')
+
+    def test_the_wrong_weekday_is_corrected_to_the_coming_one_at_the_same_time(self):
+        self.assertEqual(self.resolve('2026-10-21T17:00:00+05:30', 'by Friday 5 pm'), 'Fri 23 Oct 17:00')
+
+    def test_a_right_date_is_kept(self):
+        self.assertEqual(self.resolve('2026-10-23T17:00:00+05:30', 'by Friday 5 pm'), 'Fri 23 Oct 17:00')
+
+    def test_date_only_deadlines_are_corrected_too(self):
+        self.assertEqual(self.resolve('2026-10-22T00:00:00+05:30', 'before Friday', precision='date_only'), 'Fri 23 Oct 09:00')
+
+    def test_the_same_weekday_means_today(self):
+        self.assertEqual(self.resolve('2026-10-27T18:00:00+05:30', 'by Tuesday 6 pm'), 'Tue 20 Oct 18:00')
+
+    def test_next_weekday_accepts_either_reading_but_not_another_day(self):
+        self.assertEqual(self.resolve('2026-10-30T10:00:00+05:30', 'next Friday at 10 am'), 'Fri 30 Oct 10:00')
+        self.assertEqual(self.resolve('2026-10-23T10:00:00+05:30', 'next Friday at 10 am'), 'Fri 23 Oct 10:00')
+        self.assertEqual(self.resolve('2026-10-22T10:00:00+05:30', 'next Friday at 10 am'), 'Fri 23 Oct 10:00')
+        self.assertEqual(self.resolve('2026-10-22T10:00:00+05:30', 'next Tuesday at 10 am'), 'Tue 27 Oct 10:00')
+
+    def test_anything_else_that_pins_the_day_leaves_the_model_date(self):
+        for evidence in ('by Friday, 30 October', 'by Friday 30/10', 'every Friday from now', 'Monday or Friday',
+                         'by 5 pm tomorrow'):
+            with self.subTest(evidence=evidence):
+                self.assertEqual(self.resolve('2026-10-21T17:00:00+05:30', evidence), 'Wed 21 Oct 17:00')
+
+
 class ExplanationHonestyTests(Phase4Base):
     """LLM-05: 368 of 412 real emails showed 'no additional validated explanation',
     although none had ever been generated; and one imperfect quote discarded a

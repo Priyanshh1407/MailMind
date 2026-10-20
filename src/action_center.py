@@ -3,6 +3,7 @@ from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import re
 from zoneinfo import ZoneInfo
 
 from .database import connection, utc_timestamp
@@ -322,6 +323,41 @@ def _utc(value):
     return utc_timestamp(value.astimezone(timezone.utc))
 
 
+_WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+_WEEKDAY = re.compile(r'\b(next\s+)?(' + '|'.join(_WEEKDAYS) + r')\b', re.IGNORECASE)
+# Anything that pins the day some other way: a calendar date, or a weekday
+# that is not the coming one ("every Friday", "last Friday").
+_OTHER_DAY = re.compile(
+    r'\b\d{1,2}(?:st|nd|rd|th)?\s*(?:of\s+)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)'
+    r'|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b'
+    r'|\b\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?\b|\b\d{4}-\d{2}-\d{2}\b'
+    r'|\b(?:every|each|last|previous|after|since)\s+(?:' + '|'.join(_WEEKDAYS) + r')\b',
+    re.IGNORECASE)
+
+
+def _weekday_deadline(local_due, evidence, source_local):
+    """Models get weekday arithmetic wrong ("by Friday" on Tuesday 20 Oct came
+    back as Wednesday 21 Oct). When the evidence names exactly one weekday and
+    nothing else pins the day, the deadline is that weekday's coming
+    occurrence (on or after the day the email arrived), at the model's time
+    of day. "Next Friday" may also mean the one after; either is kept."""
+    if _OTHER_DAY.search(evidence or ''):
+        return local_due
+    named = {(bool(match.group(1)), match.group(2).lower()) for match in _WEEKDAY.finditer(evidence or '')}
+    if len({name for _next, name in named}) != 1:
+        return local_due
+    following, name = any(flag for flag, _name in named), next(iter(named))[1]
+    ahead = (_WEEKDAYS.index(name) - source_local.weekday()) % 7
+    coming = source_local.date() + timedelta(days=ahead)
+    allowed = {coming, coming + timedelta(days=7)} if following else {coming}
+    if following and ahead == 0:
+        allowed = {coming + timedelta(days=7)}
+    if local_due.date() in allowed:
+        return local_due
+    day = min(allowed)
+    return local_due.replace(year=day.year, month=day.month, day=day.day)
+
+
 def resolve_action_candidate(candidate, *, source_created_at,
                              timezone_name=DEFAULT_TIMEZONE):
     """Revalidate and canonicalize one provider candidate against its email."""
@@ -333,7 +369,8 @@ def resolve_action_candidate(candidate, *, source_created_at,
     due = None
     if candidate.due_at is not None:
         due = _datetime(candidate.due_at, "action deadline")
-        local_due = due.astimezone(zone)
+        local_due = _weekday_deadline(due.astimezone(zone), candidate.evidence, source.astimezone(zone))
+        due = local_due
         if precision == DuePrecision.DATE_ONLY.value or (
                 precision == DuePrecision.RELATIVE.value
                 and local_due.hour == 0 and local_due.minute == 0
