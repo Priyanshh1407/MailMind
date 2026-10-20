@@ -253,9 +253,15 @@ class Tools:
             if row['kind'] in ('purchase', 'subscription', 'debit'):
                 spent[row['currency']] = spent.get(row['currency'], 0) + row['amount_minor']
         totals = {}
+        suffix = (':' + re.sub(r'[^a-z0-9]+', '-', merchant.casefold()).strip('-')) if merchant else ''
         for currency, minor in spent.items():
-            token = '{{ledger:spent:%s:%s%s}}' % (month, currency.lower(), (':' + re.sub(r'[^a-z0-9]+', '-', merchant.casefold()).strip('-')) if merchant else '')
+            token = '{{ledger:spent:%s:%s%s}}' % (month, currency.lower(), suffix)
             session.tokens[token] = (minor, currency)
+            if len(spent) == 1:
+                # With one currency, also issue (and show) the form the prompt
+                # documents, {{ledger:spent:2026-09}}: models copy that form.
+                token = '{{ledger:spent:%s%s}}' % (month, suffix)
+                session.tokens[token] = (minor, currency)
             totals[currency] = token
         return {'month': month, 'merchant': merchant or None, 'spent': totals, 'count': len(rows), 'entries': entries}
 

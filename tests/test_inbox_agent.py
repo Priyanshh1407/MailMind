@@ -142,6 +142,33 @@ class MoneyTokenTests(AgentBase):
         self.assertNotIn('231000', json.dumps(calls))
 
 
+    def test_the_monthly_total_fills_in_as_the_prompt_documents_it(self):
+        """ASK-01 (found in use, 20 Oct): "How much did I spend this month?"
+        showed "[amount unavailable]". The tool issued the total as
+        {{ledger:spent:2026-10:inr}}, but the prompt documents the form
+        {{ledger:spent:2026-09}}; the model wrote that form, which was never
+        issued, so the allowlist correctly refused it."""
+        with connection(self.settings.db_path) as conn:
+            for email_id, kind, minor in (('bill', 'purchase', 47000), ('landlord', 'subscription', 64900), ('injected', 'refund', 129900)):
+                conn.execute("""INSERT INTO ledger_entries(account_id,email_id,kind,amount_minor,currency,merchant,occurred_at,
+                                    evidence,source,extraction_version,created_at,updated_at)
+                                VALUES (?,?,?,?,'INR','Shop','2026-10-02T05:00:00.000000Z','','local','v',?,?)""",
+                             (A, email_id, kind, minor, '2026-10-02T05:00:00.000000Z', '2026-10-02T05:00:00.000000Z'))
+        session = Session()
+        result = self.tools().ledger_summary(session, {'month': '2026-10'})
+        self.assertEqual(result['spent'], {'INR': '{{ledger:spent:2026-10}}'})  # the documented form
+        call, _ = self.scripted([
+            step('ledger_summary', month='2026-10'),
+            step('read_email', email_id='bill'),
+            step('final', final(('You spent {{ledger:spent:2026-10}} ({{ledger:spent:2026-10:inr}}); in September {{ledger:spent:2026-09}}.',
+                                 'bill', 'Due date: 5 November'))),
+        ])
+        status, answer, _ = ask('How much did I spend this month?', tools=self.tools(), call=call)
+        self.assertEqual(status, 'answered')
+        # Refunds are not spending; a month the tool never answered stays unavailable.
+        self.assertEqual(answer['sentences'][0]['text'], 'You spent ₹1,119 (₹1,119); in September [amount unavailable].')
+
+
 class InjectionTests(AgentBase):
     def test_injected_text_is_delivered_as_data_and_cannot_be_cited_into_a_lie(self):
         call, calls = self.scripted([
