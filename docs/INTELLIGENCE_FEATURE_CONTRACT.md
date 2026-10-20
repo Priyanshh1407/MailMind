@@ -95,6 +95,12 @@ The wire precisions are `exact_time`, `date_only`, `relative`, and `unknown`.
   exact time.
 - Relative dates resolve against the source email timestamp in the configured
   timezone, never against the worker's current wall clock alone.
+- A named weekday decides the date: when the evidence names exactly one
+  weekday ("by Friday 5 pm") and nothing else pins the day (no calendar date,
+  no "every/last Friday", not two weekdays), the deadline is that weekday's
+  coming occurrence on or after the day the email arrived, at the provider's
+  time of day. "Next Friday" accepts the coming one or the one after.
+  Providers get weekday arithmetic wrong; this check is local.
 - Ambiguous expressions such as “sometime next week” become `unknown` with no
   `due_at`; MailMind does not invent a date.
 - A deadline at/before the source timestamp is invalid for automatic scheduling.

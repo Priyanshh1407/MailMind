@@ -127,7 +127,7 @@ SQLite remains the source of truth. Vector writes are account-namespaced, revisi
 
 A saved Gmail history cursor supports partial synchronization. Live changes are checked automatically and can be forced with **Sync new messages**. The forced action is durable and rate-limited.
 
-The cursor only advances after the messages it covers have been admitted. A full batch stops paging (the rest is read from the same cursor next cycle), and a failed history call keeps the old cursor.
+The cursor only advances past messages that were already saved or were handled in this cycle (downloaded, or recorded as a failure that is retried by ID). A full batch stops paging, and the cursor moves to the last history record whose new mail was all handled, so a long run of already-saved mail after a reconnect cannot stall it; a failed history call keeps the old cursor. Pages hold 100 history records. After a Gmail call times out, later calls get a fresh connection, because the abandoned request still holds the old one and httplib2 is not thread-safe.
 
 Two backstops make sure mail is never lost silently:
 

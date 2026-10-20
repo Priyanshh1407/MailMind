@@ -56,6 +56,7 @@ The Ask agent, follow-up drafts and the daily brief treat everything a model ret
 - **Read-only tools.** The Ask agent can search, open emails, and read actions, money totals and scam reports; it has no tool that changes anything. The brief's suggested actions are typed, checked against the items it was given, and run through the existing revision-checked paths only after the user approves them.
 - **MailMind never sends mail.** Follow-ups read sent mail and threads (`gmail.modify` already allows reads); there is no send or draft code path, and a test fails if anything but a Gmail read is called.
 - **Grounding.** Answer sentences, brief facts and action evidence must quote an email the model actually opened, checked with `quote_in_source`; uncited sentences are removed.
+- **Dates are checked locally.** A deadline whose evidence names a weekday is recomputed from the email's arrival date instead of trusting the model's arithmetic.
 - **Less data out.** Amounts become numbered placeholders or session tokens filled in locally (the provider never sees the number); follow-up threads also mask names, addresses, links and long numbers; the Ask agent sees senders as domains only.
 - **Hidden text.** Text styled to be invisible is not saved as body text, so no provider reads it; the scam check keeps it as a warning sign.
 - **Bounds.** Step, read, time and rate limits per question, draft and brief; separate call slots so they never take capacity from live classification.

@@ -10,7 +10,7 @@ Run the complete suite:
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
-At the 19 October 2026 verification, all 687 discovered backend tests passed. Each of the 25 earlier test modules passed on its own on 6 October; the eight new modules (`test_signals`, `test_risk`, `test_ledger`, `test_inbox_agent`, `test_follow_ups`, `test_brief`, `test_redteam`, `test_concurrency`, `test_clean_release`) each passed on their own on 20 October.
+At the 20 October 2026 verification, all 699 discovered backend tests passed. Each of the 25 earlier test modules passed on its own on 6 October; the eight new modules (`test_signals`, `test_risk`, `test_ledger`, `test_inbox_agent`, `test_follow_ups`, `test_brief`, `test_redteam`, `test_concurrency`, `test_clean_release`) each passed on their own on 20 October.
 
 One full run on 19 October 2026 reported a single error that did not recur in eight later full runs (two in place, six in an isolated copy). Its test name was not captured, so no cause is claimed. If it happens again, keep the run's output: `unittest` prints the failing test's name and traceback.
 
@@ -70,7 +70,7 @@ Set-Location ..
 Current verified result:
 
 - 65 Node unit tests passed;
-- 47 Playwright browser scenarios passed;
+- 48 Playwright browser scenarios passed;
 - lint passed;
 - production build passed.
 
