@@ -120,7 +120,8 @@ def fallback_brief(candidates, reason):
         if rows:
             sections.append({'title': titles[kind], 'sentences': [
                 {'text': f'{item.title} ({item.detail}{", " + item.when if item.when else ""}).', 'citations': [],
-                 'ref': item.ref} for item in rows]})
+                 'ref': item.ref, 'title': item.title, 'detail': item.detail, 'when': item.when,
+                 'email_id': item.email_id, 'message_id': item.message_id} for item in rows]})
     return {'mode': 'fallback', 'reason': reason, 'sections': sections, 'proposals': [],
             'counts': {kind: sum(item.kind == kind for item in candidates) for kind in KINDS}}
 

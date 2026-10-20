@@ -702,6 +702,137 @@ class HistoryPagingRegressionTests(unittest.TestCase):
         self.assertEqual(cursor, '99')
 
 
+class RecordedHistoryMailbox:
+    """Gmail-like history with record ids: list returns records after
+    startHistoryId, up to maxResults, oldest first (as the real API does)."""
+
+    def __init__(self, message_ids, *, first_record=1000, current='5000'):
+        from tests.test_phase3_ingestion import leaf
+        self.records = [(first_record + index, key) for index, key in enumerate(message_ids)]
+        self.items = {key: {'payload': leaf('Mail ' + key)} for key in message_ids}
+        self.current, self.requests, self.gets = current, [], []
+
+    def users(self): return self
+    def history(self): return self
+    def messages(self): return self
+
+    def list(self, **kwargs):
+        from tests.support import FakeRequest
+        self.requests.append(kwargs)
+        after = [item for item in self.records if item[0] > int(kwargs['startHistoryId'])]
+        offset = int(kwargs.get('pageToken', 0))
+        chunk = after[offset:offset + kwargs['maxResults']]
+        result = {'historyId': self.current,
+                  'history': [{'id': str(record), 'messagesAdded': [{'message': {'id': key}}]} for record, key in chunk]}
+        if offset + len(chunk) < len(after):
+            result['nextPageToken'] = str(offset + len(chunk))
+        return FakeRequest(result)
+
+    def get(self, **kwargs):
+        from tests.support import FakeRequest
+        self.gets.append(kwargs['id'])
+        return FakeRequest(self.items[kwargs['id']])
+
+
+class HistoryCursorProgressTests(unittest.TestCase):
+    """INGEST-04 (found in use, 20 Oct): after an account was reconnected 10
+    days later, its history range began with 100+ messages saved earlier. Each
+    cycle read up to 3 pages of them, admitted nothing, and kept the cursor at
+    the same start because more pages remained, so the cursor never moved,
+    every cycle repeated the same slow requests until they timed out
+    ("gmail_listing_failed"), and 57 newer emails were never saved."""
+
+    def test_a_long_run_of_saved_mail_no_longer_stalls_the_cursor(self):
+        from src.email_client import get_new_emails
+        saved = [f'old-{i}' for i in range(350)]
+        fresh = [f'new-{i}' for i in range(5)]
+        service = RecordedHistoryMailbox(saved + fresh)
+        cursor, admitted = '999', []
+        for _ in range(4):
+            batch = get_new_emails(service, cursor, max_results=20, max_pages=3,
+                                   exclude_ids=set(saved) | set(admitted))
+            self.assertFalse(batch.listing_error)
+            admitted += [email['id'] for email in batch.emails]
+            self.assertGreaterEqual(int(batch.history_id), int(cursor))
+            cursor = batch.history_id
+            if not batch.has_more:
+                break
+        self.assertEqual(admitted, fresh)
+        self.assertEqual(cursor, '5000')
+        self.assertEqual(service.gets, fresh)  # saved mail is never downloaded again
+
+    def test_the_cursor_never_passes_mail_left_undownloaded_by_the_budget(self):
+        from src.email_client import get_new_emails
+        ids = [f'mail-{i}' for i in range(6)]
+        service = RecordedHistoryMailbox(ids)
+        # The time budget runs out after two downloads.
+        with patch('src.email_client.RequestBudget.remaining',
+                   lambda self: 0 if len(service.gets) >= 2 else 30):
+            batch = get_new_emails(service, '999', max_results=20)
+        self.assertTrue(batch.has_more)
+        handled = [email['id'] for email in batch.emails] + [failure['email_id'] for failure in batch.failures]
+        self.assertEqual(handled, ids[:len(handled)])
+        self.assertLess(len(handled), len(ids))
+        # The cursor stops at the last handled message's record, never beyond it;
+        # a failed download is retried by ID, so passing it loses nothing.
+        self.assertEqual(batch.history_id, str(1000 + len(handled) - 1))
+        rest = get_new_emails(service, batch.history_id, max_results=20, exclude_ids=set(handled))
+        self.assertEqual(handled + [email['id'] for email in rest.emails], ids)
+
+    def test_a_listing_error_still_keeps_the_original_cursor(self):
+        from src.email_client import get_new_emails
+        service = RecordedHistoryMailbox([f'mail-{i}' for i in range(150)])
+        original = service.list
+        calls = []
+        def failing(**kwargs):
+            calls.append(1)
+            if len(calls) == 2:
+                error = RuntimeError('synthetic history failure')
+                error.resp = Mock(status=500)
+                raise error
+            return original(**kwargs)
+        service.list = failing
+        batch = get_new_emails(service, '999', max_results=200, max_pages=3)
+        self.assertTrue(batch.listing_error)
+        self.assertEqual(batch.history_id, '999')
+
+
+class TimedOutConnectionTests(unittest.TestCase):
+    """INGEST-05: after a Gmail call timed out, the abandoned request kept
+    using the client's httplib2 connection, which is not thread-safe, so the
+    next call on the same client failed with SSL errors (seen against real
+    Gmail on 20 Oct). A timeout now gives later calls a fresh connection."""
+
+    def test_a_timeout_replaces_the_shared_connection(self):
+        import httplib2
+        from google_auth_httplib2 import AuthorizedHttp
+        from googleapiclient.http import HttpRequest
+        from src import email_client
+        transport = AuthorizedHttp(Mock(), http=httplib2.Http(timeout=5))
+        before = transport.http
+        request = Mock(spec=HttpRequest)
+        request.http = transport
+        with patch.object(email_client.GMAIL_CALLS, 'run', side_effect=TimeoutError('Provider time budget exhausted')):
+            with self.assertRaises(TimeoutError):
+                email_client.execute_gmail(request)
+        self.assertIsNot(transport.http, before)
+        self.assertEqual(transport.http.timeout, 5)
+
+    def test_other_failures_keep_the_connection(self):
+        import httplib2
+        from google_auth_httplib2 import AuthorizedHttp
+        from googleapiclient.http import HttpRequest
+        from src import email_client
+        transport = AuthorizedHttp(Mock(), http=httplib2.Http(timeout=5))
+        before = transport.http
+        request = Mock(spec=HttpRequest)
+        request.http = transport
+        with patch.object(email_client.GMAIL_CALLS, 'run', side_effect=ValueError('bad answer')):
+            with self.assertRaises(ValueError):
+                email_client.execute_gmail(request)
+        self.assertIs(transport.http, before)
+
+
 class IngestionCycleBase(unittest.TestCase):
     """A connected synthetic account with a seeded history cursor and one
     message queued as a due ingestion retry."""

@@ -687,3 +687,23 @@ test('local-only mode disables cloud, inbox checks and Google sign-in controls',
   await page.getByRole('button',{name:'Account options'}).click();await expect(page.getByRole('button',{name:'Switch Google account'})).toBeDisabled();
   for(const provider of ['Gemini:','Groq:'])await expect(page.locator('.health-grid p').filter({hasText:provider})).toContainText('Disabled');
 });
+test('overview, card badges and the daily brief share the dashboard design',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});const state=await setup(page);
+  // Ten cards (scam checks and Money on): two rows of five.
+  await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.querySelector('.overview-grid')).gridTemplateColumns.split(' ').length)).toBe(5);
+  // Every category pill sits inside its card and fits its label.
+  const badges=await page.evaluate(()=>[...document.querySelectorAll('.email-card')].map(card=>{const badge=card.querySelector('.category-badge');return badge?{inside:badge.getBoundingClientRect().right<=card.getBoundingClientRect().right+0.5,fits:badge.scrollWidth<=badge.clientWidth+1}:null;}).filter(Boolean));
+  expect(badges.length).toBeGreaterThan(0);
+  expect(badges.every(item=>item.inside&&item.fits)).toBe(true);
+  // The brief is framed like every other panel.
+  expect(await page.evaluate(()=>parseFloat(getComputedStyle(document.querySelector('.daily-brief')).paddingLeft))).toBeGreaterThanOrEqual(16);
+  // A fallback brief lists items as rows that open their email.
+  state.brief={brief_id:5,brief_date:'2026-09-18',status:'fallback',brief:{mode:'fallback',reason:'provider_quota',sections:[{title:'Overdue',sentences:[{text:'Send the form (overdue, 17 Sep 17:00).',citations:[],ref:'action:7',title:'Send the form',detail:'overdue',when:'17 Sep 17:00',email_id:'synthetic-0',message_id:null}]}],proposals:[],counts:{}},trace:[],total_tokens:0,latency_ms:5,error_code:null,created_at:'2026-09-18T12:00:00Z',updated_at:'2026-09-18T12:00:00Z'};
+  await page.reload();
+  const brief=page.getByRole('region',{name:'Daily brief'});
+  await expect(brief.getByText('Plain summary',{exact:true})).toBeVisible();
+  await expect(brief.locator('.brief-item strong')).toHaveText('Send the form');
+  await expect(brief.locator('.brief-item span')).toHaveText('overdue · 17 Sep 17:00');
+  await brief.getByRole('button',{name:'Open'}).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+});

@@ -71,7 +71,7 @@ export function MoneyPanel({ snapshot, query, setQuery, disabled, mutate, api, o
   const goMonth = delta => setQuery(previous => ({ ...previous, ledgerMonth: shiftMonth(month, delta), ledgerOffset: 0 }));
   const others = Object.entries(summary.totals).filter(([key]) => key !== currency);
   return <Surface className='money-panel'>
-    <SectionTitle icon={<IndianRupee size={18} />} eyebrow='From your receipts' title='Money' aside={<span className='estimated-badge'><ShieldCheck size={12} aria-hidden='true' /> Amounts never leave this computer</span>} />
+    <SectionTitle icon={<IndianRupee size={18} />} eyebrow='From your receipts' title='Money' aside={<span className='assurance-badge'><ShieldCheck size={12} aria-hidden='true' />Amounts never leave this computer</span>} />
     <div className='window-selector money-month' role='group' aria-label='Month'>
       <button className='filter-chip' aria-label='Previous month' onClick={() => goMonth(-1)}><ChevronLeft size={14} /></button>
       <strong>{monthLabel(month)}</strong>

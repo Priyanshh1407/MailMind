@@ -100,7 +100,7 @@ export function AskPanel({ snapshot, disabled, api, openSource }) {
   };
 
   return <Surface className='ask-panel'>
-    <SectionTitle icon={<MessageSquareText size={18} />} eyebrow='Questions about your saved mail' title='Ask your inbox' aside={<span className='estimated-badge'><BadgeCheck size={12} aria-hidden='true' /> Every sentence cites your email</span>} />
+    <SectionTitle icon={<MessageSquareText size={18} />} eyebrow='Questions about your saved mail' title='Ask your inbox' aside={<span className='assurance-badge'><BadgeCheck size={12} aria-hidden='true' />Every sentence cites your email</span>} />
     <form className='ask-form' onSubmit={event => { event.preventDefault(); submit(); }}>
       <label htmlFor='ask-question' className='visually-hidden'>Your question</label>
       <Search size={16} aria-hidden='true' />

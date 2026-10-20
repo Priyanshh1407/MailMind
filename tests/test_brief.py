@@ -48,6 +48,9 @@ class GatherTests(AgentBase):
     def test_the_fallback_needs_no_model(self):
         brief = fallback_brief(self.candidates(), 'provider_quota')
         self.assertEqual(brief['mode'], 'fallback')
+        # Each line keeps what the dashboard needs to show it and open its email.
+        line = brief['sections'][0]['sentences'][0]
+        self.assertTrue({'title', 'detail', 'when', 'email_id', 'message_id'} <= set(line))
         self.assertTrue(brief['sections'])
         self.assertEqual(brief['proposals'], [])
 

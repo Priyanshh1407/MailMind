@@ -27,7 +27,9 @@ export function DashboardStats({ snapshot }) {
   const tenths = millisecondsToTenthsUp(timing?.mean_ms);
   const completionPct = totals?.saved ? ((totals.completed / totals.saved) * 100).toFixed(1) + '% workflow completion' : 'Messages that completed the workflow';
   const actionValue = value => actionsReady ? <AnimatedCount value={value} /> : '-';
-  return <section className="stats-grid overview-grid" aria-label="Overview">
+  // Eight cards fit two rows of four; with the two optional ones, two rows of five.
+  const wide = Boolean(risk?.enabled || snapshot?.status?.ledger?.enabled);
+  return <section className={'stats-grid overview-grid' + (wide ? ' five' : '')} aria-label="Overview">
     <Stat icon={Database} label="Saved emails" value={<AnimatedCount value={totals?.saved} />} detail="Securely stored for this account" />
     <Stat icon={CheckCircle2} label="Processed" value={<AnimatedCount value={totals?.completed} />} detail={totals ? completionPct : 'Messages that completed the workflow'} />
     <Stat icon={Tag} label="Feedback" value={<AnimatedCount value={totals?.labelled} />} detail={totals ? totals.corrected + ' corrected · ' + totals.confirmed + ' confirmed' : 'Corrections improve future decisions'} />

@@ -28,7 +28,16 @@ def execute_gmail(request, budget=None):
     # Real SDK retries are disabled. Test adapters keep their simple contract.
     from googleapiclient.http import HttpRequest
     timeout=budget.timeout(5) if budget is not None else 5
-    return GMAIL_CALLS.run(lambda:request.execute(num_retries=0) if isinstance(request,HttpRequest) else request.execute(),timeout)
+    try:
+        return GMAIL_CALLS.run(lambda:request.execute(num_retries=0) if isinstance(request,HttpRequest) else request.execute(),timeout)
+    except TimeoutError:
+        # The abandoned request is still running on the old connection, and
+        # httplib2 is not thread-safe: reusing it made the next call fail with
+        # SSL errors or time out too. Later calls get a fresh connection.
+        transport=getattr(request,'http',None)
+        if isinstance(transport,AuthorizedHttp) and isinstance(transport.http,httplib2.Http):
+            transport.http=httplib2.Http(timeout=transport.http.timeout)
+        raise
 from .logging_utils import log_event
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
@@ -266,6 +275,9 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
     budget=RequestBudget(budget_seconds)
     guard=before_request or nullcontext
     overflow=False
+    # (history record id, new messages admitted up to and including it): the
+    # cursor may advance to a record once everything up to it was handled.
+    checkpoints=[]
     while batch.pages < max_pages and not overflow:
         if len(seen) >= max_results:
             # The batch is full and Gmail has more pages. Asking for
@@ -275,7 +287,7 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
             break
         parameters={'userId':'me','startHistoryId':start_history_id,
                     'historyTypes':['messageAdded'],'labelId':'INBOX',
-                    'maxResults':min(100,max_results-len(seen))}
+                    'maxResults':100}
         if page_token:
             parameters['pageToken']=page_token
         try:
@@ -311,6 +323,9 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
                         seen.add(identity)
                         identities.append(identity)
                         overflow=len(identities) > max_results
+            record=event.get('id')
+            if isinstance(record,(str,int)) and str(record).isdigit():
+                checkpoints.append((str(record),len(identities)))
         page_token=result.get('nextPageToken')
         if page_token is not None and not isinstance(page_token,str):
             batch.listing_error=True
@@ -320,10 +335,6 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
     batch.has_more=bool(page_token) or overflow
     batch.deferred=overflow
     batch.next_page_token=page_token
-    if batch.has_more or batch.listing_error:
-        # Do not advance beyond events that were not admitted. Re-reading the
-        # history range is safe because durable Gmail IDs are excluded.
-        batch.history_id=start_history_id
     for msg_id in identities[:max_results]:
         if budget.remaining() < 0.05:
             batch.deferred=True
@@ -339,6 +350,15 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
         except Exception as error:
             log_event('gmail_message_fetch_failed',error=error)
             batch.failures.append({'code':fetch_failure_code(error),'email_id':msg_id})
+    if batch.has_more or batch.listing_error:
+        # Never advance past a message that was neither saved before nor
+        # handled now (downloaded, or recorded as a failure that is retried by
+        # ID). Advancing to the last fully handled record matters: without it,
+        # a range whose first pages are all mail saved earlier (a long gap
+        # after reconnecting) was re-read from the same start every cycle and
+        # the cursor never moved. Gmail returns records after the given id.
+        handled=[record for record,count in checkpoints if count <= batch.scanned]
+        batch.history_id=handled[-1] if handled and not batch.listing_error else start_history_id
     return batch
 
 

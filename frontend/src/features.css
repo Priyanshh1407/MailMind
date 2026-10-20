@@ -8,10 +8,27 @@
   display: inline-flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  max-width: 60%;
+  max-width: 70%;
 }
+
+/* The pill sizes to its label. The old 48-55% cap was for a header without
+   the scam badge, and squeezed the pill so the label spilled out of it. */
+.email-card-header .email-card-badges .category-badge {
+  max-width: none;
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, currentColor 32%, transparent);
+  font-size: 10.5px;
+  letter-spacing: .05em;
+  line-height: 1.4;
+}
+
+.email-card-header .category-badge.important { background: color-mix(in srgb, var(--important) 12%, transparent); }
+.email-card-header .category-badge.updates { background: color-mix(in srgb, var(--update) 12%, transparent); }
+.email-card-header .category-badge.spam { background: color-mix(in srgb, var(--spam) 12%, transparent); }
+.email-card-header .category-badge.review { background: color-mix(in srgb, var(--review) 12%, transparent); }
 
 .risk-badge {
   display: inline-flex;
@@ -705,35 +722,238 @@
 /* ── Daily brief ────────────────────────────────────────────── */
 .daily-brief {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 16px;
-  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+}
+
+.brief-aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.brief-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.brief-note,
+.brief-empty,
+.brief-progress {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--lane);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.brief-note svg,
+.brief-empty > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--primary);
+}
+
+.brief-empty strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.brief-empty p,
+.brief-progress p {
+  margin: 2px 0 0;
+}
+
+.brief-progress {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.brief-steps {
+  display: flex;
+  gap: 6px;
+}
+
+.brief-steps span {
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, var(--line));
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: var(--primary-soft);
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  animation: brief-step 2.4s ease-in-out infinite;
+}
+
+.brief-steps span:nth-child(2) { animation-delay: .8s; }
+.brief-steps span:nth-child(3) { animation-delay: 1.6s; }
+
+@keyframes brief-step {
+  0%, 100% { opacity: .45; }
+  30% { opacity: 1; }
+}
+
+/* Sections sit side by side, like the Action Center cards. */
+.brief-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.brief-section {
+  --tone: var(--primary);
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--lane);
+}
+
+.brief-section.overdue,
+.brief-section.risk { --tone: var(--spam); }
+.brief-section.due { --tone: var(--important); }
+.brief-section.money { --tone: var(--success); }
+.brief-section.waiting { --tone: var(--update); }
+
+.brief-section header,
+.brief-proposals header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.brief-section-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  color: var(--tone);
 }
 
 .brief-section h3,
 .brief-proposals h3 {
-  margin: 0 0 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-count {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--surface-subtle);
   color: var(--muted);
   font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: .05em;
-  text-transform: uppercase;
+  font-weight: 600;
 }
 
 .brief-section ul,
 .brief-proposals ul {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
-  padding-left: 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.brief-sentence {
+  position: relative;
+  padding-left: 14px;
   color: var(--ink);
   font-size: 13.5px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
-.brief-proposals ul {
-  padding-left: 0;
-  list-style: none;
+.brief-sentence::before {
+  content: '';
+  position: absolute;
+  top: .62em;
+  left: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.brief-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.brief-item > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.brief-item strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-item span {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.brief-proposals {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--lane);
+}
+
+.brief-proposals header svg {
+  color: var(--primary);
+}
+
+.brief-proposals header span {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .brief-proposals li {
@@ -741,20 +961,85 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 8px 12px;
   padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.proposal-label {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.brief-proposals .actions {
+  display: inline-flex;
+  gap: 6px;
 }
 
 .brief-proposals li.approved,
 .brief-proposals li.dismissed {
-  opacity: .65;
+  opacity: .7;
 }
 
 .proposal-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.proposal-state.approved {
+  color: var(--success);
+}
+
+@media (max-width: 680px) {
+  .brief-sections {
+    grid-template-columns: 1fr;
+  }
+
+  .brief-proposals header {
+    flex-wrap: wrap;
+  }
+
+  .brief-proposals header span {
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brief-steps span {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ── Shared frame for the feature panels ────────────────────── */
+/* The same padding as the Usage and Action Center panels. */
+.money-panel,
+.ask-panel,
+.follow-ups-panel,
+.daily-brief,
+.security-report {
+  padding: clamp(16px, 2vw, 22px);
+}
+
+/* A calm statement about privacy or verification; amber stays for warnings. */
+.assurance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--line));
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* ── Security report ────────────────────────────────────────── */
@@ -767,4 +1052,32 @@
 .security-report td.residual {
   color: var(--important);
   font-weight: 700;
+}
+
+/* ── Overview grid ──────────────────────────────────────────── */
+/* Ten cards (scam checks and Money on) fit two rows of five. */
+.overview-grid.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .overview-grid.five {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* On phones a panel title, its pill and its button wrap instead of
+   pushing the page wider than the screen. */
+@media (max-width: 680px) {
+  .money-panel .section-title,
+  .ask-panel .section-title,
+  .follow-ups-panel .section-title,
+  .daily-brief .section-title {
+    flex-wrap: wrap;
+  }
+
+  .assurance-badge,
+  .brief-mode {
+    white-space: normal;
+  }
 }
