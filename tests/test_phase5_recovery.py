@@ -346,6 +346,32 @@ class RecoveryTests(unittest.TestCase):
         self.run_cycle(category='UPDATES')
         self.assertEqual(self.task()['status'],'complete')
 
+    def test_retry_all_requeues_waiting_and_stopped_emails(self):
+        self.run_cycle(classifier=Mock(return_value=Prediction(outcome='ERROR',reason='invalid_provider_output')))
+        self.assertEqual(self.task()['status'],'dead')
+        response=self.client.post('/tasks/retry-all')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual((response.json()['tasks'],response.json()['downloads']),(1,0))
+        self.assertEqual((self.task()['status'],self.task()['attempt_count']),('queued',0))
+        self.run_cycle(category='UPDATES')
+        self.assertEqual(self.task()['status'],'complete')
+
+    def test_retry_all_never_resends_a_maybe_delivered_alert(self):
+        self.run_cycle(delivery=Delivery('unknown','provider_timeout'))
+        before=self.task()
+        self.assertEqual(self.client.post('/tasks/retry-all').json()['tasks'],0)
+        self.assertEqual((self.task()['status'],self.task()['stage']),(before['status'],before['stage']))
+
+    def test_retry_all_gives_stopped_downloads_another_try(self):
+        with connection(self.settings.db_path) as conn:
+            conn.execute("""INSERT INTO ingestion_failures(account_id,email_id,attempt_count,status,next_retry_at,error_code,updated_at)
+                            VALUES (?,?,3,'dead',9e12,'message_unavailable','2026-10-01T00:00:00.000000Z')""",
+                         (self.context.account_id,'gone-1'))
+        self.assertEqual(self.client.post('/tasks/retry-all').json()['downloads'],1)
+        with connection(self.settings.db_path) as conn:
+            row=conn.execute("SELECT status,attempt_count,next_retry_at FROM ingestion_failures WHERE email_id='gone-1'").fetchone()
+        self.assertEqual(tuple(row),('retry',0,0))
+
     def test_parse_failures_are_identified_and_quarantined(self):
         self.service=mailbox(2)
         self.service.items['synthetic-0']['payload']['body']['data']='a'

@@ -95,7 +95,7 @@ section-local, while a session/account mismatch cancels the complete snapshot.
 | <code>EmailCard</code> | The "Why this category?" explanation (with the full decision story from `describeDecision` in `intelligence.js`), classification details, feedback, history, and recovery |
 | <code>Pagination</code> | Stable 20-message pages; paging towards the end loads the next 20 older emails automatically |
 | <code>AppFeedback</code> | Persistent outages and timed action notices |
-| <code>ConnectivityBanner</code> | Gmail-style system alerts, one at a time: crash-loop warning with a shutdown countdown, offline, service restarting, "Can't reach Gmail" with a retry countdown, then "back online" / "running again". Service alerts come from the supervisor status file via <code>useSupervisorStatus</code>, so they work while the API is down |
+| <code>ConnectivityBanner</code> | Gmail-style system alerts, one at a time: crash-loop warning with a shutdown countdown, offline, service restarting, "Can't reach Gmail" with a retry countdown, "AI free-tier limit reached" or "AI providers are overloaded" with the emails waiting, the next try and **Retry all now**, then "back online" / "running again" / "AI is sorting mail again". Service alerts come from the supervisor status file via <code>useSupervisorStatus</code>, so they work while the API is down |
 | <code>ActionCenter</code> | Status filters, a type filter built from the account's type counts, lifecycle controls, snoozing, and source navigation. Cards show no confidence row; tasks the AI was unsure about get a "Double-check this" badge (<code>needsDoubleCheck</code>) |
 | <code>ClassificationExplanation</code> | Rendered inside each email card: validated rationale, signals with quoted evidence, source, and model |
 | <code>TokenUsagePanel</code> | Daily bar chart (Recharts, loaded on first visit), cloud/local split, and ranked provider/operation share bars |
@@ -162,7 +162,7 @@ The browser suite uses synthetic in-browser API fixtures. It exercises account m
 
 It does not sign in to Google, read real mail, call live cloud providers, or send Telegram messages.
 
-At the 20 October 2026 verification, the frontend unit suite has 65 passing tests and the browser suite 48 passing scenarios, covering every new tab, the scam panel, the daily brief, the security report, and the shared panel design (two rows of five overview cards, pills that fit inside their cards). Lint and the production build also pass.
+At the 20 October 2026 verification, the frontend unit suite has 65 passing tests and the browser suite 49 passing scenarios, covering every new tab, the scam panel, the daily brief, the security report, and the shared panel design (two rows of five overview cards, pills that fit inside their cards). Lint and the production build also pass.
 
 ## Live check
 

@@ -146,7 +146,7 @@ function App() {
   return <BootContext.Provider value={booting}><div className={booting ? 'dashboard booting' : 'dashboard'}>
     <AppHeader snapshot={snapshot} pending={pending} mutate={accountMutate} loading={loading} error={error}
       nav={showData ? <SectionTabs tabs={tabs} activeTab={activeTab} onSelect={selectTab} onKeyDown={tabKeys} tabRefs={tabRefs} /> : null} />
-    <ConnectivityBanner snapshot={snapshot} refresh={refresh} />
+    <ConnectivityBanner snapshot={snapshot} refresh={refresh} api={api} readOnly={readOnly} />
     <AppFeedback error={error} actionError={actionError} notice={notice} snapshot={snapshot} pending={pending} refresh={refresh} dismissActionError={dismissActionError} dismissNotice={dismissNotice} />
     <main className='dashboard-main'>
       {snapshot && !connected && !snapshot.status.auth_in_progress && (disconnectReason(snapshot) === 'login_rejected'

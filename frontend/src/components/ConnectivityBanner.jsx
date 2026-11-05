@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'motion/react';
-import { CheckCircle2, CloudOff, OctagonAlert, RefreshCw, RotateCw, Wifi, WifiOff } from 'lucide-react';
+import { CheckCircle2, CloudOff, Hourglass, OctagonAlert, RefreshCw, RotateCw, Sparkles, Wifi, WifiOff } from 'lucide-react';
 import { connectivityProblem, supervisorAlert } from '../dashboard';
 import { useSupervisorStatus } from '../hooks/useSupervisorStatus';
 import { EASE_OUT } from '../motion';
@@ -30,18 +30,50 @@ const MESSAGES = {
     icon: CheckCircle2, tone: 'success', title: 'Everything is running again',
     text: 'MailMind recovered on its own; no action needed.',
   },
+  ai_quota: {
+    icon: Hourglass, tone: 'warning', title: 'AI free-tier limit reached',
+    text: 'Gemini and Groq are refusing more requests for now. Your mail is safe: MailMind sorts the waiting emails automatically once the limits reset. No need to restart or reconnect.',
+  },
+  ai_busy: {
+    icon: Hourglass, tone: 'warning', title: 'AI providers are overloaded',
+    text: 'Gemini and Groq are not answering right now. Your mail is safe: MailMind keeps retrying and sorts the waiting emails as soon as they respond.',
+  },
+  ai_back: {
+    icon: Sparkles, tone: 'success', title: 'AI is sorting mail again',
+    text: 'The waiting emails are being sorted now.',
+  },
 };
-// Shown first when several things are wrong at once.
-const PRIORITY = ['crash_loop', 'offline', 'restarting', 'gmail'];
+// Shown first when several things are wrong at once; the AI limits come last,
+// since being offline or a crashed service explains them.
+const PRIORITY = ['crash_loop', 'offline', 'restarting', 'gmail', 'ai_quota', 'ai_busy'];
+const AI_KINDS = ['ai_quota', 'ai_busy'];
+
+function formatWait(seconds) {
+  if (seconds < 60) return seconds + ' s';
+  const minutes = Math.ceil(seconds / 60);
+  return minutes < 60 ? minutes + ' min' : Math.floor(minutes / 60) + ' h ' + (minutes % 60) + ' min';
+}
 
 // Gmail-style system alerts: shown while the device or Gmail is unreachable or
 // a MailMind service is restarting, and briefly once things recover. Before
 // MailMind ever shuts itself down, this says so, with the countdown.
-export function ConnectivityBanner({ snapshot, refresh }) {
+export function ConnectivityBanner({ snapshot, refresh, api, readOnly = false }) {
   const supervisor = supervisorAlert(useSupervisorStatus());
   const [browserOnline, setBrowserOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
   const [backOnline, setBackOnline] = useState(false);
   const previous = useRef(null);
+  const [retry, setRetry] = useState({ busy: false, note: '' });
+
+  const retryAll = async () => {
+    setRetry({ busy: true, note: '' });
+    try {
+      const result = await api.request('/tasks/retry-all', { method: 'POST' });
+      setRetry({ busy: false, note: result.message });
+      refresh?.();
+    } catch (failure) {
+      setRetry({ busy: false, note: failure.message });
+    }
+  };
 
   useEffect(() => {
     const goOnline = () => { setBrowserOnline(true); refresh?.(); };
@@ -61,11 +93,14 @@ export function ConnectivityBanner({ snapshot, refresh }) {
     workerErrorCode: snapshot?.status?.worker?.last_error_code,
     gmail: connectivity?.gmail,
   });
-  const problem = PRIORITY.find(kind => kind === network || kind === supervisor?.kind) || null;
+  const ai = snapshot?.status?.ai;
+  const aiProblem = ai?.state === 'limited' ? (ai.reason === 'busy' ? 'ai_busy' : 'ai_quota') : null;
+  const problem = PRIORITY.find(kind => kind === network || kind === supervisor?.kind || kind === aiProblem) || null;
 
-  // Count down to the worker's next Gmail check (5 s, 10 s, 20 s… up to 60 s).
+  // Count down to the worker's next Gmail check (5 s, 10 s, 20 s… up to 60 s),
+  // or to the next try of the emails waiting for the AI.
   const [secondsLeft, setSecondsLeft] = useState(null);
-  const retryIn = connectivity?.retry_in_seconds ?? null;
+  const retryIn = (AI_KINDS.includes(problem) ? ai?.retry_in_seconds : connectivity?.retry_in_seconds) ?? null;
   useEffect(() => {
     setSecondsLeft(retryIn);
     if (retryIn == null) return undefined;
@@ -78,7 +113,8 @@ export function ConnectivityBanner({ snapshot, refresh }) {
     if (problem) setBackOnline(false);
     else if (previous.current) {
       // Network problems end with "back online"; service problems with "recovered".
-      setBackOnline(['offline', 'gmail'].includes(previous.current) ? 'back' : 'recovered');
+      setBackOnline(['offline', 'gmail'].includes(previous.current) ? 'back'
+        : AI_KINDS.includes(previous.current) ? 'ai_back' : 'recovered');
       timer = window.setTimeout(() => setBackOnline(false), 4000);
     }
     previous.current = problem;
@@ -104,11 +140,21 @@ export function ConnectivityBanner({ snapshot, refresh }) {
             {'Restarting ' + supervisor.label + (supervisor.retryIn ? ' in ' + supervisor.retryIn + ' s' : ' now…')}
             {supervisor.restarts > 1 ? ' · restart ' + supervisor.restarts : ''}
           </p>}
+          {AI_KINDS.includes(key) && <p className='connectivity-countdown'>
+            {ai?.waiting ? ai.waiting + ' email' + (ai.waiting === 1 ? '' : 's') + ' waiting · ' : ''}
+            {secondsLeft ? 'Next try in ' + formatWait(secondsLeft) : 'Trying again now…'}
+          </p>}
+          {AI_KINDS.includes(key) && api && <p className='connectivity-actions'>
+            <button className='button ghost compact' disabled={readOnly || retry.busy} onClick={retryAll}>
+              {retry.busy ? 'Queuing…' : 'Retry all now'}
+            </button>
+            {retry.note && <span>{retry.note}</span>}
+          </p>}
           {key === 'crash_loop' && <p className='connectivity-countdown'>
             {supervisor.shutdownIn != null ? 'Shutting down in ' + supervisor.shutdownIn + ' s unless it recovers' : 'Still retrying…'}
           </p>}
         </div>
-        {['gmail', 'restarting', 'crash_loop'].includes(key) && <RefreshCw size={14} className='spin-icon connectivity-retry' aria-hidden='true' />}
+        {['gmail', 'restarting', 'crash_loop', ...AI_KINDS].includes(key) && <RefreshCw size={14} className='spin-icon connectivity-retry' aria-hidden='true' />}
       </m.div>}
     </AnimatePresence>
   </div>;

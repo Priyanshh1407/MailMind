@@ -1081,3 +1081,17 @@
     white-space: normal;
   }
 }
+
+/* The AI-limit alert's "Retry all now" button and its confirmation. */
+.connectivity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.connectivity-actions span {
+  font-size: 12px;
+  opacity: .85;
+}

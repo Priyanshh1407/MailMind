@@ -216,6 +216,8 @@ Only a real login problem (for example, access revoked in your Google account) a
 
 ## Recovery controls
 
+**When the AI is at its limit.** Gemini and Groq free tiers allow only so many requests (Groq: about four emails a minute). When every provider keeps refusing, an alert says **AI free-tier limit reached** (or **AI providers are overloaded**), how many emails are waiting, and when MailMind tries again. Nothing is lost and you do not need to restart: waiting emails are sorted automatically once the limits reset. **Retry all now** puts every waiting or stopped email and every failed download back in the queue with fresh attempts; an alert that may already have been sent is never resent.
+
 A failed classification stage may expose **Retry unfinished step**.
 
 An ambiguous Telegram state may expose:

@@ -63,6 +63,7 @@ from src.intelligence_safety import (
     claim_mutation_slot,
     intelligence_diagnostics,
 )
+from src.provider_status import ai_status
 from src.email_signals import signals_summary
 from src.email_risk import risk_rows, risk_summary
 from src.intelligence_backfill import (
@@ -942,6 +943,7 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                           'failed_checks':failed_checks,'retry_in_seconds':retry_in}
             return {**{key: bool(state[key]) for key in ('connected', 'is_polling', 'auth_in_progress', 'purge_pending')},
                     'connectivity':connectivity,
+                    'ai':ai_status(conn,context.account_id),
                     'generation': state['generation'], 'account_id':context.account_id, 'ingestion':ingestion,
                     'ingestion_paused':ingestion_paused,
                     'active_pending_tasks':active_pending,
@@ -1112,6 +1114,30 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                        WHERE account_id=? AND email_id=?""",
                     (utc_timestamp(),context.account_id,email_id))
         return {'message':'Retry saved. Completed notification steps stay completed.'}
+
+    @application.post('/tasks/retry-all')
+    def retry_all_tasks(context=Depends(session)):
+        # Every email waiting or stopped in the queue starts again with fresh
+        # attempts, like Retry on each card. Alert delivery is left alone: an
+        # alert that may have been sent is resolved explicitly, never resent.
+        with application.state.accounts.guard(context) as conn:
+            ids=[row[0] for row in conn.execute(
+                "SELECT email_id FROM processing_tasks WHERE account_id=? AND status IN ('retry','dead') AND stage!='notify'",
+                (context.account_id,))]
+            conn.execute(
+                "UPDATE processing_tasks SET status='queued',attempt_count=0,next_retry_at=0,error_code=NULL "
+                "WHERE account_id=? AND status IN ('retry','dead') AND stage!='notify'",(context.account_id,))
+            for email_id in ids:
+                conn.execute(
+                    """UPDATE intelligence_backfill_items SET status='queued',error_code=NULL,updated_at=?
+                       WHERE account_id=? AND email_id=? AND status IN ('retry','dead')""",
+                    (utc_timestamp(),context.account_id,email_id))
+            downloads=conn.execute(
+                "UPDATE ingestion_failures SET status='retry',attempt_count=0,next_retry_at=0 "
+                "WHERE account_id=? AND status IN ('retry','dead')",(context.account_id,)).rowcount
+        return {'tasks':len(ids),'downloads':downloads,
+                'message':f'{len(ids)} email(s) and {downloads} download(s) will be retried. '
+                          'If the AI is at its limit, they wait for it, then continue automatically.'}
 
     @application.post('/authenticate',status_code=202)
     def authenticate(context=Depends(session)):
