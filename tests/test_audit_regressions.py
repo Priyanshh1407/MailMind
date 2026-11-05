@@ -1863,7 +1863,9 @@ class RetryUntilRecoveredTests(Phase4Base):
         self.assertEqual(fetch_failure_code(Status(503)), 'message_fetch_failed')
         self.assertEqual(fetch_failure_code(Status(429)), 'message_fetch_failed')
         self.assertEqual(fetch_failure_code(ConnectionError()), 'message_fetch_failed')
-        self.assertEqual(fetch_failure_code(Status(404)), 'message_unavailable')
+        self.assertEqual(fetch_failure_code(Status(404)), 'message_deleted')
+        self.assertEqual(fetch_failure_code(Status(410)), 'message_deleted')
+        self.assertEqual(fetch_failure_code(Status(403)), 'message_unavailable')
         self.assertEqual(fetch_failure_code(ValueError('odd')), 'message_unavailable')
 
     def failure_status(self, code, times):
@@ -1886,6 +1888,18 @@ class RetryUntilRecoveredTests(Phase4Base):
     def test_permanent_download_failure_is_quarantined(self):
         self.assertEqual(self.failure_status('message_unavailable', 3)['status'], 'dead')
         self.assertEqual(self.failure_status('message_parse_failed', 3)['status'], 'dead')
+
+    def test_mail_deleted_in_gmail_is_final_at_once_remembered_and_not_listed(self):
+        # Gmail's 404 does not change on a second ask: stop at the first one.
+        row = self.failure_status('message_deleted', 1)
+        self.assertEqual((row['status'], row['attempt_count']), ('dead', 1))
+        from src.work_queue import claim_cycle, excluded_messages, record_ingestion_failure
+        manager, _ = self.connected_manager()
+        context = manager.worker_context()
+        token, _job = claim_cycle(manager, context)
+        record_ingestion_failure({'code': 'message_deleted', 'email_id': 'gone'}, manager, context, token)
+        with manager.transaction() as conn:
+            self.assertIn('gone', excluded_messages(conn, context.account_id))  # never downloaded again
 
     def test_search_indexing_retries_after_backoff_instead_of_giving_up(self):
         from src.email_search import reconcile_search_index

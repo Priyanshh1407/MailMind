@@ -362,15 +362,31 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(self.client.post('/tasks/retry-all').json()['tasks'],0)
         self.assertEqual((self.task()['status'],self.task()['stage']),(before['status'],before['stage']))
 
-    def test_retry_all_gives_stopped_downloads_another_try(self):
+    def test_retry_all_never_fetches_deleted_or_empty_messages_again(self):
+        # A deleted message (Gmail 404) or one with no content stays stopped:
+        # asking again cannot change the answer. A temporary failure is tried now.
         with connection(self.settings.db_path) as conn:
-            conn.execute("""INSERT INTO ingestion_failures(account_id,email_id,attempt_count,status,next_retry_at,error_code,updated_at)
-                            VALUES (?,?,3,'dead',9e12,'message_unavailable','2026-10-01T00:00:00.000000Z')""",
-                         (self.context.account_id,'gone-1'))
-        self.assertEqual(self.client.post('/tasks/retry-all').json()['downloads'],1)
+            for email_id, status, code in (('gone-1', 'dead', 'message_unavailable'), ('empty-1', 'dead', 'empty_body'),
+                                           ('blip-1', 'retry', 'message_fetch_failed')):
+                conn.execute("""INSERT INTO ingestion_failures(account_id,email_id,attempt_count,status,next_retry_at,error_code,updated_at)
+                                VALUES (?,?,3,?,9e12,?,'2026-10-01T00:00:00.000000Z')""",
+                             (self.context.account_id, email_id, status, code))
+        self.assertEqual(self.client.post('/tasks/retry-all').json()['downloads'], 1)
         with connection(self.settings.db_path) as conn:
-            row=conn.execute("SELECT status,attempt_count,next_retry_at FROM ingestion_failures WHERE email_id='gone-1'").fetchone()
-        self.assertEqual(tuple(row),('retry',0,0))
+            rows = {row[0]: (row[1], row[2], row[3]) for row in conn.execute(
+                'SELECT email_id,status,attempt_count,next_retry_at FROM ingestion_failures')}
+        self.assertEqual(rows['gone-1'], ('dead', 3, 9e12))
+        self.assertEqual(rows['empty-1'], ('dead', 3, 9e12))
+        self.assertEqual(rows['blip-1'], ('retry', 3, 0))
+
+    def test_mail_deleted_in_gmail_is_not_listed_as_a_failed_download(self):
+        with connection(self.settings.db_path) as conn:
+            for email_id, code in (('gone-1', 'message_deleted'), ('broken-1', 'message_parse_failed')):
+                conn.execute("""INSERT INTO ingestion_failures(account_id,email_id,attempt_count,status,next_retry_at,error_code,updated_at)
+                                VALUES (?,?,1,'dead',9e12,?,'2026-10-01T00:00:00.000000Z')""",
+                             (self.context.account_id, email_id, code))
+        listed = [row['email_id'] for row in self.client.get('/status').json()['ingestion_failures']]
+        self.assertEqual(listed, ['broken-1'])
 
     def test_parse_failures_are_identified_and_quarantined(self):
         self.service=mailbox(2)

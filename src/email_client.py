@@ -364,10 +364,15 @@ def get_new_emails(service, start_history_id, max_results=20, *, max_pages=3,
 
 def fetch_failure_code(error):
     """'message_fetch_failed' for a temporary failure (retried until Gmail
-    answers); 'message_unavailable' for a permanent one (deleted, rejected)."""
+    answers); 'message_deleted' when Gmail says the message no longer exists
+    (404/410); 'message_unavailable' for any other permanent failure."""
     from .provider_policy import provider_failure
     if _temporary_gmail_failure(error) or provider_failure(error).retryable:
         return 'message_fetch_failed'
+    response = getattr(error, 'resp', None) or getattr(error, 'response', None)
+    status = getattr(response, 'status', None) or getattr(response, 'status_code', None)
+    if status in (404, 410):
+        return 'message_deleted'
     return 'message_unavailable'
 
 

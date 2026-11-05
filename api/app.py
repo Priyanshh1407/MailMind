@@ -959,7 +959,9 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                     'resume_pending_tasks':application.state.settings.resume_pending_tasks,
                     'worker':dict(health) if (health:=conn.execute('SELECT heartbeat_at,last_success_at,last_error_at,last_error_code FROM worker_health WHERE account_id=?',(context.account_id,)).fetchone()) else None,
                     'auto_mark_read':application.state.settings.auto_mark_read,
-                    'ingestion_failures':[dict(row) for row in conn.execute('SELECT email_id,status,attempt_count,next_retry_at,error_code FROM ingestion_failures WHERE account_id=? ORDER BY updated_at DESC,email_id LIMIT 50',(context.account_id,))],
+                    # Mail deleted in Gmail is not a failure: it is remembered (so it is
+                    # never downloaded again) but not listed.
+                    'ingestion_failures':[dict(row) for row in conn.execute("SELECT email_id,status,attempt_count,next_retry_at,error_code FROM ingestion_failures WHERE account_id=? AND error_code!='message_deleted' ORDER BY updated_at DESC,email_id LIMIT 50",(context.account_id,))],
                     'processing_counts':processing_counts,
                     'notification_counts':{row['status']:row['count'] for row in conn.execute('SELECT status,COUNT(*) AS count FROM notification_outbox WHERE account_id=? GROUP BY status',(context.account_id,))},
                     'feedback_index_pending':conn.execute("SELECT COUNT(*) FROM feedback_history f WHERE account_id=? AND indexing_state!='indexed' AND revision_id=(SELECT MAX(revision_id) FROM feedback_history x WHERE x.account_id=f.account_id AND x.email_id=f.email_id)", (context.account_id,)).fetchone()[0],
@@ -1132,9 +1134,12 @@ def create_app(*, settings=None, model_factory=MailMindModel,
                     """UPDATE intelligence_backfill_items SET status='queued',error_code=NULL,updated_at=?
                        WHERE account_id=? AND email_id=? AND status IN ('retry','dead')""",
                     (utc_timestamp(),context.account_id,email_id))
+            # Downloads that failed for a temporary reason are tried now. Stopped
+            # ones are left alone: Gmail said the message no longer exists
+            # (deleted) or has no content, and asking again cannot change that.
             downloads=conn.execute(
-                "UPDATE ingestion_failures SET status='retry',attempt_count=0,next_retry_at=0 "
-                "WHERE account_id=? AND status IN ('retry','dead')",(context.account_id,)).rowcount
+                "UPDATE ingestion_failures SET next_retry_at=0 WHERE account_id=? AND status='retry'",
+                (context.account_id,)).rowcount
         return {'tasks':len(ids),'downloads':downloads,
                 'message':f'{len(ids)} email(s) and {downloads} download(s) will be retried. '
                           'If the AI is at its limit, they wait for it, then continue automatically.'}

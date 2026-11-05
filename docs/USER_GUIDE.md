@@ -216,7 +216,7 @@ Only a real login problem (for example, access revoked in your Google account) a
 
 ## Recovery controls
 
-**When the AI is at its limit.** Gemini and Groq free tiers allow only so many requests (Groq: about four emails a minute). When every provider keeps refusing, an alert says **AI free-tier limit reached** (or **AI providers are overloaded**), how many emails are waiting, and when MailMind tries again. Nothing is lost and you do not need to restart: waiting emails are sorted automatically once the limits reset. **Retry all now** puts every waiting or stopped email and every failed download back in the queue with fresh attempts; an alert that may already have been sent is never resent.
+**When the AI is at its limit.** Gemini and Groq free tiers allow only so many requests (Groq: about four emails a minute). When every provider keeps refusing, an alert says **AI free-tier limit reached** (or **AI providers are overloaded**), how many emails are waiting, and when MailMind tries again. Nothing is lost and you do not need to restart: waiting emails are sorted automatically once the limits reset. **Retry all now** puts every waiting or stopped email back in the queue with fresh attempts, and tries downloads that failed for a temporary reason right away. Messages Gmail reports as deleted or empty are left alone, since asking again cannot change that, and an alert that may already have been sent is never resent.
 
 A failed classification stage may expose **Retry unfinished step**.
 

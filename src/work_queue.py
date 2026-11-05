@@ -119,10 +119,12 @@ def record_ingestion_failure(failure, manager, context, token):
         row=conn.execute('SELECT attempt_count FROM ingestion_failures WHERE account_id=? AND email_id=?',(context.account_id,identity)).fetchone()
         count=(row['attempt_count'] if row else 0)+1
         # A temporary download failure (network, Gmail 5xx/429) retries until
-        # Gmail answers. A deleted message or unparseable content gets a few
-        # tries, then is quarantined and shown in the dashboard.
+        # Gmail answers. A message deleted in Gmail is final at once: the row is
+        # kept only so it is never downloaded again, and the dashboard hides it.
+        # Unparseable content gets a few tries, then is quarantined and shown.
         permanent=failure['code']!='message_fetch_failed'
-        status='dead' if permanent and count >= manager.settings.max_processing_attempts else 'retry'
+        status=('dead' if failure['code']=='message_deleted'
+                or (permanent and count >= manager.settings.max_processing_attempts) else 'retry')
         conn.execute("""INSERT INTO ingestion_failures(account_id,email_id,attempt_count,status,next_retry_at,error_code,updated_at)
             VALUES (?,?,?,?,?,?,?) ON CONFLICT(account_id,email_id) DO UPDATE SET attempt_count=excluded.attempt_count,
             status=excluded.status,next_retry_at=excluded.next_retry_at,error_code=excluded.error_code,updated_at=excluded.updated_at""",
