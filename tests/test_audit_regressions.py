@@ -175,6 +175,79 @@ class ProviderFailoverRegressionTests(unittest.TestCase):
         self.assertEqual((result.outcome, result.reason), ('ERROR', 'provider_quota'))
 
 
+class GroqRateLimitTests(ProviderFailoverRegressionTests):
+    """QUOTA-01 (found in use, 5 Nov): with the primary Gemini model overloaded,
+    a backlog of emails reached Groq, whose free tier allows 8,000 tokens a
+    minute (about four emails). Gemini models are cooled down after a failure,
+    Groq never was, so every email hit Groq right after its last 429: 89 of 150
+    Groq calls failed in 20 minutes. Groq now pauses for as long as it says."""
+
+    @staticmethod
+    def groq_limited(retry_after='30'):
+        import requests
+
+        def route():
+            response = Mock(status_code=429, status=429, headers={'retry-after': retry_after})
+            response.raise_for_status.side_effect = requests.HTTPError('429 Too Many Requests', response=response)
+            return response
+        return route
+
+    @staticmethod
+    def groq_answer_with(text, headers):
+        def route():
+            response = Mock(status_code=200, headers=headers)
+            response.raise_for_status.return_value = None
+            response.json.return_value = {'choices': [{'message': {'content': text}}]}
+            return response
+        return route
+
+    def test_a_429_pauses_groq_until_it_says_and_then_it_is_used_again(self):
+        result, called = self.classify(self.raises(503), fallback=self.raises(503), groq=self.groq_limited('30'))
+        self.assertEqual(called, ['audit-primary', 'audit-fallback', 'groq'])
+        self.assertEqual(result.reason, 'provider_quota')
+        llm_api._model_cooldowns.pop('audit-primary', None)
+        llm_api._model_cooldowns.pop('audit-fallback', None)
+        # The next email does not send Groq a request it would refuse.
+        result, called = self.classify(self.raises(503), fallback=self.raises(503), groq=self.groq_limited('30'))
+        self.assertEqual(called, ['audit-primary', 'audit-fallback'])
+        self.assertEqual((result.outcome, result.reason), ('ERROR', 'provider_quota'))
+        llm_api._model_cooldowns.pop('audit-primary', None)
+        llm_api._model_cooldowns.pop('audit-fallback', None)
+        later = llm_api.monotonic() + 31
+        with patch.object(llm_api, 'monotonic', lambda: later):
+            _result, called = self.classify(self.raises(503), fallback=self.raises(503),
+                                            groq=self.groq_answer(json.dumps(enriched_output('UPDATES'))))
+        self.assertEqual(called[-1], 'groq')
+
+    def test_too_few_tokens_left_pauses_before_the_next_refusal(self):
+        answer = json.dumps(enriched_output('UPDATES'))
+        result, _called = self.classify(self.raises(503), fallback=self.raises(503), groq=self.groq_answer_with(
+            answer, {'x-ratelimit-remaining-tokens': '6000', 'x-ratelimit-reset-tokens': '7.5s'}))
+        self.assertEqual(result.category, 'UPDATES')
+        self.assertTrue(llm_api._groq_available())
+        self.classify(self.raises(503), fallback=self.raises(503), groq=self.groq_answer_with(
+            answer, {'x-ratelimit-remaining-tokens': '900', 'x-ratelimit-reset-tokens': '7.5s'}))
+        self.assertFalse(llm_api._groq_available())
+        later = llm_api.monotonic() + 8
+        with patch.object(llm_api, 'monotonic', lambda: later):
+            self.assertTrue(llm_api._groq_available())
+
+    def test_the_assistant_features_share_the_same_pause(self):
+        llm_api._pause_groq(30)
+        with patch.object(llm_api, 'get_client', side_effect=RuntimeError('no gemini')), \
+                patch.dict(llm_api.os.environ, {'GROQ_API_KEY': 'synthetic'}, clear=False), \
+                patch('requests.post') as post:
+            with self.assertRaises(llm_api.StructuredUnavailable) as raised:
+                llm_api.call_structured('{}', system='s', schema={'type': 'object'}, schema_name='t',
+                                        settings=self.settings, operation='inbox_question', validate=lambda value: value)
+        post.assert_not_called()
+        self.assertEqual((raised.exception.code, raised.exception.retryable), ('provider_quota', True))
+
+    def test_groq_durations(self):
+        self.assertEqual([llm_api._duration_seconds(value) for value in ('585ms', '7.66s', '2h9m36s', '12', None)],
+                         [0.585, 7.66, 7776.0, 12.0, None])
+
+
 class ReanalyzeAuthorityRegressionTests(Phase4Base):
     """BUG-01: Re-analyze must use the authoritative cloud route in normal mode."""
 

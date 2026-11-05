@@ -171,6 +171,65 @@ def _model_succeeded(version):
         _model_cooldowns.pop(version,None)
 
 
+# Groq's limits are per key and per minute (the free tier allows 8,000 tokens a
+# minute, about four emails), shared by classification and the assistant
+# features. Groq says when it will accept requests again; until then MailMind
+# skips it instead of sending requests it knows will be refused (each refusal
+# used to trigger the next one).
+GROQ_TOKEN_RESERVE = 2500  # about one classification request with its answer
+GROQ_MAX_PAUSE_SECONDS = 6 * 3600
+GROQ_PAUSE_KEY = 'groq:rate-limit'  # kept with the model cooldowns, so one reset clears both
+_DURATION = re.compile(r'(\d+(?:\.\d+)?)(ms|h|m|s)')
+
+
+def _duration_seconds(value):
+    """Groq durations: '585ms', '7.66s', '2h9m36s'; a bare number is seconds."""
+    text = str(value or '').strip()
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    total, found = 0.0, False
+    for amount, unit in _DURATION.findall(text):
+        found = True
+        total += float(amount) * {'ms': 0.001, 's': 1, 'm': 60, 'h': 3600}[unit]
+    return total if found else None
+
+
+def _groq_available():
+    with _model_cooldown_lock:
+        return _model_cooldowns.get(GROQ_PAUSE_KEY, 0) <= monotonic()
+
+
+def _pause_groq(seconds):
+    seconds = min(max(seconds, 1.0), GROQ_MAX_PAUSE_SECONDS)
+    with _model_cooldown_lock:
+        _model_cooldowns[GROQ_PAUSE_KEY] = max(_model_cooldowns.get(GROQ_PAUSE_KEY, 0), monotonic() + seconds)
+
+
+def _note_groq_limits(response):
+    """Pause Groq after a 429, or when too little is left for the next request."""
+    headers = getattr(response, 'headers', None) or {}
+    if getattr(response, 'status_code', None) == 429:
+        wait = (_duration_seconds(headers.get('retry-after'))
+                or _duration_seconds(headers.get('x-ratelimit-reset-tokens'))
+                or MODEL_FAILURE_COOLDOWN_SECONDS)
+        _pause_groq(wait)
+        return
+    try:
+        tokens_left = int(headers.get('x-ratelimit-remaining-tokens'))
+    except (TypeError, ValueError):
+        tokens_left = None
+    try:
+        requests_left = int(headers.get('x-ratelimit-remaining-requests'))
+    except (TypeError, ValueError):
+        requests_left = None
+    if requests_left is not None and requests_left <= 0:
+        _pause_groq(_duration_seconds(headers.get('x-ratelimit-reset-requests')) or MODEL_FAILURE_COOLDOWN_SECONDS)
+    elif tokens_left is not None and tokens_left < GROQ_TOKEN_RESERVE:
+        _pause_groq(_duration_seconds(headers.get('x-ratelimit-reset-tokens')) or 1.0)
+
+
 def build_classification_payload(sender, subject, body, examples, *, source_timestamp=None):
     """Build one bounded data envelope; retrieved text never becomes instructions."""
     from .privacy import external_email, provider_email_text, redact
@@ -607,6 +666,10 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
         source,version='groq',settings.groq_model
         return result(outcome='UNAVAILABLE',reason='fallback_not_configured')
     source,version='groq',settings.groq_model
+    if not _groq_available():
+        # Groq asked us to wait; this email retries later without a request.
+        failures.append(Failure('provider_quota',True))
+        return routes_failed()
     attempted, captured = Event(), []
     try:
         import requests
@@ -617,6 +680,7 @@ def classify_email(sender, subject, body_snippet, *, account_id=None, collection
                 response=requests.post(GROQ_URL,
                     headers={'Authorization':f'Bearer {key}'},timeout=(timeout/2,timeout/2),
                     json=groq_request_body(version,contents))
+                _note_groq_limits(response)
                 response.raise_for_status()
                 payload=response.json()
                 captured.append(payload)
@@ -760,6 +824,9 @@ def call_structured(contents, *, system, schema, schema_name, settings, operatio
     key = os.getenv('GROQ_API_KEY')
     if not key or budget.remaining() < 0.05:
         finish()
+    if not _groq_available():
+        failures.append(Failure('provider_quota', True))
+        finish()
     version = settings.groq_model
     attempted, captured = Event(), []
     try:
@@ -772,6 +839,7 @@ def call_structured(contents, *, system, schema, schema_name, settings, operatio
                                          timeout=(timeout / 2, timeout / 2),
                                          json=structured_groq_body(version, system, schema, schema_name,
                                                                    contents, max_output_tokens))
+                _note_groq_limits(response)
                 if response.status_code == 400 and salvage is not None:
                     # Some Groq models answer a JSON-schema request with a native
                     # function call, which the API rejects but returns as
