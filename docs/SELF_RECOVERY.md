@@ -46,7 +46,7 @@ An API restart revokes browser sessions and bumps the generation. It keeps `conn
 Each failure is classified as temporary or permanent (`provider_failure`).
 
 - **Temporary failures retry forever, at most 5 minutes apart** (5 · 2ⁿ⁻¹ s, capped at 300 s):
-  - classification (Gemini, then Groq);
+  - classification (Gemini, then Groq). When a provider is at its limit, Groq is paused for as long as it says and skipped without a request; after 3 such failures in a row the dashboard shows **AI free-tier limit reached** (or **AI providers are overloaded**) with the emails waiting and the next try;
   - Telegram alerts and reminders;
   - Gmail downloads;
   - search indexing (the backoff is timed from its last attempt);
@@ -54,7 +54,8 @@ Each failure is classified as temporary or permanent (`provider_failure`).
 - **Permanent failures stop at once, with the reason:**
   - a rejected request or API key, or an invalid AI answer → Needs Review;
   - unconfigured Telegram;
-  - an unreadable or deleted email → quarantined after a few tries;
+  - an email deleted in Gmail → final at Gmail's first 404, remembered so it is never fetched again, not shown as a failure;
+  - an unreadable email → quarantined after a few tries and shown;
   - an alert that may already have been sent → never resent automatically.
 
 See [RESILIENCE.md](RESILIENCE.md) for the tested outcome of every provider fault.
@@ -83,7 +84,9 @@ See [RESILIENCE.md](RESILIENCE.md) for the tested outcome of every provider faul
 | Bad API key, rejected request, invalid AI answer | Retrying returns the same answer | The email goes to Needs Review with the reason |
 | Telegram not configured | A setup choice | Alerts stop; no endless retries |
 | An alert that may have been sent | Retrying could duplicate it | Asks the user to confirm |
-| Deleted or unreadable email | The same result every time | Quarantined and shown in the dashboard |
+| Email deleted in Gmail | It no longer exists | Remembered and never fetched again; not shown as a failure |
+| Unreadable email | The same result every time | Quarantined and shown in the dashboard |
+| AI free tier used up | Only time (or a paid plan) restores it | An alert with the wait and the emails waiting; they are sorted automatically once the limits reset, or at once with **Retry all now** |
 | Startup crash loop | Restarts can't fix the cause | Warns, retries for 60 s, then stops cleanly |
 | PC reboot or supervisor closed | Nothing starts MailMind again | Not covered: run `start_all.bat` |
 | Disk full or database corruption | Outside the app | Not handled beyond "storage busy, retry" |

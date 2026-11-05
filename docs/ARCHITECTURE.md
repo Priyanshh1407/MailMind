@@ -131,7 +131,7 @@ The cursor only advances past messages that were already saved or were handled i
 
 Two backstops make sure mail is never lost silently:
 
-- a message whose download failed is fetched again by ID when its retry is due. Temporary failures (network, Gmail 5xx/429) retry until Gmail answers; a deleted or unparseable message is quarantined after the attempt limit;
+- a message whose download failed is fetched again by ID when its retry is due. Temporary failures (network, Gmail 5xx/429) retry until Gmail answers. A message Gmail reports as gone (404/410, usually deleted by the user) is `message_deleted`: final at the first answer, kept only so it is never downloaded again, and not listed in `/status`. An unparseable message is quarantined after the attempt limit and listed;
 - every five minutes the worker lists INBOX messages from the last two days and fetches any it has not saved, within the normal queue capacity.
 
 ### Historical backlog
@@ -287,7 +287,8 @@ Failover classifies each failure by what it proves (every case is tested in [the
 - temporary (timeout, 429, 5xx): cool the model down, try the next route;
 - broken model (400, 404, unknown error): cool it down, try the next route;
 - rejected Gemini key (401/403): skip the other Gemini models, go to Groq;
-- invalid answer: try the next route without a cooldown.
+- invalid answer: try the next route without a cooldown;
+- Groq rate limit (429, or an answer whose `x-ratelimit-remaining-*` headers leave too little for the next request): pause Groq for its `retry-after` or reset time and skip it without a request until then. Classification and the assistant features share this pause, because they share one key and one per-minute limit.
 
 An email fails only after every route is tried. It stays retryable if any route failed temporarily; otherwise it goes to Needs Review. Gemini 3+ models are sent `thinking_level: low`; older models, which reject it, are not.
 
@@ -332,6 +333,8 @@ If embedding or Chroma query work fails, the API logs a safe event and returns l
 - A malformed (non-numeric) retry time cannot strand a task: each worker cycle repairs it, because SQLite ranks text above every number.
 - Temporary failures never give up. Classification (AI outage, quota, timeout), Telegram alerts, reminders and Gmail downloads keep retrying with backoff capped at 5 minutes; the search index retries on the same schedule, and feedback indexing gets a few quick tries, then retries every 5 minutes. Permanent failures stop at once with the reason: a rejected or invalid request, invalid model output, unconfigured Telegram, or an ambiguous send that might already have been delivered (never resent automatically).
 - Disconnect and Stop processing park the OAuth credential (`<digest>.parked.json`, timestamped) instead of using or deleting it. Background work only reads the live credential, so a parked one is never used. Connect Google while disconnected first tries `renew_saved_login`: it refreshes the parked (or paused) credential with a bounded timeout and checks the account matches. On success the account reconnects with no browser flow; otherwise the normal OAuth page opens. Parked credentials older than 24 h are deleted on restart and before each reconnect, and Delete account data removes them at once. Switching accounts while connected never uses the silent path.
+- When the newest classification attempts all failed on provider capacity (quota, overload, timeout; at least 3 in a row, within 15 minutes), `/status` reports `ai: {state: "limited", reason: "quota" | "busy", waiting, retry_in_seconds}` (`src/provider_status.py`). It is worked out from the worker's own records, the waiting tasks and their next retry time, because the provider pauses live in the worker's memory. The dashboard shows it as an alert with a countdown.
+- `POST /tasks/retry-all` requeues every waiting or stopped email with fresh attempts (like Retry on one card) and brings forward downloads that failed for a temporary reason. It never touches a notification that may already have been delivered, or a download Gmail answered for good (deleted or empty).
 - An API restart keeps Google connected when the saved login file still exists and no deletion is pending. It still revokes browser sessions and bumps the generation, so work from before the restart is fenced out.
 - Losing the internet does not sign the user out. The per-cycle Gmail check separates a proven login problem (rejected refresh, 401/403, wrong account), which pauses the account, from network trouble or a Gmail outage, which keeps it connected. The cycle is skipped, so emails don't spend their retries while offline, and the worker backs off exponentially: 5, 10, 20, 40, then every 60 s. `/status` reports the failed-check streak and the seconds until the next check, and the dashboard shows Gmail-style connectivity alerts while keeping the saved mail on screen.
 - An interrupted intelligence backfill is recovered through the same lease/retry path without repeating historical side effects.

@@ -331,6 +331,6 @@ Never run **Delete this account data** on Main unless you mean it. It removes th
 Note the section, what you saw and what you expected, and take a screenshot. Black out email addresses and any real mail first. Most first-run surprises have simple causes:
 
 - **An email never appears.** Gmail filed it as Spam (see *About Gmail's spam filter*), or Google needs reconnecting (the header says so).
-- **Ask, Follow-ups or the brief fail with a provider error.** The Gemini or Groq quota is used up. Wait for it to reset; the brief falls back to the plain summary on its own.
+- **Ask, Follow-ups or the brief fail with a provider error, or an "AI free-tier limit reached" alert appears.** The Gemini or Groq quota is used up (Groq's free tier allows about four emails a minute). Nothing is lost and you do not need to restart: the alert shows how many emails are waiting and when MailMind tries again, and they are sorted automatically. **Retry all now** requeues every waiting or stopped email at once. The brief falls back to the plain summary on its own.
 - **A money entry is missing.** MailMind filed that email as Spam. Set its label to Updates and wait a minute.
 - **A scam score differs a little from this guide.** The header verdict depends on the real email. A difference of a few points is fine; a red result on C1 or C2 is not.
